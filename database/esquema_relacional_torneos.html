@@ -1,0 +1,177 @@
+<style>
+#erd svg.erDiagram .divider path { stroke-opacity: 0.5; }
+#erd svg.erDiagram .row-rect-odd path,
+#erd svg.erDiagram .row-rect-odd rect,
+#erd svg.erDiagram .row-rect-even path,
+#erd svg.erDiagram .row-rect-even rect { stroke: none !important; }
+#erd { background: #ffffff; border-radius: 12px; padding: 16px; }
+</style>
+<div id="erd"></div>
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+
+const src = `erDiagram
+  TORNEO ||--o{ INSCRIPCIONES_TORNEO : tiene
+  TORNEO ||--o{ PARTIDOS : organiza
+  EQUIPOS ||--o{ INSCRIPCIONES_TORNEO : participa
+  EQUIPOS ||--o{ JUGADOR_EQUIPO : contrata
+  JUGADORES ||--o{ JUGADOR_EQUIPO : pertenece
+  EQUIPOS ||--o{ PARTIDOS : juega
+  PARTIDOS ||--o{ EVENTOS_PARTIDO : registra
+  JUGADORES ||--o{ EVENTOS_PARTIDO : participa
+  EVENTOS ||--o{ EVENTOS_PARTIDO : clasifica
+  EQUIPOS ||--o{ EVENTOS_PARTIDO : acredita
+  TORNEO {
+    int ID PK
+    varchar Nombre
+    varchar Disciplina
+    date Fecha_Inicio
+    date Fecha_Fin
+    timestamp Fecha_Registro
+    timestamp Fecha_Modificacion
+    varchar Estado
+  }
+  EQUIPOS {
+    int ID PK
+    varchar Nombre
+    timestamp Fecha_Registro
+    timestamp Fecha_Modificacion
+    varchar Estado
+  }
+  JUGADORES {
+    int ID PK
+    varchar Nombre
+    timestamp Fecha_Registro
+    timestamp Fecha_Modificacion
+    varchar Estado
+  }
+  INSCRIPCIONES_TORNEO {
+    int ID PK
+    int Torneo_ID FK
+    int Equipo_ID FK
+    timestamp Fecha
+    timestamp Fecha_Registro
+    timestamp Fecha_Modificacion
+    varchar Estado
+  }
+  JUGADOR_EQUIPO {
+    int ID PK
+    int JUGADOR_ID FK
+    int EQUIPO_ID FK
+    int Dorsal
+    date Fecha_Inicio
+    date Fecha_Fin
+    timestamp Fecha_Registro
+    timestamp Fecha_Modificacion
+    varchar Estado
+  }
+  PARTIDOS {
+    int ID PK
+    int Torneo_ID FK
+    int EQUIPOS_ID_LOCAL FK
+    int EQUIPOS_ID_VISITANTE FK
+    timestamp Fecha_Partido
+    int Jornada
+    varchar Fase
+    varchar Grupo
+    timestamp Fecha_Registro
+    timestamp Fecha_Modificacion
+    varchar Estado
+  }
+  EVENTOS {
+    int ID PK
+    varchar Nombre
+    varchar Descripcion
+    timestamp Fecha_Registro
+    timestamp Fecha_Modificacion
+    varchar Estado
+  }
+  EVENTOS_PARTIDO {
+    int ID PK
+    int PARTIDOS_ID FK
+    int JUGADOR_ID FK
+    int EQUIPO_ID FK
+    int EVENTOS_ID FK
+    int JUGADOR_ID_ENTRA FK
+    int MINUTO
+    timestamp Fecha_Registro
+    timestamp Fecha_Modificacion
+    varchar Estado
+  }
+  USUARIOS {
+    int ID PK
+    varchar Username UK
+    varchar Nombre
+    varchar Password_Hash
+    varchar Rol
+    timestamp Fecha_Registro
+    timestamp Fecha_Modificacion
+    varchar Estado
+  }
+`;
+
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  fontFamily: '"anthropic-sans", sans-serif',
+  themeVariables: {
+    fontSize: '13px',
+    fontFamily: '"anthropic-sans", sans-serif',
+    background: '#ffffff',
+    primaryColor: '#ffffff',
+    primaryTextColor: '#000000',
+    primaryBorderColor: '#000000',
+    lineColor: '#000000',
+    textColor: '#000000',
+    attributeBackgroundColorOdd: '#ffffff',
+    attributeBackgroundColorEven: '#ffffff',
+    relationLabelColor: '#000000',
+    relationLabelBackground: '#ffffff',
+  },
+});
+
+await document.fonts.ready;
+const { svg } = await mermaid.render('erd-svg', src);
+document.getElementById('erd').innerHTML = svg;
+
+document.querySelectorAll('#erd svg.erDiagram .node').forEach(node => {
+  const firstPath = node.querySelector('path[d]');
+  if (!firstPath) return;
+  const d = firstPath.getAttribute('d');
+  const nums = d.match(/-?[\d.]+/g)?.map(Number);
+  if (!nums || nums.length < 8) return;
+  const xs = [nums[0], nums[2], nums[4], nums[6]];
+  const ys = [nums[1], nums[3], nums[5], nums[7]];
+  const x = Math.min(...xs), y = Math.min(...ys);
+  const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect.setAttribute('x', x); rect.setAttribute('y', y);
+  rect.setAttribute('width', w); rect.setAttribute('height', h);
+  rect.setAttribute('rx', '8');
+  rect.setAttribute('fill', '#ffffff');
+  rect.setAttribute('stroke', '#7F77DD');
+  rect.setAttribute('stroke-width', '2');
+  firstPath.replaceWith(rect);
+});
+
+document.querySelectorAll('#erd svg.erDiagram .row-rect-odd path, #erd svg.erDiagram .row-rect-even path').forEach(p => {
+  p.setAttribute('fill', '#ffffff');
+  p.setAttribute('stroke', 'none');
+});
+document.querySelectorAll('#erd svg.erDiagram .divider path').forEach(p => {
+  p.setAttribute('stroke', '#000000');
+  p.setAttribute('stroke-width', '1');
+});
+
+document.querySelectorAll('#erd svg.erDiagram text, #erd svg.erDiagram tspan').forEach(t => {
+  t.setAttribute('fill', '#000000');
+});
+
+document.querySelectorAll('#erd svg.erDiagram .er.relationshipLine').forEach(l => {
+  l.setAttribute('stroke', '#000000');
+});
+document.querySelectorAll('#erd svg.erDiagram .er.entityBox').forEach(b => {
+  b.setAttribute('fill', '#ffffff');
+  b.setAttribute('stroke', '#7F77DD');
+});
+</script>

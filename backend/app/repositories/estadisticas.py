@@ -1,0 +1,57 @@
+"""Consultas de solo lectura contra las vistas de /database/04_views.sql.
+
+Son vistas, no tablas mapeadas por el ORM (no tienen PK propia útil para
+identidad de objeto), así que se consultan con SQL textual y se devuelven
+como mappings; los schemas de app/schemas/estadisticas.py las validan.
+"""
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+class EstadisticasRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def _fetch(self, sql: str, **params: Any) -> list[dict[str, Any]]:
+        result = await self.session.execute(text(sql), params)
+        return [dict(row) for row in result.mappings().all()]
+
+    async def tabla_posiciones(self, torneo_id: int) -> list[dict[str, Any]]:
+        return await self._fetch(
+            "SELECT * FROM vw_tabla_posiciones WHERE torneo_id = :torneo_id "
+            "ORDER BY pts DESC, dg DESC, gf DESC, equipo",
+            torneo_id=torneo_id,
+        )
+
+    async def goleadores(self, torneo_id: int, limit: int = 50) -> list[dict[str, Any]]:
+        return await self._fetch(
+            "SELECT * FROM vw_goleadores WHERE torneo_id = :torneo_id "
+            "ORDER BY goles DESC, jugador LIMIT :limit",
+            torneo_id=torneo_id,
+            limit=limit,
+        )
+
+    async def proximos_partidos(self, torneo_id: int | None = None) -> list[dict[str, Any]]:
+        if torneo_id is not None:
+            return await self._fetch(
+                "SELECT * FROM vw_proximos_partidos WHERE torneo_id = :torneo_id "
+                "ORDER BY fecha_partido",
+                torneo_id=torneo_id,
+            )
+        return await self._fetch("SELECT * FROM vw_proximos_partidos ORDER BY fecha_partido")
+
+    async def resultados_partidos(self, torneo_id: int) -> list[dict[str, Any]]:
+        return await self._fetch(
+            "SELECT * FROM vw_resultados_partidos WHERE torneo_id = :torneo_id "
+            "ORDER BY fecha_partido DESC",
+            torneo_id=torneo_id,
+        )
+
+    async def plantilla_equipo(self, equipo_id: int) -> list[dict[str, Any]]:
+        return await self._fetch(
+            "SELECT * FROM vw_jugadores_activos_por_equipo WHERE equipo_id = :equipo_id "
+            "ORDER BY dorsal NULLS LAST, jugador",
+            equipo_id=equipo_id,
+        )

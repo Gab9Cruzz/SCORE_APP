@@ -1,0 +1,19 @@
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+sqlalchemy[asyncio]==2.0.52
+psycopg[binary]==3.3.4
+pydantic==2.13.4
+pydantic-settings==2.15.0
+python-jose[cryptography]==3.5.0
+bcrypt==5.0.0
+python-multipart==0.0.32
+
+# Tests
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx==0.28.1
+# Solo lo usa tests/conftest.py para correr los .sql de /database de un
+# saque (script completo con bloques DO $$...$$): asyncpg soporta eso vía
+# protocolo simple; psycopg, la app, no lo necesita para nada más. No es el
+# driver de la app — ver el comentario sobre asyncpg+Windows en .env.example.
+asyncpg==0.31.0

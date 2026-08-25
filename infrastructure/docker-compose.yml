@@ -1,0 +1,24 @@
+# La API corre en contenedor; Postgres corre en el host (ya lo tenés
+# instalado y con torneos_mvp cargado, ver /database). host.docker.internal
+# apunta al host tanto en Docker Desktop (Win/Mac) como en Linux gracias al
+# extra_hosts de abajo.
+services:
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:1234@host.docker.internal:5432/torneos_mvp
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Falta JWT_SECRET_KEY. Generá uno con: python -c "import secrets; print(secrets.token_hex(32))" y exportalo antes de levantar el compose (ver README de esta carpeta)}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: "120"
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin1234}
+      ADMIN_NOMBRE: Administrador
+      CORS_ORIGINS: "*"
+      API_V1_PREFIX: /api/v1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
