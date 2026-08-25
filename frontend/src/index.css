@@ -1,0 +1,445 @@
+:root {
+  --bg: #0f1420;
+  --surface: #171f30;
+  --surface-alt: #1f2a40;
+  --border: #2b3654;
+  --text: #e6ebf5;
+  --text-muted: #93a0bd;
+  --accent: #4fd1c5;
+  --accent-strong: #38b2ac;
+  --danger: #ef6a6a;
+  --warning: #e0b23a;
+  --radius: 10px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.nav-bar__brand {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.nav-bar__links {
+  display: flex;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.nav-bar__links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius);
+}
+
+.nav-bar__links a.active,
+.nav-bar__links a:hover {
+  color: var(--text);
+  background: var(--surface-alt);
+}
+
+.nav-bar__session {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.nav-bar__session a {
+  color: var(--accent);
+}
+
+main {
+  flex: 1;
+  padding: 1rem;
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.page h1 {
+  margin-top: 0;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 800px) {
+  .dashboard-grid {
+    grid-template-columns: 1.3fr 1fr 1fr;
+  }
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  padding: 0.4rem 0.5rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+
+th:first-child,
+td:first-child {
+  text-align: left;
+}
+
+.goleadores-list,
+.partidos-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.goleadores-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.35rem;
+}
+
+.partidos-list li {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+
+.partidos-list a {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.torneo-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.torneo-picker select {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+}
+
+.badge--en-curso {
+  background: rgba(79, 209, 197, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.badge--finalizado {
+  background: rgba(147, 160, 189, 0.15);
+}
+
+.error-text {
+  color: var(--danger);
+}
+
+.login-page {
+  display: flex;
+  justify-content: center;
+  padding-top: 2rem;
+}
+
+.login-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  width: min(100%, 340px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+}
+
+.login-form input {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.7rem;
+}
+
+.login-form button {
+  margin-top: 0.5rem;
+  background: var(--accent);
+  border: none;
+  color: #05201d;
+  font-weight: 600;
+  padding: 0.65rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.login-form button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.button-link {
+  display: inline-block;
+  text-align: center;
+  background: var(--accent);
+  color: #05201d;
+  font-weight: 600;
+  padding: 0.65rem;
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+
+/* Marcador — usado en Control de Mesa y Partido en Vivo */
+.marcador {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.marcador__equipo {
+  text-align: center;
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.marcador__score {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.marcador__estado {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.eventos-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.eventos-timeline li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.eventos-timeline__minuto {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  min-width: 2.5em;
+}
+
+/* Control de Mesa — mobile-first, botones grandes para uso en cancha */
+.partidos-list--tappable button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mesa .link-button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: 0.5rem 0;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.carga-evento {
+  min-height: 220px;
+}
+
+.tap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.6rem;
+}
+
+.tap-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 1rem 0.75rem;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  min-height: 64px;
+  cursor: pointer;
+}
+
+.tap-button:active {
+  background: var(--accent);
+  color: #05201d;
+}
+
+.tap-button__icon {
+  font-size: 1.4rem;
+}
+
+.confirmar-evento {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.confirmar-evento label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+  max-width: 160px;
+}
+
+.confirmar-evento input {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.6rem;
+  border-radius: var(--radius);
+  font-size: 1.1rem;
+}
+
+.confirmar-evento__acciones {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.confirmar-evento__acciones button[type="button"]:not(.link-button) {
+  background: var(--accent);
+  border: none;
+  color: #05201d;
+  font-weight: 600;
+  padding: 0.7rem 1.2rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.confirmar-evento__acciones button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 480px) {
+  .nav-bar__links {
+    order: 3;
+    width: 100%;
+  }
+
+  .marcador__score {
+    font-size: 1.5rem;
+  }
+}
