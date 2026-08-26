@@ -1,0 +1,17 @@
+Para levantar todo (después de prender la PC)
+Terminal 1 — backend:
+
+
+cd c:\Users\Gabo\Desktop\proyectos\Score-App\backend
+.venv\Scripts\activate
+python run.py
+Dejalo corriendo. Confirmá en http://localhost:8000/health → {"status":"ok"}.
+
+Terminal 2 — frontend:
+
+
+cd c:\Users\Gabo\Desktop\proyectos\Score-App\frontend
+npm run dev
+Te va a mostrar la URL (normalmente http://localhost:5173).
+
+Con eso ya tenés todo arriba: abrís el navegador en esa URL y listo.

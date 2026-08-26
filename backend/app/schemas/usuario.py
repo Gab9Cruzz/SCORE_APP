@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-RolUsuario = Literal["Admin", "Arbitro", "Publico"]
+RolUsuario = Literal["AdminGeneral", "TorneoAdmin", "Arbitro", "Publico"]
 EstadoUsuario = Literal["Activo", "Inactivo"]
 
 

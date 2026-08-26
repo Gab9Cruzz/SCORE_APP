@@ -49,6 +49,16 @@ class BaseRepository(Generic[ModelT]):
 
     async def update(self, id_: int, **datos: Any) -> ModelT:
         obj = await self.get_or_404(id_)
+        return await self.save_changes(obj, **datos)
+
+    async def save_changes(self, obj: ModelT, **datos: Any) -> ModelT:
+        """Igual que `update`, pero recibe el objeto ya cargado.
+
+        Separado de `update` para que un caller que necesite hacer algo con
+        el objeto ANTES de mutarlo (ej: el ownership-check de Árbitro en
+        roles-3-modulos-plan.md Fase 1) no tenga que cargarlo dos veces —
+        una para el chequeo y otra dentro de `update`.
+        """
         for campo, valor in datos.items():
             if valor is not None:
                 setattr(obj, campo, valor)

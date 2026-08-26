@@ -22,7 +22,7 @@ async def test_crear_torneo_sin_auth_falla(client: AsyncClient):
     assert resp.status_code == 401
 
 
-async def test_admin_crea_torneo(client: AsyncClient, admin_headers: dict[str, str]):
+async def test_admin_crea_torneo(client: AsyncClient, admin_general_headers: dict[str, str]):
     resp = await client.post(
         "/api/v1/torneos",
         json={
@@ -31,7 +31,7 @@ async def test_admin_crea_torneo(client: AsyncClient, admin_headers: dict[str, s
             "fecha_inicio": "2026-05-01",
             "fecha_fin": "2026-06-01",
         },
-        headers=admin_headers,
+        headers=admin_general_headers,
     )
     assert resp.status_code == 201, resp.text
     body = resp.json()
@@ -41,7 +41,7 @@ async def test_admin_crea_torneo(client: AsyncClient, admin_headers: dict[str, s
     assert resp.status_code == 200
 
 
-async def test_fecha_fin_anterior_a_inicio_es_rechazada(client: AsyncClient, admin_headers: dict[str, str]):
+async def test_fecha_fin_anterior_a_inicio_es_rechazada(client: AsyncClient, admin_general_headers: dict[str, str]):
     resp = await client.post(
         "/api/v1/torneos",
         json={
@@ -50,12 +50,12 @@ async def test_fecha_fin_anterior_a_inicio_es_rechazada(client: AsyncClient, adm
             "fecha_inicio": "2026-06-01",
             "fecha_fin": "2026-05-01",
         },
-        headers=admin_headers,
+        headers=admin_general_headers,
     )
     assert resp.status_code == 422
 
 
-async def test_baja_logica_de_torneo(client: AsyncClient, admin_headers: dict[str, str]):
+async def test_baja_logica_de_torneo(client: AsyncClient, admin_general_headers: dict[str, str]):
     resp = await client.post(
         "/api/v1/torneos",
         json={
@@ -64,11 +64,11 @@ async def test_baja_logica_de_torneo(client: AsyncClient, admin_headers: dict[st
             "fecha_inicio": "2026-05-01",
             "fecha_fin": "2026-06-01",
         },
-        headers=admin_headers,
+        headers=admin_general_headers,
     )
     torneo_id = resp.json()["id"]
 
-    resp = await client.delete(f"/api/v1/torneos/{torneo_id}", headers=admin_headers)
+    resp = await client.delete(f"/api/v1/torneos/{torneo_id}", headers=admin_general_headers)
     assert resp.status_code == 200
     assert resp.json()["estado"] == "Inactivo"
 

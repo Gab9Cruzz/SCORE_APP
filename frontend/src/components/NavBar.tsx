@@ -14,6 +14,16 @@ export function NavBar() {
         <NavLink to="/control-de-mesa" className={({ isActive }) => (isActive ? "active" : undefined)}>
           Control de Mesa
         </NavLink>
+        {(session?.rol === "TorneoAdmin" || session?.rol === "AdminGeneral") && (
+          <NavLink to="/torneo-admin" className={({ isActive }) => (isActive ? "active" : undefined)}>
+            Torneo Admin
+          </NavLink>
+        )}
+        {session?.rol === "Arbitro" && (
+          <NavLink to="/arbitro" className={({ isActive }) => (isActive ? "active" : undefined)}>
+            Mis partidos
+          </NavLink>
+        )}
       </nav>
       <div className="nav-bar__session">
         {session ? (

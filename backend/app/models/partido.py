@@ -19,5 +19,10 @@ class Partido(TimestampMixin, Base):
     # Valores válidos: Regular, Grupos, Octavos, Cuartos, Semifinal, Final, Tercer puesto
     fase: Mapped[str] = mapped_column(String(30), default="Regular")
     grupo: Mapped[str | None] = mapped_column(String(10))
+    # Árbitro asignado a este partido (nullable — puede no tener uno
+    # todavía). Un solo árbitro por partido a propósito, ver D6 en
+    # roles-3-modulos-plan.md. Usado por el ownership-check de
+    # PartidoService/EventoPartidoService (D5).
+    arbitro_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
     # Valores válidos: Programado, En curso, Finalizado, Cancelado
     estado: Mapped[str] = mapped_column(String(20), default="Programado")

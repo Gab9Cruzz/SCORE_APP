@@ -8,7 +8,7 @@ async def test_listar_jugadores_es_publico(client: AsyncClient):
     assert len(resp.json()) >= 6
 
 
-async def test_admin_crea_jugador(client: AsyncClient, admin_headers: dict[str, str]):
-    resp = await client.post("/api/v1/jugadores", json={"nombre": "Jugador Nuevo"}, headers=admin_headers)
+async def test_admin_crea_jugador(client: AsyncClient, admin_general_headers: dict[str, str]):
+    resp = await client.post("/api/v1/jugadores", json={"nombre": "Jugador Nuevo"}, headers=admin_general_headers)
     assert resp.status_code == 201
     assert resp.json()["estado"] == "Activo"

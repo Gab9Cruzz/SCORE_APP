@@ -443,3 +443,106 @@ td:first-child {
     font-size: 1.5rem;
   }
 }
+
+/* Módulo Torneo Admin (roles-3-modulos-plan.md, Fase 2) */
+.page__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.page__header button {
+  background: var(--accent);
+  border: none;
+  color: #05201d;
+  font-weight: 600;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.table-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.table-actions button {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.resource-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 420px;
+}
+
+.resource-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+}
+
+.resource-form input,
+.resource-form select {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.55rem 0.6rem;
+  border-radius: var(--radius);
+}
+
+.resource-form__actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.25rem;
+}
+
+.resource-form__actions button[type="submit"] {
+  background: var(--accent);
+  border: none;
+  color: #05201d;
+  font-weight: 600;
+  padding: 0.65rem 1.2rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.resource-form__actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.admin-nav {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
+}
+
+.admin-nav a {
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.admin-nav a.active,
+.admin-nav a:hover {
+  color: var(--text);
+  background: var(--surface-alt);
+}

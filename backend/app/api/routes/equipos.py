@@ -24,18 +24,18 @@ async def obtener_equipo(equipo_id: int, session: AsyncSession = Depends(get_db)
     return await EquipoService(session).get(equipo_id)
 
 
-@router.post("", response_model=EquipoOut, status_code=201, dependencies=[Depends(require_roles("Admin"))])
+@router.post("", response_model=EquipoOut, status_code=201, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def crear_equipo(data: EquipoCreate, session: AsyncSession = Depends(get_db)) -> EquipoOut:
     return await EquipoService(session).create(data)
 
 
-@router.patch("/{equipo_id}", response_model=EquipoOut, dependencies=[Depends(require_roles("Admin"))])
+@router.patch("/{equipo_id}", response_model=EquipoOut, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def actualizar_equipo(
     equipo_id: int, data: EquipoUpdate, session: AsyncSession = Depends(get_db)
 ) -> EquipoOut:
     return await EquipoService(session).update(equipo_id, data)
 
 
-@router.delete("/{equipo_id}", response_model=EquipoOut, dependencies=[Depends(require_roles("Admin"))])
+@router.delete("/{equipo_id}", response_model=EquipoOut, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def dar_de_baja_equipo(equipo_id: int, session: AsyncSession = Depends(get_db)) -> EquipoOut:
     return await EquipoService(session).soft_delete(equipo_id)

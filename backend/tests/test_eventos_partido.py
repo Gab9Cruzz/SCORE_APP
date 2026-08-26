@@ -51,3 +51,55 @@ async def test_anular_evento(client: AsyncClient, arbitro_headers: dict[str, str
     resp = await client.post(f"/api/v1/eventos-partido/{evento_id}/anular", headers=arbitro_headers)
     assert resp.status_code == 200
     assert resp.json()["estado"] == "Anulado"
+
+
+async def test_arbitro_no_asignado_no_puede_registrar_evento(
+    client: AsyncClient, arbitro_no_asignado_headers: dict[str, str]
+):
+    # D5/D6 (roles-3-modulos-plan.md, Fase 1): el ownership-check rechaza a
+    # un Árbitro válido que no es el asignado al partido 3.
+    resp = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 30},
+        headers=arbitro_no_asignado_headers,
+    )
+    assert resp.status_code == 403
+    assert "asignado" in resp.json()["detail"].lower()
+
+
+async def test_arbitro_no_asignado_no_puede_anular_evento(
+    client: AsyncClient, arbitro_headers: dict[str, str], arbitro_no_asignado_headers: dict[str, str]
+):
+    # El evento lo carga el árbitro asignado; el intento de anularlo viene
+    # de un árbitro distinto, sin asignación al partido 3.
+    resp = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 15},
+        headers=arbitro_headers,
+    )
+    evento_id = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/eventos-partido/{evento_id}/anular", headers=arbitro_no_asignado_headers
+    )
+    assert resp.status_code == 403
+    assert "asignado" in resp.json()["detail"].lower()
+
+
+async def test_torneo_admin_puede_registrar_y_anular_evento(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    # TorneoAdmin no pasa por el ownership-check (D5) — sin partido "propio".
+    resp = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 45},
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    evento_id = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/eventos-partido/{evento_id}/anular", headers=torneo_admin_headers
+    )
+    assert resp.status_code == 200
+    assert resp.json()["estado"] == "Anulado"

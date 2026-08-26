@@ -69,6 +69,12 @@ CREATE TABLE PARTIDOS (
     Jornada INT,
     Fase VARCHAR(30) DEFAULT 'Regular',
     Grupo VARCHAR(10),
+    -- Árbitro asignado a este partido. Nullable: un partido puede no tener
+    -- árbitro asignado todavía. Sin esto, "el árbitro solo ve/carga SUS
+    -- partidos asignados" (roles-3-modulos-plan.md, Fase 1) no es
+    -- construible. Un solo árbitro por partido a propósito — ver D6 en
+    -- ese plan.
+    ARBITRO_ID INT,
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Estado VARCHAR(20) DEFAULT 'Programado'

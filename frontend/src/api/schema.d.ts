@@ -197,7 +197,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar Partidos */
+        /**
+         * Listar Partidos
+         * @description Público, sin auth (roles-3-modulos-plan.md, Fase 1: los resultados
+         *     ya son públicos a propósito). `arbitro_id` (Fase 3, D1) es un filtro
+         *     más, no un chequeo de permiso: PartidoOut ya expone arbitro_id en
+         *     cada fila, así que este query param no agrega ninguna fuga nueva,
+         *     solo evita filtrar del lado del cliente.
+         */
         get: operations["listar_partidos_api_v1_partidos_get"];
         put?: never;
         /**
@@ -205,6 +212,10 @@ export interface paths {
          * @description Programa un partido. trg_partidos_validar_inscripcion (06_triggers.sql)
          *     rechaza si alguno de los dos equipos no está inscrito y no cancelado en
          *     el torneo — el error llega como 400 con el mensaje del trigger.
+         *
+         *     Árbitro NO tiene este endpoint (roles-3-modulos-plan.md, Fase 1, D4):
+         *     crear partidos es de TorneoAdmin/AdminGeneral. Árbitro solo carga
+         *     partidos que ya le asignaron.
          */
         post: operations["crear_partido_api_v1_partidos_post"];
         delete?: never;
@@ -232,7 +243,12 @@ export interface paths {
         delete: operations["cancelar_partido_api_v1_partidos__partido_id__delete"];
         options?: never;
         head?: never;
-        /** Actualizar Partido */
+        /**
+         * Actualizar Partido
+         * @description Árbitro conserva este endpoint para avanzar el estado de SU partido
+         *     (Programado -> En curso -> Finalizado). El chequeo de "¿es tuyo?" vive
+         *     en PartidoService.update(), no acá (D5).
+         */
         patch: operations["actualizar_partido_api_v1_partidos__partido_id__patch"];
         trace?: never;
     };
@@ -354,6 +370,9 @@ export interface paths {
          * @description fn_validar_jugador_partido (06_triggers.sql) rechaza si el equipo no
          *     disputa el partido, si el jugador no pertenecía a ese equipo en esa
          *     fecha, o si jugador_id_entra falta/sobra según el tipo de evento.
+         *
+         *     Árbitro: el chequeo de "¿es tu partido?" vive en
+         *     EventoPartidoService.create() (D5), no acá.
          */
         post: operations["registrar_evento_partido_api_v1_eventos_partido_post"];
         delete?: never;
@@ -392,6 +411,9 @@ export interface paths {
          * Anular Evento Partido
          * @description Estado='Anulado' para un evento cargado por error (ej: gol mal
          *     registrado). No se borra físicamente, se anula: mantiene el historial.
+         *
+         *     Árbitro: mismo chequeo que en registrar_evento_partido, ver
+         *     EventoPartidoService.anular() (D5).
          */
         post: operations["anular_evento_partido_api_v1_eventos_partido__evento_partido_id__anular_post"];
         delete?: never;
@@ -429,11 +451,19 @@ export interface paths {
         get: operations["obtener_usuario_api_v1_usuarios__usuario_id__get"];
         put?: never;
         post?: never;
-        /** Dar De Baja Usuario */
+        /**
+         * Dar De Baja Usuario
+         * @description Rechaza que un AdminGeneral se desactive a sí mismo — chequeo en
+         *     UsuarioService.soft_delete() (T6).
+         */
         delete: operations["dar_de_baja_usuario_api_v1_usuarios__usuario_id__delete"];
         options?: never;
         head?: never;
-        /** Actualizar Usuario */
+        /**
+         * Actualizar Usuario
+         * @description Rechaza que un AdminGeneral se cambie su propio rol o se desactive a
+         *     sí mismo — chequeo en UsuarioService.update() (T6).
+         */
         patch: operations["actualizar_usuario_api_v1_usuarios__usuario_id__patch"];
         trace?: never;
     };
@@ -896,6 +926,8 @@ export interface components {
              * @enum {string}
              */
             estado: "Programado" | "En curso" | "Finalizado" | "Cancelado";
+            /** Arbitro Id */
+            arbitro_id: number | null;
             /**
              * Fecha Registro
              * Format: date-time
@@ -919,6 +951,8 @@ export interface components {
             grupo?: string | null;
             /** Estado */
             estado?: ("Programado" | "En curso" | "Finalizado" | "Cancelado") | null;
+            /** Arbitro Id */
+            arbitro_id?: number | null;
         };
         /** PlantillaJugadorOut */
         PlantillaJugadorOut: {
@@ -1114,7 +1148,7 @@ export interface components {
              * @default Publico
              * @enum {string}
              */
-            rol: "Admin" | "Arbitro" | "Publico";
+            rol: "AdminGeneral" | "TorneoAdmin" | "Arbitro" | "Publico";
         };
         /** UsuarioOut */
         UsuarioOut: {
@@ -1128,7 +1162,7 @@ export interface components {
              * Rol
              * @enum {string}
              */
-            rol: "Admin" | "Arbitro" | "Publico";
+            rol: "AdminGeneral" | "TorneoAdmin" | "Arbitro" | "Publico";
             /**
              * Estado
              * @enum {string}
@@ -1150,7 +1184,7 @@ export interface components {
             /** Nombre */
             nombre?: string | null;
             /** Rol */
-            rol?: ("Admin" | "Arbitro" | "Publico") | null;
+            rol?: ("AdminGeneral" | "TorneoAdmin" | "Arbitro" | "Publico") | null;
             /** Estado */
             estado?: ("Activo" | "Inactivo") | null;
             /** Password */
@@ -1890,6 +1924,7 @@ export interface operations {
                 limit?: number;
                 torneo_id?: number | null;
                 estado?: ("Programado" | "En curso" | "Finalizado" | "Cancelado") | null;
+                arbitro_id?: number | null;
             };
             header?: never;
             path?: never;
@@ -2473,7 +2508,7 @@ export interface operations {
             query?: {
                 skip?: number;
                 limit?: number;
-                rol?: ("Admin" | "Arbitro" | "Publico") | null;
+                rol?: ("AdminGeneral" | "TorneoAdmin" | "Arbitro" | "Publico") | null;
             };
             header?: never;
             path?: never;

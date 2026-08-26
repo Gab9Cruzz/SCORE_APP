@@ -30,7 +30,7 @@ async def obtener_inscripcion(
 
 
 @router.post(
-    "", response_model=InscripcionTorneoOut, status_code=201, dependencies=[Depends(require_roles("Admin"))]
+    "", response_model=InscripcionTorneoOut, status_code=201, dependencies=[Depends(require_roles("TorneoAdmin"))]
 )
 async def inscribir_equipo(
     data: InscripcionTorneoCreate, session: AsyncSession = Depends(get_db)
@@ -43,7 +43,7 @@ async def inscribir_equipo(
 @router.patch(
     "/{inscripcion_id}",
     response_model=InscripcionTorneoOut,
-    dependencies=[Depends(require_roles("Admin"))],
+    dependencies=[Depends(require_roles("TorneoAdmin"))],
 )
 async def actualizar_inscripcion(
     inscripcion_id: int, data: InscripcionTorneoUpdate, session: AsyncSession = Depends(get_db)

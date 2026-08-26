@@ -24,19 +24,19 @@ async def obtener_torneo(torneo_id: int, session: AsyncSession = Depends(get_db)
     return await TorneoService(session).get(torneo_id)
 
 
-@router.post("", response_model=TorneoOut, status_code=201, dependencies=[Depends(require_roles("Admin"))])
+@router.post("", response_model=TorneoOut, status_code=201, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def crear_torneo(data: TorneoCreate, session: AsyncSession = Depends(get_db)) -> TorneoOut:
     return await TorneoService(session).create(data)
 
 
-@router.patch("/{torneo_id}", response_model=TorneoOut, dependencies=[Depends(require_roles("Admin"))])
+@router.patch("/{torneo_id}", response_model=TorneoOut, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def actualizar_torneo(
     torneo_id: int, data: TorneoUpdate, session: AsyncSession = Depends(get_db)
 ) -> TorneoOut:
     return await TorneoService(session).update(torneo_id, data)
 
 
-@router.delete("/{torneo_id}", response_model=TorneoOut, dependencies=[Depends(require_roles("Admin"))])
+@router.delete("/{torneo_id}", response_model=TorneoOut, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def dar_de_baja_torneo(torneo_id: int, session: AsyncSession = Depends(get_db)) -> TorneoOut:
     """Borrado lógico (Estado='Inactivo'). No hay DELETE físico: ver el
     comentario sobre ON DELETE CASCADE en database/02_constraints.sql."""

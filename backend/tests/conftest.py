@@ -29,6 +29,7 @@ from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.session import get_db
 from app.main import app
+from app.models.partido import Partido
 from app.models.usuario import Usuario
 
 settings = get_settings()
@@ -134,21 +135,40 @@ async def _crear_usuario(session: AsyncSession, username: str, password: str, ro
     return usuario
 
 
-@pytest_asyncio.fixture
-async def admin_headers(db_session: AsyncSession, client: AsyncClient) -> dict[str, str]:
-    await _crear_usuario(db_session, "admin_test", "adminpass123", "Admin")
+async def _login_headers(client: AsyncClient, username: str, password: str) -> dict[str, str]:
     resp = await client.post(
-        "/api/v1/auth/login", data={"username": "admin_test", "password": "adminpass123"}
+        "/api/v1/auth/login", data={"username": username, "password": password}
     )
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+@pytest_asyncio.fixture
+async def admin_general_headers(db_session: AsyncSession, client: AsyncClient) -> dict[str, str]:
+    await _crear_usuario(db_session, "admin_general_test", "adminpass123", "AdminGeneral")
+    return await _login_headers(client, "admin_general_test", "adminpass123")
+
+
+@pytest_asyncio.fixture
+async def torneo_admin_headers(db_session: AsyncSession, client: AsyncClient) -> dict[str, str]:
+    await _crear_usuario(db_session, "torneo_admin_test", "torneopass123", "TorneoAdmin")
+    return await _login_headers(client, "torneo_admin_test", "torneopass123")
 
 
 @pytest_asyncio.fixture
 async def arbitro_headers(db_session: AsyncSession, client: AsyncClient) -> dict[str, str]:
-    await _crear_usuario(db_session, "arbitro_test", "arbitropass123", "Arbitro")
-    resp = await client.post(
-        "/api/v1/auth/login", data={"username": "arbitro_test", "password": "arbitropass123"}
-    )
-    assert resp.status_code == 200, resp.text
-    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+    """Árbitro asignado al partido 3 (05_seed.sql) — el que ya usan los
+    tests de eventos-partido. Para un árbitro SIN partido asignado, usar
+    arbitro_no_asignado_headers (prueba el 403 del ownership-check)."""
+    usuario = await _crear_usuario(db_session, "arbitro_test", "arbitropass123", "Arbitro")
+    partido = await db_session.get(Partido, 3)
+    partido.arbitro_id = usuario.id
+    await db_session.commit()
+    return await _login_headers(client, "arbitro_test", "arbitropass123")
+
+
+@pytest_asyncio.fixture
+async def arbitro_no_asignado_headers(db_session: AsyncSession, client: AsyncClient) -> dict[str, str]:
+    """Árbitro válido pero sin ningún partido asignado."""
+    await _crear_usuario(db_session, "arbitro_sin_asignar_test", "arbitropass123", "Arbitro")
+    return await _login_headers(client, "arbitro_sin_asignar_test", "arbitropass123")

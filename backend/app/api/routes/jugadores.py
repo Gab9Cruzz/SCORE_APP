@@ -24,18 +24,18 @@ async def obtener_jugador(jugador_id: int, session: AsyncSession = Depends(get_d
     return await JugadorService(session).get(jugador_id)
 
 
-@router.post("", response_model=JugadorOut, status_code=201, dependencies=[Depends(require_roles("Admin"))])
+@router.post("", response_model=JugadorOut, status_code=201, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def crear_jugador(data: JugadorCreate, session: AsyncSession = Depends(get_db)) -> JugadorOut:
     return await JugadorService(session).create(data)
 
 
-@router.patch("/{jugador_id}", response_model=JugadorOut, dependencies=[Depends(require_roles("Admin"))])
+@router.patch("/{jugador_id}", response_model=JugadorOut, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def actualizar_jugador(
     jugador_id: int, data: JugadorUpdate, session: AsyncSession = Depends(get_db)
 ) -> JugadorOut:
     return await JugadorService(session).update(jugador_id, data)
 
 
-@router.delete("/{jugador_id}", response_model=JugadorOut, dependencies=[Depends(require_roles("Admin"))])
+@router.delete("/{jugador_id}", response_model=JugadorOut, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def dar_de_baja_jugador(jugador_id: int, session: AsyncSession = Depends(get_db)) -> JugadorOut:
     return await JugadorService(session).soft_delete(jugador_id)

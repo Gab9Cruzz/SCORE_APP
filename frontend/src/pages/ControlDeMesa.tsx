@@ -57,7 +57,13 @@ export function ControlDeMesaPage() {
   );
 }
 
-function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver: () => void }) {
+/** Exportado para reusarlo tal cual en el módulo Árbitro (Fase 3, D4) —
+ * "Mis partidos" embebe este mismo componente al elegir un partido, sin
+ * duplicar la lógica de carga de eventos/mutaciones. No tiene ninguna
+ * afordancia exclusiva de TorneoAdmin/AdminGeneral (confirmado en la
+ * revisión de Fase 3): solo scoreboard, form de carga de evento y
+ * timeline de eventos, seguro de embeber para un Árbitro. */
+export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver: () => void }) {
   const queryClient = useQueryClient();
   const { session } = useAuth();
 

@@ -26,6 +26,9 @@ CREATE INDEX idx_partidos_visitante ON PARTIDOS(EQUIPOS_ID_VISITANTE);
 CREATE INDEX idx_partidos_fecha ON PARTIDOS(Fecha_Partido);
 CREATE INDEX idx_partidos_estado ON PARTIDOS(Estado);
 CREATE INDEX idx_partidos_jornada ON PARTIDOS(Torneo_ID, Jornada);
+-- Usado por el ownership-check de Árbitro (Fase 1) y por "Mis partidos"
+-- (Fase 3) — ambos filtran por ARBITRO_ID en cada request.
+CREATE INDEX idx_partidos_arbitro ON PARTIDOS(ARBITRO_ID);
 
 -- EVENTOS_PARTIDO
 CREATE INDEX idx_eventos_partido_partido ON EVENTOS_PARTIDO(PARTIDOS_ID);

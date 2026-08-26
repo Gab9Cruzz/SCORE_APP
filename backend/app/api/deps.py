@@ -32,13 +32,21 @@ async def get_current_user(
 
 
 def require_roles(*roles: str) -> Callable:
-    """Uso: Depends(require_roles("Admin")) o Depends(require_roles("Admin", "Arbitro"))."""
+    """Uso: Depends(require_roles("TorneoAdmin")) o Depends(require_roles("TorneoAdmin", "Arbitro")).
+
+    AdminGeneral no hace falta pasarlo en `roles`: pasa cualquier chequeo vía
+    el bypass de abajo, centralizado acá en vez de enumerado en cada uno de
+    los routers (ver roles-3-modulos-plan.md, Fase 1, D3). La única
+    excepción real es usuarios.py, que sí llama a
+    require_roles("AdminGeneral") explícito — ahí el bypass y el chequeo
+    literal coinciden, así que no necesita tratamiento especial acá.
+    """
 
     async def _checker(usuario: Usuario = Depends(get_current_user)) -> Usuario:
-        if usuario.rol not in roles:
-            raise ForbiddenError(
-                f"Esta operación requiere rol {' o '.join(roles)} (tenés: {usuario.rol})."
-            )
-        return usuario
+        if usuario.rol == "AdminGeneral" or usuario.rol in roles:
+            return usuario
+        raise ForbiddenError(
+            f"Esta operación requiere rol {' o '.join(roles)} (tenés: {usuario.rol})."
+        )
 
     return _checker

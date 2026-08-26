@@ -24,18 +24,18 @@ async def obtener_evento(evento_id: int, session: AsyncSession = Depends(get_db)
     return await EventoService(session).get(evento_id)
 
 
-@router.post("", response_model=EventoOut, status_code=201, dependencies=[Depends(require_roles("Admin"))])
+@router.post("", response_model=EventoOut, status_code=201, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def crear_evento(data: EventoCreate, session: AsyncSession = Depends(get_db)) -> EventoOut:
     return await EventoService(session).create(data)
 
 
-@router.patch("/{evento_id}", response_model=EventoOut, dependencies=[Depends(require_roles("Admin"))])
+@router.patch("/{evento_id}", response_model=EventoOut, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def actualizar_evento(
     evento_id: int, data: EventoUpdate, session: AsyncSession = Depends(get_db)
 ) -> EventoOut:
     return await EventoService(session).update(evento_id, data)
 
 
-@router.delete("/{evento_id}", response_model=EventoOut, dependencies=[Depends(require_roles("Admin"))])
+@router.delete("/{evento_id}", response_model=EventoOut, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def dar_de_baja_evento(evento_id: int, session: AsyncSession = Depends(get_db)) -> EventoOut:
     return await EventoService(session).soft_delete(evento_id)

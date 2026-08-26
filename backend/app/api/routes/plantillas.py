@@ -31,7 +31,7 @@ async def obtener_vinculo(vinculo_id: int, session: AsyncSession = Depends(get_d
 
 
 @router.post(
-    "", response_model=JugadorEquipoOut, status_code=201, dependencies=[Depends(require_roles("Admin"))]
+    "", response_model=JugadorEquipoOut, status_code=201, dependencies=[Depends(require_roles("TorneoAdmin"))]
 )
 async def dar_de_alta_jugador(
     data: JugadorEquipoCreate, session: AsyncSession = Depends(get_db)
@@ -42,7 +42,7 @@ async def dar_de_alta_jugador(
 
 
 @router.patch(
-    "/{vinculo_id}", response_model=JugadorEquipoOut, dependencies=[Depends(require_roles("Admin"))]
+    "/{vinculo_id}", response_model=JugadorEquipoOut, dependencies=[Depends(require_roles("TorneoAdmin"))]
 )
 async def actualizar_vinculo(
     vinculo_id: int, data: JugadorEquipoUpdate, session: AsyncSession = Depends(get_db)
@@ -53,7 +53,7 @@ async def actualizar_vinculo(
 @router.post(
     "/{vinculo_id}/baja",
     response_model=JugadorEquipoOut,
-    dependencies=[Depends(require_roles("Admin"))],
+    dependencies=[Depends(require_roles("TorneoAdmin"))],
 )
 async def dar_de_baja_jugador(
     vinculo_id: int, fecha_fin: date, session: AsyncSession = Depends(get_db)

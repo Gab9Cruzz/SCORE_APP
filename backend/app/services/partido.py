@@ -1,8 +1,10 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.partido import Partido
+from app.models.usuario import Usuario
 from app.repositories.partido import PartidoRepository
 from app.schemas.partido import PartidoCreate, PartidoUpdate
+from app.services.permisos import verificar_arbitro_asignado
 
 
 class PartidoService:
@@ -18,8 +20,13 @@ class PartidoService:
         limit: int = 100,
         torneo_id: int | None = None,
         estado: str | None = None,
+        arbitro_id: int | None = None,
     ) -> list[Partido]:
-        return await self.repo.list(skip=skip, limit=limit, torneo_id=torneo_id, estado=estado)
+        # arbitro_id (Fase 3, D1): filtro más, mismo mecanismo genérico de
+        # BaseRepository.list — no hace falta tocar el repositorio.
+        return await self.repo.list(
+            skip=skip, limit=limit, torneo_id=torneo_id, estado=estado, arbitro_id=arbitro_id
+        )
 
     async def create(self, data: PartidoCreate) -> Partido:
         # Nada de validación de negocio acá: quién disputa el partido y si
@@ -29,8 +36,14 @@ class PartidoService:
         # devuelve tal cual como 400.
         return await self.repo.create(**data.model_dump())
 
-    async def update(self, id_: int, data: PartidoUpdate) -> Partido:
-        return await self.repo.update(id_, **data.model_dump(exclude_unset=True))
+    async def update(self, id_: int, data: PartidoUpdate, usuario_actual: Usuario) -> Partido:
+        # Árbitro solo puede tocar SU partido asignado (D5/D6,
+        # roles-3-modulos-plan.md Fase 1) — carga una vez, chequea, y
+        # reusa ese mismo objeto para guardar (save_changes), sin volver
+        # a consultarlo.
+        partido = await self.repo.get_or_404(id_)
+        verificar_arbitro_asignado(partido, usuario_actual)
+        return await self.repo.save_changes(partido, **data.model_dump(exclude_unset=True))
 
     async def soft_delete(self, id_: int) -> Partido:
         return await self.repo.soft_delete(id_, estado_inactivo="Cancelado")

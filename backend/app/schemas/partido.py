@@ -44,6 +44,9 @@ class PartidoUpdate(BaseModel):
     fase: FasePartido | None = None
     grupo: str | None = None
     estado: EstadoPartido | None = None
+    # Asignación de árbitro (D6, roles-3-modulos-plan.md) — un paso
+    # separado de crear el partido, por eso no está en PartidoCreate.
+    arbitro_id: int | None = None
 
 
 class PartidoOut(PartidoBase):
@@ -51,5 +54,6 @@ class PartidoOut(PartidoBase):
 
     id: int
     estado: EstadoPartido
+    arbitro_id: int | None
     fecha_registro: datetime
     fecha_modificacion: datetime
