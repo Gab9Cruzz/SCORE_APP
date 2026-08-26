@@ -25,6 +25,11 @@ interface ResourceTableProps<T extends RowConEstado> {
   /** Estados que ya están de baja — no se les muestra el botón de borrar
    * de nuevo (Inactivo/Cancelado según el recurso). Default: ["Inactivo", "Cancelado"]. */
   estadosDeBaja?: string[];
+  /** roles-3-modulos-plan.md, Fase 4, D2a: oculta el botón de baja para
+   * la fila que es el usuario logueado — cierra preventivamente el click
+   * más probable de auto-lockout (el backend ya lo rechaza con 403, esto
+   * evita el viaje redondo). Opcional: solo lo usa UsuariosAdmin.tsx. */
+  isSelf?: (row: T) => boolean;
 }
 
 /** Tabla genérica de listado para el módulo Torneo Admin
@@ -43,6 +48,7 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
     softDeleteLabel = "Dar de baja",
     softDeletePending = false,
     estadosDeBaja = ["Inactivo", "Cancelado"],
+    isSelf,
   } = props;
 
   if (isLoading) return <p>Cargando...</p>;
@@ -75,7 +81,7 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
                       Editar
                     </button>
                   )}
-                  {onSoftDelete && !estadosDeBaja.includes(row.estado ?? "") && (
+                  {onSoftDelete && !estadosDeBaja.includes(row.estado ?? "") && !isSelf?.(row) && (
                     <button type="button" onClick={() => onSoftDelete(row)} disabled={softDeletePending}>
                       {softDeleteLabel}
                     </button>

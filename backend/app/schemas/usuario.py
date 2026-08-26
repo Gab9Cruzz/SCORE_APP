@@ -38,6 +38,18 @@ class UsuarioUpdate(BaseModel):
     estado: EstadoUsuario | None = None
     password: str | None = None
 
+    @field_validator("password")
+    @classmethod
+    def password_minima(cls, v: str | None) -> str | None:
+        # roles-3-modulos-plan.md, Fase 4, D3: UsuarioCreate ya tenía este
+        # mínimo, acá faltaba — agujero preexistente que antes solo era
+        # alcanzable llamando la API cruda, ahora es un click de distancia
+        # con el form de edición de Usuarios. `None` (no tocar la
+        # contraseña) sigue siendo válido, solo se valida si mandan algo.
+        if v is not None and len(v) < 8:
+            raise ValueError("password debe tener al menos 8 caracteres.")
+        return v
+
 
 class UsuarioOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

@@ -20,7 +20,7 @@ const columnas = [
   { key: "estado", label: "Estado" },
 ];
 
-function renderPagina() {
+function renderPagina(isSelf?: (row: Fila) => boolean) {
   const Wrapper = createWrapper();
   return render(
     <Wrapper>
@@ -31,6 +31,7 @@ function renderPagina() {
         createFields={campos}
         editFields={campos}
         columns={columnas}
+        isSelf={isSelf}
       />
     </Wrapper>,
   );
@@ -90,6 +91,26 @@ describe("SimpleResourceAdminPage", () => {
     await user.click(screen.getByRole("button", { name: "Dar de baja" }));
 
     await waitFor(() => expect(deleteHit).toBe(true));
+  });
+
+  it("dar de baja: muestra un mensaje si falla (roles-3-modulos-plan.md, Fase 4, D2b — antes era silencioso)", async () => {
+    const user = userEvent.setup();
+    server.use(http.delete(`${BASE}/1`, () => HttpResponse.json({ detail: "no podés desactivar tu propia cuenta" }, { status: 403 })));
+    renderPagina();
+    await screen.findByText("Uno");
+
+    await user.click(screen.getByRole("button", { name: "Dar de baja" }));
+
+    expect(await screen.findByText("no podés desactivar tu propia cuenta")).toBeInTheDocument();
+  });
+
+  it("isSelf oculta el botón de 'Dar de baja' para la propia fila (Fase 4, D2a)", async () => {
+    renderPagina((row) => row.id === 1);
+    await screen.findByText("Uno");
+
+    expect(screen.queryByRole("button", { name: "Dar de baja" })).not.toBeInTheDocument();
+    // Editar sigue disponible — isSelf solo afecta la baja.
+    expect(screen.getByRole("button", { name: "Editar" })).toBeInTheDocument();
   });
 
   it("muestra el error del backend inline al fallar la creación", async () => {

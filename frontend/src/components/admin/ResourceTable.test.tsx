@@ -73,6 +73,24 @@ describe("ResourceTable", () => {
     expect(screen.getAllByRole("button", { name: "Dar de baja" })).toHaveLength(1);
   });
 
+  it("isSelf oculta el botón de baja solo para la fila que matchea (Fase 4, D2a)", () => {
+    const rows: Fila[] = [
+      { id: 1, nombre: "Yo", estado: "Activo" },
+      { id: 2, nombre: "Otro", estado: "Activo" },
+    ];
+    render(
+      <ResourceTable<Fila>
+        rows={rows}
+        columns={columnas}
+        isLoading={false}
+        isError={false}
+        onSoftDelete={() => {}}
+        isSelf={(row) => row.id === 1}
+      />,
+    );
+    expect(screen.getAllByRole("button", { name: "Dar de baja" })).toHaveLength(1);
+  });
+
   it("click en 'Dar de baja' llama a onSoftDelete con la fila", async () => {
     const user = userEvent.setup();
     const onSoftDelete = vi.fn();

@@ -34,6 +34,21 @@ describe("ResourceForm", () => {
     expect(onSubmit).toHaveBeenCalledWith({ dorsal: 10 });
   });
 
+  it("campo password: renderiza un input enmascarado (Fase 4, D3)", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    const fields: ResourceFormField[] = [{ name: "password", label: "Contraseña", type: "password" }];
+    render(<ResourceForm fields={fields} onSubmit={onSubmit} submitting={false} submitError={null} />);
+
+    const input = screen.getByLabelText("Contraseña");
+    expect(input).toHaveAttribute("type", "password");
+
+    await user.type(input, "clave12345");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(onSubmit).toHaveBeenCalledWith({ password: "clave12345" });
+  });
+
   it("campo reference: muestra 'Cargando...' mientras optionsLoading", () => {
     const fields: ResourceFormField[] = [
       { name: "torneo_id", label: "Torneo", type: "reference", optionsLoading: true },

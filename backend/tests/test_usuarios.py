@@ -110,6 +110,23 @@ async def test_password_corta_es_rechazada(client: AsyncClient, admin_general_he
     assert resp.status_code == 422
 
 
+async def test_patch_password_corta_es_rechazada(client: AsyncClient, admin_general_headers: dict[str, str]):
+    # roles-3-modulos-plan.md, Fase 4, D3: UsuarioUpdate.password no tenía
+    # el mismo mínimo de 8 caracteres que UsuarioCreate — agujero
+    # preexistente, alcanzable ahora desde el form de edición nuevo.
+    creado = await client.post(
+        "/api/v1/usuarios",
+        json={"username": "para_patch", "nombre": "Para Patch", "password": "clave12345", "rol": "Publico"},
+        headers=admin_general_headers,
+    )
+    usuario_id = creado.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/usuarios/{usuario_id}", json={"password": "123"}, headers=admin_general_headers
+    )
+    assert resp.status_code == 422
+
+
 async def test_admin_general_no_puede_cambiarse_su_propio_rol(
     client: AsyncClient, admin_general_headers: dict[str, str]
 ):

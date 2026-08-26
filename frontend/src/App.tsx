@@ -6,6 +6,7 @@ import { DashboardPage } from "./pages/Dashboard";
 import { LoginPage } from "./pages/Login";
 import { PartidoEnVivoPage } from "./pages/PartidoEnVivo";
 import { MisPartidosPage } from "./pages/arbitro/MisPartidos";
+import { UsuariosAdminPage } from "./pages/admin/UsuariosAdmin";
 import { EquiposAdminPage } from "./pages/torneo-admin/EquiposAdmin";
 import { InscripcionesAdminPage } from "./pages/torneo-admin/InscripcionesAdmin";
 import { JugadoresAdminPage } from "./pages/torneo-admin/JugadoresAdmin";
@@ -33,16 +34,34 @@ export function App() {
           />
           <Route path="/partido/:partidoId/en-vivo" element={<PartidoEnVivoPage />} />
 
-          {/* Módulo Árbitro (roles-3-modulos-plan.md, Fase 3, D3): ruta
-              única, sin layout/Outlet — hoy es una sola pantalla. Sin
-              AdminGeneral en la lista de roles a propósito: el "entrar
-              como" de AdminGeneral en este módulo es la pregunta que
-              Fase 4 todavía no decidió. */}
+          {/* Módulo Árbitro (roles-3-modulos-plan.md, Fase 3, D3 + Fase 4,
+              D1): ruta única, sin layout/Outlet — hoy es una sola
+              pantalla. AdminGeneral se agregó en Fase 4 (acceso cruzado
+              "sin restricción" del plan original) — sin selector "entrar
+              como", solo la lista de roles ampliada. En la práctica un
+              AdminGeneral casi siempre ve el empty-state (no suele tener
+              arbitro_id asignado), pero backend-side ya tenía acceso
+              (bypass de require_roles, D3 confirmado por la voz externa). */}
           <Route
             path="/arbitro"
             element={
-              <RequireRole roles={["Arbitro"]}>
+              <RequireRole roles={["Arbitro", "AdminGeneral"]}>
                 <MisPartidosPage />
+              </RequireRole>
+            }
+          />
+
+          {/* Módulo Admin General (roles-3-modulos-plan.md, Fase 4, D4):
+              ruta standalone, NO anidada bajo /torneo-admin — ese layout
+              no gatea por pestaña, así que un tab acá le mostraría un
+              link muerto a TorneoAdmin. RequireRole solo AdminGeneral,
+              coincide exacto con el gate literal de escritura del
+              backend (usuarios.py). */}
+          <Route
+            path="/admin/usuarios"
+            element={
+              <RequireRole roles={["AdminGeneral"]}>
+                <UsuariosAdminPage />
               </RequireRole>
             }
           />

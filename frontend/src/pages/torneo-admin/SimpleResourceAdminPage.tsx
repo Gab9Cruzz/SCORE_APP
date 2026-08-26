@@ -19,6 +19,8 @@ interface SimpleResourceAdminPageProps<TOut extends RowBase> {
   editFields: ResourceFormField[];
   columns: ResourceTableColumn<TOut>[];
   emptyMessage?: string;
+  /** roles-3-modulos-plan.md, Fase 4, D2a — ver ResourceTable.tsx. */
+  isSelf?: (row: TOut) => boolean;
 }
 
 /** Página de gestión CRUD para un recurso "simple" (Torneo, Equipo,
@@ -28,7 +30,7 @@ interface SimpleResourceAdminPageProps<TOut extends RowBase> {
  * esto — se desvían demasiado del patrón (ver PartidosAdmin.tsx,
  * InscripcionesAdmin.tsx, PlantillasAdmin.tsx). */
 export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResourceAdminPageProps<TOut>) {
-  const { resourceKey, basePath, title, createFields, editFields, columns, emptyMessage } = props;
+  const { resourceKey, basePath, title, createFields, editFields, columns, emptyMessage, isSelf } = props;
   const crud = useResourceCrud<TOut>({ resourceKey, basePath });
   const [modo, setModo] = useState<Modo<TOut>>({ tipo: "lista" });
 
@@ -83,6 +85,11 @@ export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResou
           + Nuevo
         </button>
       </div>
+      {/* roles-3-modulos-plan.md, Fase 4, D2b: gap preexistente — un
+          softDelete fallido (self-lockout, red, 500) no mostraba nada acá.
+          Beneficia a los 4 recursos que usan esta página compartida, no
+          solo a Usuarios. */}
+      {crud.softDelete.isError && <p className="error-text">{apiErrorMessage(crud.softDelete.error)}</p>}
       <ResourceTable<TOut>
         rows={crud.listQuery.data ?? []}
         columns={columns}
@@ -92,6 +99,7 @@ export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResou
         onSelect={(fila) => setModo({ tipo: "editar", fila })}
         onSoftDelete={(fila) => crud.softDelete.mutate(fila.id)}
         softDeletePending={crud.softDelete.isPending}
+        isSelf={isSelf}
       />
     </div>
   );

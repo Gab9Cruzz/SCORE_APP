@@ -19,9 +19,14 @@ export function NavBar() {
             Torneo Admin
           </NavLink>
         )}
-        {session?.rol === "Arbitro" && (
+        {(session?.rol === "Arbitro" || session?.rol === "AdminGeneral") && (
           <NavLink to="/arbitro" className={({ isActive }) => (isActive ? "active" : undefined)}>
             Mis partidos
+          </NavLink>
+        )}
+        {session?.rol === "AdminGeneral" && (
+          <NavLink to="/admin/usuarios" className={({ isActive }) => (isActive ? "active" : undefined)}>
+            Usuarios
           </NavLink>
         )}
       </nav>

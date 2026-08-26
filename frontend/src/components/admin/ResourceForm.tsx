@@ -13,7 +13,7 @@ export interface ResourceFormField {
   /** "reference": select con opciones cargadas de otro recurso (id
    * numérico). "select": select con una lista fija de strings (ej. un
    * Literal de estado) — no pide nada a la API. */
-  type: "text" | "number" | "date" | "datetime" | "reference" | "select";
+  type: "text" | "number" | "date" | "datetime" | "password" | "reference" | "select";
   required?: boolean;
   /** Solo para type "reference". */
   options?: ResourceFormFieldOption[];

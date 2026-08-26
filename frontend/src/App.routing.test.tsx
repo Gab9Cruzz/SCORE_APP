@@ -13,6 +13,7 @@ const LOGIN = "http://127.0.0.1:8000/api/v1/auth/login";
 const ME = "http://127.0.0.1:8000/api/v1/auth/me";
 const TORNEOS = "http://127.0.0.1:8000/api/v1/torneos";
 const PARTIDOS = "http://127.0.0.1:8000/api/v1/partidos";
+const USUARIOS = "http://127.0.0.1:8000/api/v1/usuarios";
 
 function renderApp(initialPath: string) {
   const queryClient = createTestQueryClient();
@@ -45,6 +46,7 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
     server.use(
       http.get(TORNEOS, () => HttpResponse.json([])),
       http.get(PARTIDOS, () => HttpResponse.json([])),
+      http.get(USUARIOS, () => HttpResponse.json([])),
       // AuthContext.login() llama /auth/me tras cada login exitoso (Fase 3,
       // D2) — default handler acá para que los tests que no lo pisan no
       // revienten con un request sin mockear (onUnhandledRequest: "error").
@@ -58,13 +60,13 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
     expect(screen.getByText(/TorneoAdmin o AdminGeneral/)).toBeInTheDocument();
   });
 
-  it("navegar directo a /arbitro sin sesión muestra el prompt de login, no crashea (Fase 3, D3)", () => {
+  it("navegar directo a /arbitro sin sesión muestra el prompt de login, no crashea (Fase 3, D3 + Fase 4, D1)", () => {
     renderApp("/arbitro");
     expect(screen.getByText("Necesitás iniciar sesión")).toBeInTheDocument();
-    expect(screen.getByText("Arbitro", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText("Arbitro o AdminGeneral", { selector: "strong" })).toBeInTheDocument();
   });
 
-  it("TorneoAdmin logueado no puede entrar a /arbitro (D3: sin AdminGeneral/TorneoAdmin en la lista)", async () => {
+  it("TorneoAdmin logueado no puede entrar a /arbitro (D3: TorneoAdmin nunca estuvo en la lista)", async () => {
     mockLogin("TorneoAdmin");
     renderApp("/login");
     await iniciarSesion();
@@ -72,6 +74,42 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
 
     renderApp("/arbitro");
     expect(screen.getByText("Necesitás iniciar sesión")).toBeInTheDocument();
+  });
+
+  it("AdminGeneral logueado SÍ puede entrar a /arbitro (Fase 4, D1: acceso cruzado)", async () => {
+    mockLogin("AdminGeneral");
+    renderApp("/login");
+    await iniciarSesion();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Torneo Admin" })).toBeInTheDocument());
+
+    renderApp("/arbitro");
+    expect(await screen.findByRole("heading", { name: "Mis partidos" })).toBeInTheDocument();
+  });
+
+  it("navegar directo a /admin/usuarios sin sesión muestra el prompt de login (Fase 4, D4)", () => {
+    renderApp("/admin/usuarios");
+    expect(screen.getByText("Necesitás iniciar sesión")).toBeInTheDocument();
+    expect(screen.getByText("AdminGeneral", { selector: "strong" })).toBeInTheDocument();
+  });
+
+  it("TorneoAdmin logueado no puede entrar a /admin/usuarios (D4: literal AdminGeneral-only, coincide con el backend)", async () => {
+    mockLogin("TorneoAdmin");
+    renderApp("/login");
+    await iniciarSesion();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Torneo Admin" })).toBeInTheDocument());
+
+    renderApp("/admin/usuarios");
+    expect(screen.getByText("Necesitás iniciar sesión")).toBeInTheDocument();
+  });
+
+  it("AdminGeneral logueado puede entrar a /admin/usuarios (Fase 4, D4)", async () => {
+    mockLogin("AdminGeneral");
+    renderApp("/login");
+    await iniciarSesion();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Torneo Admin" })).toBeInTheDocument());
+
+    renderApp("/admin/usuarios");
+    expect(await screen.findByRole("heading", { name: "Usuarios" })).toBeInTheDocument();
   });
 
   it("TorneoAdmin: login redirige a /torneo-admin (antes NO pasaba — login() no exponía el rol)", async () => {

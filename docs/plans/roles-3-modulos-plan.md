@@ -911,6 +911,208 @@ amerita coordinar un worktree aparte para eso.
   (¿un selector de "entrar como", o simplemente ve todo junto en su propia
   vista?). No decidido todavía — abrir como pregunta en esa fase.
 
+#### Fase 4 — Resultado de /plan-eng-review (2026-08-26)
+
+**Step 0:** el backend de esta fase ya está construido de punta a punta
+desde Fase 1/2 — CRUD completo de usuarios (`usuarios.py` +
+`UsuarioService`), guard de auto-lockout, filtro `?rol=`. Fase 4 es casi
+puramente frontend: una pantalla que encaja exacto en el scaffold
+genérico ya existente (`SimpleResourceAdminPage`, el mismo patrón de
+`TorneosAdmin.tsx`) — mismo `id+estado+fechas`, `DELETE`=soft-delete. No
+se activó el gate de reducción de alcance: no hay una versión más chica
+que siga entregando "gestión de usuarios + acceso cruzado", que es
+literalmente lo que pide el texto original de esta fase.
+
+##### Decisiones de arquitectura (D1-D4)
+
+- **D1 — Acceso cruzado de AdminGeneral a `/arbitro`:** se amplía
+  `RequireRole` de `/arbitro` para incluir `AdminGeneral` (además de
+  `Arbitro`), más el link condicional de NavBar. Sin selector "entrar
+  como" — dos listas de roles ampliadas, sin UI nueva. Confirmado por la
+  voz externa: backend-safe sin cambios — `require_roles()` ya tiene un
+  bypass global de AdminGeneral (`deps.py`) para TODO excepto
+  `usuarios.py` (a propósito), y `verificar_arbitro_asignado` ya es
+  no-op para cualquier rol que no sea Árbitro — AdminGeneral ya tenía
+  acceso de backend a `/partidos`/`/eventos-partido` desde antes; esto
+  solo expone la ruta de frontend a una capacidad que ya era legal.
+- **D2 — Self-lockout en la lista de Usuarios:** dos arreglos juntos,
+  mismo costo marginal por tocar el mismo archivo:
+  (a) `ResourceTable` gana un prop opcional `isSelf?: (row) => boolean`
+  que oculta el botón "Dar de baja" para la fila del usuario logueado —
+  cierra preventivamente el click más probable de auto-lockout.
+  (b) `SimpleResourceAdminPage` gana un mensaje de error visible cuando
+  falla un softDelete — gap preexistente confirmado por la voz externa
+  (`crud.softDelete.isError`/`.error` nunca se leían), que beneficia a
+  los 4 recursos que ya usan este componente compartido (Torneos,
+  Equipos, Jugadores, y el nuevo Usuarios), no solo a esta pantalla.
+  La voz externa confirmó que el otro camino de auto-lockout (editar tu
+  propia fila y cambiarte el rol/estado desde el form) YA no es
+  silencioso — `SimpleResourceAdminPage` ya cablea `submitError` al
+  form de edición, sin trabajo extra.
+- **D3 (hallazgo de la voz externa, no discutido — se corrige directo):**
+  `UsuarioUpdate.password` (`schemas/usuario.py`) no tenía el mismo
+  validador de mínimo 8 caracteres que `UsuarioCreate` — agujero
+  preexistente que antes solo era alcanzable llamando la API cruda,
+  ahora queda un click de distancia con el form de edición nuevo. Se
+  agrega el mismo `field_validator`.
+- **D4 (ruteo, confirmado explícito — no había otra opción real):**
+  ruta standalone `/admin/usuarios`, sin anidar bajo `/torneo-admin`.
+  La voz externa señaló por qué anidar sería un error: el nav de
+  `TorneoAdminLayout` no está gateado por pestaña (`RequireRole` envuelve
+  todo el layout), así que un tab "Usuarios" ahí le mostraría un link
+  muerto a TorneoAdmin (siempre cae en el prompt de login) — confuso,
+  aunque no un agujero de seguridad (el backend sigue literal-gateado).
+  `RequireRole roles={["AdminGeneral"]}` — sin TorneoAdmin, coincide
+  exacto con el gate literal de escritura del backend (los 4 endpoints
+  de escritura en `usuarios.py` son `require_roles("AdminGeneral")`
+  literal); TorneoAdmin puede seguir llamando `GET /usuarios` en otro
+  lado (picker de árbitro, Fase 2 D5) sin llegar nunca a esta pantalla.
+
+##### Hallazgos de la voz externa (Claude subagente — Codex no estaba
+instalado en esta sesión)
+
+1. **El gap de D3** (crítico como hallazgo, resuelto directo arriba).
+2. **El gap de ruteo de D4** (resuelto directo arriba).
+3. Confirmado sin objeciones: el tipo de campo `"password"` nuevo en
+   `ResourceForm` es casi un no-op en runtime — la rama genérica ya pasa
+   cualquier `type` no-`reference`/`select` directo al `<input type=...>`
+   (`ResourceForm.tsx`); lo único que hace falta es ensanchar el union
+   de TypeScript. Nada que sobre-construir acá.
+4. Confirmado sin objeciones: `initialValues.password` en modo edición
+   arranca en `null` (no viene en `UsuarioOut`), así que si el admin no
+   toca el campo, `password` nunca se manda — no hay riesgo de que un
+   password vacío pise el validador de 8 caracteres por accidente.
+5. Confirmado sin objeciones: dejar `"Publico"` como opción del select
+   de rol en el form de creación tiene sentido — `landingPorRol` ya
+   manda cualquier rol no reconocido a `/dashboard` (público, sin
+   `RequireRole`), no es una cuenta "sin adónde ir".
+6. Gap transitorio menor, no bloqueante: `session.id` puede estar
+   `undefined` justo después del login (mientras `GET /auth/me` no
+   resolvió) — durante esa ventana, `isSelf` compara contra `undefined`
+   y el botón de tu propia fila queda visible. Se autocorrige solo: si
+   se lo clickeás en ese instante, D2(b) ya muestra el error en vez de
+   fallar en silencio. No amerita un guard extra.
+
+##### Diagrama — acceso por rol después de Fase 4
+
+```
+                    /torneo-admin    /arbitro       /admin/usuarios
+AdminGeneral            ✅               ✅ (D1)          ✅
+TorneoAdmin              ✅               ❌               ❌
+Arbitro                  ❌               ✅               ❌
+Publico / sin sesión     ❌               ❌               ❌
+
+GET /usuarios (lectura): AdminGeneral ve todo | TorneoAdmin ve solo
+rol=Arbitro (Fase 2, D5, sin cambios) | el resto, 403.
+POST/PATCH/DELETE /usuarios: AdminGeneral únicamente, literal, sin
+cambios (Fase 1, D3/T7).
+```
+
+##### NOT in scope (Fase 4)
+
+- Selector "entrar como" — considerado (C en la revisión) y rechazado:
+  sin evidencia de demanda, dos links en el nav alcanzan.
+- Deshabilitar (en vez de solo ocultar) los campos rol/estado en el form
+  de edición cuando editás tu propia fila — la voz externa confirmó que
+  el camino ya no es silencioso (submitError existente), así que es una
+  mejora de UX opcional, no un gap a cerrar.
+- Auditoría más amplia de otros gaps de UX silenciosos en el scaffold
+  genérico fuera de softDelete (create/update de los otros 3 recursos ya
+  tienen su propio `submitError` cableado — no se encontró ningún otro
+  camino silencioso).
+
+##### What already exists (reusado, no reconstruido)
+
+- CRUD completo de usuarios + guard de auto-lockout + filtro `?rol=` —
+  el backend entero de esta fase, construido en Fase 1/2.
+- `SimpleResourceAdminPage` + `ResourceTable` + `ResourceForm` — mismo
+  patrón exacto que `TorneosAdmin.tsx`, sin inventar una página custom.
+- Bypass de AdminGeneral en `require_roles()` (Fase 1, D3) — D1 no
+  necesita tocar el backend en absoluto.
+- Empty-state árbitro-específico de "Mis partidos" (Fase 3) — cubre
+  gratis el caso común de un AdminGeneral sin partidos asignados.
+
+##### Failure modes
+
+| Codepath | Falla realista | Test | Manejo de error | Visible o silenciosa |
+|---|---|---|---|---|
+| PATCH `/usuarios/{id}` con password de 1-7 caracteres | Antes de D3: se acepta y hashea igual | Nueva (T2) | 422 de Pydantic tras D3 | Visible tras el fix, silenciosa (aceptaba cualquier cosa) antes |
+| AdminGeneral hace click en "Dar de baja" de su propia fila | Antes de D2: 403 sin ningún mensaje en la lista | Nueva (T9) | Guard D2(a) lo oculta; si igual se dispara (ventana de `session.id` undefined), D2(b) lo muestra | Visible tras el fix |
+| softDelete falla por cualquier otra razón (network, 500) en Torneos/Equipos/Jugadores/Usuarios | Antes de D2(b): sin ningún feedback en la lista | Nueva (T9) | Mensaje de error visible tras D2(b) | Visible tras el fix, silenciosa antes (afecta 4 recursos, no solo Usuarios) |
+| TorneoAdmin navega directo a `/admin/usuarios` por URL | Bloqueado por `RequireRole` — nunca llega al backend | Nueva (T9) | `LoginPrompt` | Visible, mensaje claro |
+
+##### Worktree parallelization strategy
+
+Secuencial, fase chica: T1 (validador backend) y T3-T5 (prop nuevo en
+`ResourceForm`/`ResourceTable`/`SimpleResourceAdminPage`) son
+prerequisito de T6 (`UsuariosAdmin.tsx`). T7-T8 (rutas + nav) dependen de
+T6. Un solo desarrollador, sin beneficio real de partir en worktrees.
+
+##### Implementation Tasks
+
+- [x] **T1 (P1, human: ~10min / CC: ~5min)** — backend/app/schemas —
+  `UsuarioUpdate.password`: mismo `field_validator` de mínimo 8
+  caracteres que `UsuarioCreate` (D3, hallazgo de la voz externa).
+  - Surfaced by: D3
+  - Verify: T2
+- [x] **T2 (P1, human: ~10min / CC: ~5min)** — backend/tests — Test
+  nuevo: `PATCH /usuarios/{id}` con password corta devuelve 422.
+  - Surfaced by: D3
+  - Verify: `pytest backend/tests/test_usuarios.py`
+- [x] **T3 (P2, human: ~5min / CC: ~2min)** — frontend/src/components/admin —
+  `ResourceForm.tsx`: ensanchar `ResourceFormField.type` para incluir
+  `"password"` (la rama genérica ya renderiza el `<input>` correcto,
+  solo hace falta el tipo).
+  - Surfaced by: hallazgo #3 de la voz externa
+  - Verify: T9
+- [x] **T4 (P1, human: ~15min / CC: ~5min)** — frontend/src/components/admin —
+  `ResourceTable.tsx`: prop opcional `isSelf?: (row: T) => boolean` —
+  oculta el botón "Dar de baja" cuando es `true` (D2a).
+  - Surfaced by: D2
+  - Verify: T9
+- [x] **T5 (P1, human: ~15min / CC: ~5min)** — frontend/src/pages/torneo-admin —
+  `SimpleResourceAdminPage.tsx`: pasar `isSelf` a `ResourceTable`;
+  agregar mensaje de error visible cuando falla `crud.softDelete` (D2b,
+  beneficia a los 4 recursos que ya usan este componente).
+  - Surfaced by: D2
+  - Verify: T9
+- [x] **T6 (P1, human: ~40min / CC: ~15min)** — frontend/src/pages/admin —
+  `UsuariosAdmin.tsx` (nuevo): config vía `SimpleResourceAdminPage`,
+  mismo patrón que `TorneosAdmin.tsx` — `createFields`
+  (username/nombre/password requerido/rol),
+  `editFields` (nombre/rol/estado/password opcional — "dejar en blanco
+  para no cambiar"), `isSelf={(row) => row.id === session?.id}`.
+  - Surfaced by: D1, D2, D3
+  - Verify: T9
+- [x] **T7 (P1, human: ~10min / CC: ~5min)** — frontend/src —
+  `App.tsx`: ruta nueva `/admin/usuarios`, `RequireRole
+  roles={["AdminGeneral"]}` (D4, standalone, sin anidar bajo
+  `/torneo-admin`); ampliar `/arbitro` a `RequireRole
+  roles={["Arbitro", "AdminGeneral"]}` (D1).
+  - Surfaced by: D1, D4
+  - Verify: T9
+- [x] **T8 (P1, human: ~10min / CC: ~5min)** — frontend/src/components —
+  `NavBar.tsx`: link condicional "Usuarios" → `/admin/usuarios`
+  (AdminGeneral únicamente); ampliar la condición del link "Mis
+  partidos" para incluir AdminGeneral (D1).
+  - Surfaced by: D1
+  - Verify: manual
+- [x] **T9 (P1, human: ~40min / CC: ~15min)** — frontend/src — Tests
+  (vitest+RTL+MSW): tipo `"password"` en `ResourceForm.test.tsx`;
+  `isSelf` oculta el botón en `ResourceTable.test.tsx`; mensaje de error
+  de softDelete en `SimpleResourceAdminPage.test.tsx`;
+  `UsuariosAdmin.test.tsx` (crear/editar/listar, password opcional en
+  edición); ruteo: AdminGeneral llega a `/arbitro` y a
+  `/admin/usuarios`, TorneoAdmin rechazado en `/admin/usuarios`.
+  - Surfaced by: D1-D4, hallazgos de tests de la voz externa
+  - Verify: `npm run test`
+- [x] **T10 (P2, human: ~5min / CC: ~2min)** — frontend/src/api —
+  Regenerar `schema.d.ts` — corrido, diff vacío: el validador de D3 es un
+  `field_validator` custom, no un `Field(min_length=...)`, así que no se
+  refleja en el JSON Schema de OpenAPI. Resultado esperado, no un error.
+  - Surfaced by: consistencia con backend
+  - Verify: diff de `schema.d.ts` es vacío (confirmado)
+
 ## Fuera de alcance en este plan
 
 - Diseño visual / branding / pulido de UI (confirmado por el usuario en
@@ -939,11 +1141,17 @@ Mesa. Riesgo aceptado documentado (D6): sin guard de `estado` dentro de
 todavía — Fase 1, Fase 2 y Fase 3 completas siguen sobre el working tree
 del commit `04e07c3`.
 
-Retomar con Fase 4 (Admin General — gestión de usuarios + acceso cruzado
-a los otros módulos) cuando el usuario lo pida — arrancar esa fase con
-`/plan-eng-review` apuntando a su sección, igual que las tres anteriores.
-Esa fase tiene una pregunta abierta desde el plan original ("selector de
-entrar como" vs ver todo junto) que no está decidida todavía.
+Fase 4 (Admin General — gestión de usuarios + acceso cruzado) — 10/10
+tasks implementadas y verificadas: 57 tests backend (56 + 1 nuevo de T2)
++ 67 tests frontend (55 + 12 nuevos), `tsc -b` limpio, `vite build` OK
+(91 módulos), `oxlint` limpio. Pantalla de gestión de usuarios en
+`/admin/usuarios`, acceso cruzado de AdminGeneral a `/arbitro` sin
+selector. **Las 4 fases del plan original están completas.**
+
+Nada de esto está commiteado — Fase 1, 2, 3 y 4 completas siguen sobre
+el working tree del commit `04e07c3`. No hay una Fase 5 planeada; el
+próximo paso natural es evaluar/armar los commits antes de seguir con
+cualquier otro trabajo.
 
 ## GSTACK REVIEW REPORT
 
@@ -951,13 +1159,14 @@ entrar como" vs ver todo junto) que no está decidida todavía.
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | not run |
 | Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | not run |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 3 | CLEAR (Fase 2), ISSUES_OPEN (Fase 3, accepted risk) | Fase 3: 6 issues resolved via AskUserQuestion (D1-D6), 1 real gap found by outside voice (estado guard in MesaPanel) — user explicitly accepted the risk instead of the recommended fix. Fase 2: 8 issues resolved, 0 critical gaps. Fase 1 (prior run, implemented): 9 issues resolved, 1 known gap (T17 drift check is manual-only by design) |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 4 | CLEAR (Fase 2), ISSUES_OPEN (Fase 3 accepted risk, Fase 4 fixes pending implementation) | Fase 4: 4 issues resolved via AskUserQuestion (D1-D2) + 2 hallazgos aplicados directo (D3 backend validator gap, D4 routing). Fase 3: 6 issues resolved (D1-D6), 1 real gap accepted as risk. Fase 2: 8 issues resolved, 0 critical gaps. Fase 1 (prior run, implemented): 9 issues resolved, 1 known gap (T17 drift check is manual-only by design) |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | not run (diseño fuera de alcance por decisión del usuario) |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | not run |
 
-- **CODEX:** not installed this session — outside voice ran via Claude subagent instead (Fase 1, Fase 2, and Fase 3 runs).
+- **CODEX:** not installed this session — outside voice ran via Claude subagent instead (Fase 1 through Fase 4 runs).
+- **CROSS-MODEL (Fase 4):** subagent verified D1/D2 are backend-safe (AdminGeneral's `require_roles()` bypass already covers `/partidos`/`/eventos-partido`; `verificar_arbitro_asignado` is a no-op for non-Arbitro roles) and confirmed the reuse plan for `SimpleResourceAdminPage`/`ResourceTable`/`ResourceForm` drops in cleanly. Found 2 real gaps applied directly rather than debated: `UsuarioUpdate.password` was missing the same 8-char minimum validator `UsuarioCreate` has (D3 — a preexisting hole made UI-reachable by the new edit form) and nesting the new screen as a `TorneoAdminLayout` tab would show TorneoAdmin a dead-end nav link since that layout's `RequireRole` isn't per-tab (D4 — settled on a standalone `/admin/usuarios` route instead). Confirmed several non-issues: the edit-form self-role-change path was already non-silent (`submitError` already wired), the `"password"` field type is a near no-op at the render layer, and empty-string-password-on-edit can't accidentally trip the validator (`initialValues.password` starts `null`).
 - **CROSS-MODEL (Fase 3):** subagent found `MesaPanel` (reused by D4) has no `partido.estado` guard anywhere — the event-entry form renders unconditionally regardless of match state, and neither the frontend nor `EventoPartidoService` checks state, only ownership. Today this is masked because `ControlDeMesaPage`'s list only lets you *select* Programado/En curso matches — the protection lives in the list, not the panel. Subagent recommended adding a real guard in `MesaPanel` as defense-in-depth (D6, option C) since "Mis partidos" is a second, independent path into the same component. **User explicitly chose the list-filter-only option (D6-A) instead**, accepting the gap as documented risk (see Failure modes in the Fase 3 section) rather than following the recommendation — logged, not silently overridden. Subagent also confirmed D1 introduces no new data exposure (`PartidoOut` already includes `arbitro_id` in the existing public `GET /partidos` response) and that `MesaPanel` has no TorneoAdmin/AdminGeneral-only affordances, so D4's reuse is safe. Minor findings (no anular-event UI exists yet — preexisting gap, not this phase's; NavBar/Login redirect branches easy to forget) folded into T7/T8/T9.
 - **CROSS-MODEL (Fase 2):** subagent narrowed D5 (giving TorneoAdmin read access to the árbitro list) — instead of opening `GET /usuarios` fully, the service now force-filters to `rol="Arbitro"` for TorneoAdmin callers, reusing the existing `?rol=` param instead of exposing the full user roster. Subagent also argued for splitting Fase 2 into 3 independent sub-phases (no technical coupling forces atomicity here, unlike Fase 1); user explicitly considered and rejected the split, keeping Fase 2 complete in one pass. Subagent confirmed the trigger-validation join, the torneo→equipo sequencing gap, and that `arbitro_id` must render edit-only — all folded into D4's implementation tasks.
-- **VERDICT:** Eng Review ISSUES_OPEN for Fase 3 (implemented, 10/10 tasks, 58 backend + 55 frontend tests) — one gap (MesaPanel estado guard) knowingly left open by explicit user decision (D6), not an oversight; documented as accepted risk in Failure modes, candidate for TODOS.md if it becomes a real incident. CLEAR for Fase 2 (all issues resolved, no open critical gaps). Fase 1 remains ISSUES_OPEN by design (T17's drift check has no automated test, documented risk, already implemented and shipped). Eng review required before /ship.
+- **VERDICT:** Eng Review CLEAR for Fase 4 (implemented, 10/10 tasks, 57 backend + 67 frontend tests — every issue the outside voice found, fixed) — no open critical gaps. ISSUES_OPEN for Fase 3 (implemented, 10/10 tasks, 58 backend + 55 frontend tests) — one gap (MesaPanel estado guard) knowingly left open by explicit user decision (D6), not an oversight; documented as accepted risk in Failure modes, candidate for TODOS.md if it becomes a real incident. CLEAR for Fase 2 (all issues resolved, no open critical gaps). Fase 1 remains ISSUES_OPEN by design (T17's drift check has no automated test, documented risk, already implemented and shipped). Eng review required before /ship — all 4 phases of this plan are now implemented; the working tree still has nothing committed.
 
 NO UNRESOLVED DECISIONS
