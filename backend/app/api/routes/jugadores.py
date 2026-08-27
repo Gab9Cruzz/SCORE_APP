@@ -1,27 +1,63 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import get_current_user_optional, require_roles
 from app.db.session import get_db
-from app.schemas.jugador import EstadoJugador, JugadorCreate, JugadorOut, JugadorUpdate
+from app.models.usuario import Usuario
+from app.schemas.jugador import EstadoJugador, JugadorCreate, JugadorOut, JugadorPublicOut, JugadorUpdate
+from app.schemas.perfil_jugador import PerfilJugadorOut, PerfilJugadorPublicOut
 from app.services.jugador import JugadorService
+from app.services.perfil_jugador import PerfilJugadorService
 
 router = APIRouter(prefix="/jugadores", tags=["Jugadores"])
 
+# Los 3 GET de acá abajo siguen siendo públicos (no exigen login) pero ya no
+# filtran PII (cédula, correo) a un caller anónimo — security review de
+# equipos-jugadores-plan.md, Fase 3. get_current_user_optional nunca levanta
+# 401: un caller sin token o con token inválido recibe la proyección
+# *PublicOut (sin PII); el frontend admin, que ya manda su Bearer token en
+# cada request (api/client.ts), sigue viendo JugadorOut/PerfilJugadorOut
+# completo en la misma ruta — no hizo falta tocar el frontend.
 
-@router.get("", response_model=list[JugadorOut])
+
+@router.get("", response_model=None)
 async def listar_jugadores(
     skip: int = 0,
     limit: int = Query(default=100, le=200),
     estado: EstadoJugador | None = None,
     session: AsyncSession = Depends(get_db),
-) -> list[JugadorOut]:
-    return await JugadorService(session).list(skip=skip, limit=limit, estado=estado)
+    usuario_actual: Usuario | None = Depends(get_current_user_optional),
+) -> list[JugadorOut] | list[JugadorPublicOut]:
+    jugadores = await JugadorService(session).list(skip=skip, limit=limit, estado=estado)
+    if usuario_actual is None:
+        return [JugadorPublicOut.model_validate(j) for j in jugadores]
+    return [JugadorOut.model_validate(j) for j in jugadores]
 
 
-@router.get("/{jugador_id}", response_model=JugadorOut)
-async def obtener_jugador(jugador_id: int, session: AsyncSession = Depends(get_db)) -> JugadorOut:
-    return await JugadorService(session).get(jugador_id)
+@router.get("/{jugador_id}", response_model=None)
+async def obtener_jugador(
+    jugador_id: int,
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario | None = Depends(get_current_user_optional),
+) -> JugadorOut | JugadorPublicOut:
+    jugador = await JugadorService(session).get(jugador_id)
+    if usuario_actual is None:
+        return JugadorPublicOut.model_validate(jugador)
+    return JugadorOut.model_validate(jugador)
+
+
+@router.get("/{jugador_id}/perfil", response_model=None)
+async def obtener_perfil_de_jugador(
+    jugador_id: int,
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario | None = Depends(get_current_user_optional),
+) -> PerfilJugadorOut | PerfilJugadorPublicOut:
+    """Stats + trayectoria consolidadas por disciplina (equipos-jugadores-plan.md,
+    Fase 2, Etapa D)."""
+    resultado = await PerfilJugadorService(session).obtener(jugador_id)
+    if usuario_actual is None:
+        return PerfilJugadorPublicOut.model_validate(resultado.model_dump())
+    return resultado
 
 
 @router.post("", response_model=JugadorOut, status_code=201, dependencies=[Depends(require_roles("TorneoAdmin"))])

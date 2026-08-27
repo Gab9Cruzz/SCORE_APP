@@ -6,9 +6,17 @@ from app.models.mixins import TimestampMixin
 
 
 class Jugador(TimestampMixin, Base):
+    """Identidad de la persona (única por cédula). El perfil por disciplina
+    vive en JugadorPerfilDisciplina — una persona puede jugar Fútbol y
+    Tenis con dos perfiles sobre la misma fila acá (equipos-jugadores-plan.md)."""
+
     __tablename__ = "jugadores"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(100))
+    cedula: Mapped[str] = mapped_column(String(20))
+    # NO es único a nivel de columna a propósito (EC-12 del plan): dos
+    # cédulas distintas pueden compartir un correo familiar.
+    correo_electronico: Mapped[str] = mapped_column(String(150))
     # Valores válidos: Activo, Inactivo (chk_jugadores_estado)
     estado: Mapped[str] = mapped_column(String(20), default="Activo")

@@ -9,10 +9,41 @@
 -- las funciones PL/pgSQL deben usar minúsculas.
 -- ============================================================
 
+-- ------------------------------------------------------------
+-- Catálogo de disciplinas y modalidades (docs/plans/equipos-jugadores-plan.md,
+-- Fase 3 — Eng Review).
+--
+-- DISCIPLINA reemplaza a TORNEO.Disciplina (antes texto libre). Tipo
+-- distingue disciplinas de equipo (Fútbol: sin modalidad) de individuales
+-- (Tenis, Pádel: requieren MODALIDAD en el torneo — ver TORNEO abajo y
+-- fn_validar_torneo_modalidad en 06_triggers.sql).
+-- MODALIDAD.Tamano_Equipo fija cuántos jugadores admite un "equipo" en esa
+-- modalidad (1 = individual, 2 = dobles/pádel) — EC-6 del plan bloquea el
+-- exceso en el service layer (P2), no acá.
+-- ------------------------------------------------------------
+CREATE TABLE DISCIPLINA (
+    ID SERIAL PRIMARY KEY,
+    Nombre VARCHAR(50) NOT NULL,
+    Tipo VARCHAR(20) NOT NULL,
+    Estado VARCHAR(20) DEFAULT 'Activo'
+);
+
+CREATE TABLE MODALIDAD (
+    ID SERIAL PRIMARY KEY,
+    Disciplina_ID INT NOT NULL,
+    Nombre VARCHAR(30) NOT NULL,
+    Tamano_Equipo INT NOT NULL,
+    Estado VARCHAR(20) DEFAULT 'Activo'
+);
+
 CREATE TABLE TORNEO (
     ID SERIAL PRIMARY KEY,
     Nombre VARCHAR(100) NOT NULL,
-    Disciplina VARCHAR(50) NOT NULL,
+    Disciplina_ID INT NOT NULL,
+    -- NULL si DISCIPLINA.Tipo='Equipo', obligatorio si Tipo='Individual'.
+    -- No se puede expresar con un CHECK simple (cruza tablas) — lo valida
+    -- fn_validar_torneo_modalidad en 06_triggers.sql.
+    Modalidad_ID INT,
     Fecha_Inicio DATE NOT NULL,
     Fecha_Fin DATE NOT NULL,
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -28,12 +59,35 @@ CREATE TABLE EQUIPOS (
     Estado VARCHAR(20) DEFAULT 'Activo'
 );
 
+-- JUGADORES = identidad de la persona (única por Cedula). El perfil por
+-- disciplina vive en JUGADOR_PERFIL_DISCIPLINA, abajo — una persona puede
+-- jugar Fútbol y Tenis con dos perfiles distintos sobre la misma fila acá.
 CREATE TABLE JUGADORES (
     ID SERIAL PRIMARY KEY,
     Nombre VARCHAR(100) NOT NULL,
+    Cedula VARCHAR(20) NOT NULL,
+    -- NO es UNIQUE a propósito: dos cédulas distintas pueden compartir un
+    -- correo familiar. La identidad de la persona es la cédula.
+    Correo_Electronico VARCHAR(150) NOT NULL,
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Estado VARCHAR(20) DEFAULT 'Activo'
+);
+
+-- Perfil de un jugador dentro de una disciplina. Suspendido es una sanción
+-- explícita — el estado Libre/Activo NO se guarda acá, se deriva de si hay
+-- una JUGADOR_EQUIPO vigente (ver vw_estado_perfil_disciplina en
+-- 04_views.sql y EC-10/EC-11 del plan): guardarlo como columna obliga a
+-- recordar actualizarlo en cada agencia-libre y cada traspaso, y una
+-- migración futura que toque JUGADOR_EQUIPO sin tocar esta columna la
+-- deja desincronizada.
+CREATE TABLE JUGADOR_PERFIL_DISCIPLINA (
+    ID SERIAL PRIMARY KEY,
+    Jugador_ID INT NOT NULL,
+    Disciplina_ID INT NOT NULL,
+    Suspendido BOOLEAN NOT NULL DEFAULT FALSE,
+    Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE INSCRIPCIONES_TORNEO (
@@ -46,16 +100,43 @@ CREATE TABLE INSCRIPCIONES_TORNEO (
     Estado VARCHAR(20) DEFAULT 'Inscrito'
 );
 
+-- Membresía de un perfil de disciplina en el roster de un equipo para UN
+-- torneo puntual. INSCRIPCIONES_TORNEO ya modela "equipo-en-este-torneo"
+-- (Torneo_ID + Equipo_ID, único por par) — es el ancla del roster, por eso
+-- JUGADOR_EQUIPO no repite Torneo_ID/Equipo_ID, los hereda de ahí. La
+-- exclusividad "un jugador, un equipo, por torneo" la impone el trigger
+-- fn_validar_exclusividad_torneo (06_triggers.sql), no un UNIQUE plano,
+-- porque Torneo_ID no vive directamente en esta tabla.
 CREATE TABLE JUGADOR_EQUIPO (
     ID SERIAL PRIMARY KEY,
-    JUGADOR_ID INT NOT NULL,
-    EQUIPO_ID INT NOT NULL,
+    Jugador_Perfil_ID INT NOT NULL,
+    Inscripcion_Torneo_ID INT NOT NULL,
     Dorsal INT,
     Fecha_Inicio DATE NOT NULL,
     Fecha_Fin DATE,
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- 'Traspasado' es distinto de 'Inactivo' genérico: deja en la propia
+    -- fila el POR QUÉ terminó la membresía, sin tener que ir a buscarlo en
+    -- TRASPASOS.
     Estado VARCHAR(20) DEFAULT 'Activo'
+);
+
+-- Trayectoria de traspasos, append-only. Nunca se edita ni se borra una
+-- fila — corregir un traspaso mal hecho es un traspaso nuevo en sentido
+-- inverso; el original solo se marca Estado='Anulado' como anotación
+-- visual (EC-20 del plan), sigue existiendo en la trayectoria.
+CREATE TABLE TRASPASOS (
+    ID SERIAL PRIMARY KEY,
+    Jugador_Perfil_ID INT NOT NULL,
+    -- NULL = fichaje desde agencia libre, no un traspaso equipo-a-equipo.
+    Inscripcion_Origen_ID INT,
+    Inscripcion_Destino_ID INT NOT NULL,
+    Dorsal_Nuevo INT,
+    Realizado_Por INT NOT NULL,
+    Motivo VARCHAR(200),
+    Fecha_Traspaso TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    Estado VARCHAR(20) DEFAULT 'Completado'
 );
 
 CREATE TABLE PARTIDOS (

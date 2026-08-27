@@ -1,26 +1,43 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.jugador_equipo import JugadorEquipo
+from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.repositories.jugador_equipo import JugadorEquipoRepository
 from app.schemas.jugador_equipo import JugadorEquipoCreate, JugadorEquipoUpdate
 
 
 class JugadorEquipoService:
-    """Altas/bajas de plantilla. dorsal único por equipo vigente lo hace
-    cumplir uq_dorsal_por_equipo_vigente (03_indexes.sql, índice parcial)."""
+    """Altas/bajas de plantilla. dorsal único por roster vigente lo hace
+    cumplir uq_dorsal_por_roster_vigente (03_indexes.sql, índice parcial)."""
 
     def __init__(self, session: AsyncSession):
         self.repo = JugadorEquipoRepository(session)
+        self.inscripcion_repo = InscripcionTorneoRepository(session)
 
     async def get(self, id_: int) -> JugadorEquipo:
         return await self.repo.get_or_404(id_)
 
     async def list(
-        self, skip: int = 0, limit: int = 100, equipo_id: int | None = None, jugador_id: int | None = None
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        inscripcion_torneo_id: int | None = None,
+        jugador_perfil_id: int | None = None,
     ) -> list[JugadorEquipo]:
-        return await self.repo.list(skip=skip, limit=limit, equipo_id=equipo_id, jugador_id=jugador_id)
+        return await self.repo.list(
+            skip=skip,
+            limit=limit,
+            inscripcion_torneo_id=inscripcion_torneo_id,
+            jugador_perfil_id=jugador_perfil_id,
+        )
 
     async def create(self, data: JugadorEquipoCreate) -> JugadorEquipo:
+        # Serializa contra otra transacción concurrente activando el mismo
+        # perfil en el mismo torneo (equipos-jugadores-plan.md, Fase 3
+        # security review) — fn_validar_exclusividad_torneo (06_triggers.sql)
+        # no alcanza sola, ver JugadorEquipoRepository.lock_exclusividad_torneo.
+        inscripcion = await self.inscripcion_repo.get_or_404(data.inscripcion_torneo_id)
+        await self.repo.lock_exclusividad_torneo(data.jugador_perfil_id, inscripcion.torneo_id)
         return await self.repo.create(**data.model_dump())
 
     async def update(self, id_: int, data: JugadorEquipoUpdate) -> JugadorEquipo:

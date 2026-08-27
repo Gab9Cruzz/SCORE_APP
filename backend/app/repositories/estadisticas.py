@@ -55,3 +55,20 @@ class EstadisticasRepository:
             "ORDER BY dorsal NULLS LAST, jugador",
             equipo_id=equipo_id,
         )
+
+    async def estado_perfil(self, jugador_perfil_id: int) -> str | None:
+        """Libre/Activo/Suspendido, derivado (Fase 1, EC-10/EC-11) — se
+        reusa la vista en vez de reimplementar la lógica acá (Perfil de
+        Jugador, Fase 2 Etapa D)."""
+        filas = await self._fetch(
+            "SELECT estado FROM vw_estado_perfil_disciplina WHERE jugador_perfil_id = :id",
+            id=jugador_perfil_id,
+        )
+        return filas[0]["estado"] if filas else None
+
+    async def goles_totales_perfil(self, jugador_perfil_id: int) -> int:
+        filas = await self._fetch(
+            "SELECT goles_totales FROM vw_goleadores_por_disciplina WHERE jugador_perfil_id = :id",
+            id=jugador_perfil_id,
+        )
+        return filas[0]["goles_totales"] if filas else 0

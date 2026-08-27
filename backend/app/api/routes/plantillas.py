@@ -18,11 +18,13 @@ router = APIRouter(prefix="/plantillas", tags=["Plantillas"])
 
 @router.get("", response_model=list[JugadorEquipoOut])
 async def listar_plantilla(
-    equipo_id: int | None = None,
-    jugador_id: int | None = None,
+    inscripcion_torneo_id: int | None = None,
+    jugador_perfil_id: int | None = None,
     session: AsyncSession = Depends(get_db),
 ) -> list[JugadorEquipoOut]:
-    return await JugadorEquipoService(session).list(equipo_id=equipo_id, jugador_id=jugador_id)
+    return await JugadorEquipoService(session).list(
+        inscripcion_torneo_id=inscripcion_torneo_id, jugador_perfil_id=jugador_perfil_id
+    )
 
 
 @router.get("/{vinculo_id}", response_model=JugadorEquipoOut)
@@ -36,8 +38,10 @@ async def obtener_vinculo(vinculo_id: int, session: AsyncSession = Depends(get_d
 async def dar_de_alta_jugador(
     data: JugadorEquipoCreate, session: AsyncSession = Depends(get_db)
 ) -> JugadorEquipoOut:
-    """dorsal único por equipo mientras la fila está vigente
-    (uq_dorsal_por_equipo_vigente, 03_indexes.sql)."""
+    """dorsal único por roster (torneo+equipo) mientras la fila está vigente
+    (uq_dorsal_por_roster_vigente, 03_indexes.sql). La exclusividad por
+    torneo (un perfil, un equipo, por torneo) la valida
+    fn_validar_exclusividad_torneo (06_triggers.sql) — llega como 400."""
     return await JugadorEquipoService(session).create(data)
 
 

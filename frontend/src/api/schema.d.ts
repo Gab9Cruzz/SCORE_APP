@@ -38,6 +38,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/disciplinas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Disciplinas */
+        get: operations["listar_disciplinas_api_v1_disciplinas_get"];
+        put?: never;
+        /** Crear Disciplina */
+        post: operations["crear_disciplina_api_v1_disciplinas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/disciplinas/{disciplina_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtener Disciplina */
+        get: operations["obtener_disciplina_api_v1_disciplinas__disciplina_id__get"];
+        put?: never;
+        post?: never;
+        /** Dar De Baja Disciplina */
+        delete: operations["dar_de_baja_disciplina_api_v1_disciplinas__disciplina_id__delete"];
+        options?: never;
+        head?: never;
+        /** Actualizar Disciplina */
+        patch: operations["actualizar_disciplina_api_v1_disciplinas__disciplina_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/modalidades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Modalidades */
+        get: operations["listar_modalidades_api_v1_modalidades_get"];
+        put?: never;
+        /** Crear Modalidad */
+        post: operations["crear_modalidad_api_v1_modalidades_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/modalidades/{modalidad_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtener Modalidad */
+        get: operations["obtener_modalidad_api_v1_modalidades__modalidad_id__get"];
+        put?: never;
+        post?: never;
+        /** Dar De Baja Modalidad */
+        delete: operations["dar_de_baja_modalidad_api_v1_modalidades__modalidad_id__delete"];
+        options?: never;
+        head?: never;
+        /** Actualizar Modalidad */
+        patch: operations["actualizar_modalidad_api_v1_modalidades__modalidad_id__patch"];
+        trace?: never;
+    };
     "/api/v1/torneos": {
         parameters: {
             query?: never;
@@ -151,6 +225,70 @@ export interface paths {
         head?: never;
         /** Actualizar Jugador */
         patch: operations["actualizar_jugador_api_v1_jugadores__jugador_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/jugadores/{jugador_id}/perfil": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Perfil De Jugador
+         * @description Stats + trayectoria consolidadas por disciplina (equipos-jugadores-plan.md,
+         *     Fase 2, Etapa D). Público, como el resto de los GET de este router.
+         */
+        get: operations["obtener_perfil_de_jugador_api_v1_jugadores__jugador_id__perfil_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/perfiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Perfiles */
+        get: operations["listar_perfiles_api_v1_perfiles_get"];
+        put?: never;
+        /**
+         * Crear Perfil
+         * @description unique_perfil_por_disciplina (02_constraints.sql) evita un segundo
+         *     perfil para la misma (jugador, disciplina) — 409.
+         */
+        post: operations["crear_perfil_api_v1_perfiles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/perfiles/{perfil_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtener Perfil */
+        get: operations["obtener_perfil_api_v1_perfiles__perfil_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Actualizar Perfil
+         * @description Único uso real: alternar `suspendido`.
+         */
+        patch: operations["actualizar_perfil_api_v1_perfiles__perfil_id__patch"];
         trace?: never;
     };
     "/api/v1/eventos": {
@@ -307,8 +445,10 @@ export interface paths {
         put?: never;
         /**
          * Dar De Alta Jugador
-         * @description dorsal único por equipo mientras la fila está vigente
-         *     (uq_dorsal_por_equipo_vigente, 03_indexes.sql).
+         * @description dorsal único por roster (torneo+equipo) mientras la fila está vigente
+         *     (uq_dorsal_por_roster_vigente, 03_indexes.sql). La exclusividad por
+         *     torneo (un perfil, un equipo, por torneo) la valida
+         *     fn_validar_exclusividad_torneo (06_triggers.sql) — llega como 400.
          */
         post: operations["dar_de_alta_jugador_api_v1_plantillas_post"];
         delete?: never;
@@ -349,6 +489,107 @@ export interface paths {
          * @description Cierra la vigencia (fecha_fin) y libera el dorsal para otro jugador.
          */
         post: operations["dar_de_baja_jugador_api_v1_plantillas__vinculo_id__baja_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plantillas/lote/validar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validar Lote
+         * @description 200 siempre — inválido es un dato en la respuesta, no un error HTTP.
+         */
+        post: operations["validar_lote_api_v1_plantillas_lote_validar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plantillas/lote/confirmar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirmar Lote
+         * @description Revalida en el servidor (EC-7) — nunca confía en las filas
+         *     "válidas" que el cliente vio en /validar. Éxito parcial también da 200.
+         */
+        post: operations["confirmar_lote_api_v1_plantillas_lote_confirmar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/traspasos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Traspasos */
+        get: operations["listar_traspasos_api_v1_traspasos_get"];
+        put?: never;
+        /**
+         * Crear Traspaso
+         * @description Cierra la membresía de origen (si hay) y abre la de destino en una
+         *     sola transacción — ver TraspasoService.crear.
+         */
+        post: operations["crear_traspaso_api_v1_traspasos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/traspasos/{traspaso_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtener Traspaso */
+        get: operations["obtener_traspaso_api_v1_traspasos__traspaso_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/traspasos/{traspaso_id}/anular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular Traspaso
+         * @description EC-20: anotación visual — NO revierte el roster. Corregir el error
+         *     de verdad es un traspaso nuevo en sentido inverso (POST /traspasos).
+         */
+        post: operations["anular_traspaso_api_v1_traspasos__traspaso_id__anular_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -597,6 +838,69 @@ export interface components {
              */
             client_secret?: string | null;
         };
+        /** ConfirmarLoteResponse */
+        ConfirmarLoteResponse: {
+            /** Insertados */
+            insertados: components["schemas"]["JugadorEquipoOut"][];
+            /** Rechazados */
+            rechazados: components["schemas"]["FilaInvalida"][];
+        };
+        /** DisciplinaCreate */
+        DisciplinaCreate: {
+            /** Nombre */
+            nombre: string;
+            /**
+             * Tipo
+             * @enum {string}
+             */
+            tipo: "Equipo" | "Individual";
+        };
+        /** DisciplinaOut */
+        DisciplinaOut: {
+            /** Nombre */
+            nombre: string;
+            /**
+             * Tipo
+             * @enum {string}
+             */
+            tipo: "Equipo" | "Individual";
+            /** Id */
+            id: number;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Activo" | "Inactivo";
+        };
+        /** DisciplinaUpdate */
+        DisciplinaUpdate: {
+            /** Nombre */
+            nombre?: string | null;
+            /** Tipo */
+            tipo?: ("Equipo" | "Individual") | null;
+            /** Estado */
+            estado?: ("Activo" | "Inactivo") | null;
+        };
+        /** EquipoActivoOut */
+        EquipoActivoOut: {
+            /** Inscripcion Torneo Id */
+            inscripcion_torneo_id: number;
+            /** Torneo Id */
+            torneo_id: number;
+            /** Torneo */
+            torneo: string;
+            /** Equipo Id */
+            equipo_id: number;
+            /** Equipo */
+            equipo: string;
+            /** Dorsal */
+            dorsal: number | null;
+            /**
+             * Fecha Inicio
+             * Format: date
+             */
+            fecha_inicio: string;
+        };
         /** EquipoCreate */
         EquipoCreate: {
             /** Nombre */
@@ -718,6 +1022,32 @@ export interface components {
             /** Estado */
             estado?: ("Activo" | "Inactivo") | null;
         };
+        /** FilaInvalida */
+        FilaInvalida: {
+            /** Fila Index */
+            fila_index: number;
+            /** Cedula */
+            cedula: string;
+            /** Nombre */
+            nombre: string;
+            /** Motivo */
+            motivo: string;
+        };
+        /** FilaValida */
+        FilaValida: {
+            /** Fila Index */
+            fila_index: number;
+            /** Cedula */
+            cedula: string;
+            /** Nombre */
+            nombre: string;
+            /** Correo Electronico */
+            correo_electronico: string;
+            /** Dorsal */
+            dorsal: number | null;
+            /** Jugador Id */
+            jugador_id: number | null;
+        };
         /** GoleadorOut */
         GoleadorOut: {
             /** Torneo Id */
@@ -786,13 +1116,17 @@ export interface components {
         JugadorCreate: {
             /** Nombre */
             nombre: string;
+            /** Cedula */
+            cedula: string;
+            /** Correo Electronico */
+            correo_electronico: string;
         };
         /** JugadorEquipoCreate */
         JugadorEquipoCreate: {
-            /** Jugador Id */
-            jugador_id: number;
-            /** Equipo Id */
-            equipo_id: number;
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number;
+            /** Inscripcion Torneo Id */
+            inscripcion_torneo_id: number;
             /** Dorsal */
             dorsal?: number | null;
             /**
@@ -805,10 +1139,10 @@ export interface components {
         JugadorEquipoOut: {
             /** Id */
             id: number;
-            /** Jugador Id */
-            jugador_id: number;
-            /** Equipo Id */
-            equipo_id: number;
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number;
+            /** Inscripcion Torneo Id */
+            inscripcion_torneo_id: number;
             /** Dorsal */
             dorsal: number | null;
             /**
@@ -822,7 +1156,7 @@ export interface components {
              * Estado
              * @enum {string}
              */
-            estado: "Activo" | "Inactivo" | "Suspendido";
+            estado: "Activo" | "Inactivo" | "Suspendido" | "Traspasado";
             /**
              * Fecha Registro
              * Format: date-time
@@ -841,12 +1175,16 @@ export interface components {
             /** Fecha Fin */
             fecha_fin?: string | null;
             /** Estado */
-            estado?: ("Activo" | "Inactivo" | "Suspendido") | null;
+            estado?: ("Activo" | "Inactivo" | "Suspendido" | "Traspasado") | null;
         };
         /** JugadorOut */
         JugadorOut: {
             /** Nombre */
             nombre: string;
+            /** Cedula */
+            cedula: string;
+            /** Correo Electronico */
+            correo_electronico: string;
             /** Id */
             id: number;
             /**
@@ -865,10 +1203,81 @@ export interface components {
              */
             fecha_modificacion: string;
         };
+        /** JugadorPerfilDisciplinaCreate */
+        JugadorPerfilDisciplinaCreate: {
+            /** Jugador Id */
+            jugador_id: number;
+            /** Disciplina Id */
+            disciplina_id: number;
+        };
+        /** JugadorPerfilDisciplinaOut */
+        JugadorPerfilDisciplinaOut: {
+            /** Id */
+            id: number;
+            /** Jugador Id */
+            jugador_id: number;
+            /** Disciplina Id */
+            disciplina_id: number;
+            /** Suspendido */
+            suspendido: boolean;
+            /**
+             * Fecha Registro
+             * Format: date-time
+             */
+            fecha_registro: string;
+            /**
+             * Fecha Modificacion
+             * Format: date-time
+             */
+            fecha_modificacion: string;
+        };
+        /** JugadorPerfilDisciplinaUpdate */
+        JugadorPerfilDisciplinaUpdate: {
+            /** Suspendido */
+            suspendido?: boolean | null;
+        };
         /** JugadorUpdate */
         JugadorUpdate: {
             /** Nombre */
             nombre?: string | null;
+            /** Cedula */
+            cedula?: string | null;
+            /** Correo Electronico */
+            correo_electronico?: string | null;
+            /** Estado */
+            estado?: ("Activo" | "Inactivo") | null;
+        };
+        /** ModalidadCreate */
+        ModalidadCreate: {
+            /** Disciplina Id */
+            disciplina_id: number;
+            /** Nombre */
+            nombre: string;
+            /** Tamano Equipo */
+            tamano_equipo: number;
+        };
+        /** ModalidadOut */
+        ModalidadOut: {
+            /** Disciplina Id */
+            disciplina_id: number;
+            /** Nombre */
+            nombre: string;
+            /** Tamano Equipo */
+            tamano_equipo: number;
+            /** Id */
+            id: number;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Activo" | "Inactivo";
+        };
+        /** ModalidadUpdate */
+        ModalidadUpdate: {
+            /** Nombre */
+            nombre?: string | null;
+            /** Tamano Equipo */
+            tamano_equipo?: number | null;
             /** Estado */
             estado?: ("Activo" | "Inactivo") | null;
         };
@@ -954,6 +1363,39 @@ export interface components {
             /** Arbitro Id */
             arbitro_id?: number | null;
         };
+        /** PerfilDisciplinaOut */
+        PerfilDisciplinaOut: {
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number;
+            /** Disciplina Id */
+            disciplina_id: number;
+            /** Disciplina */
+            disciplina: string;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Libre" | "Activo" | "Suspendido";
+            /** Goles Totales */
+            goles_totales: number;
+            /** Equipos Activos */
+            equipos_activos: components["schemas"]["EquipoActivoOut"][];
+            /** Trayectoria */
+            trayectoria: components["schemas"]["TraspasoTrayectoriaOut"][];
+        };
+        /** PerfilJugadorOut */
+        PerfilJugadorOut: {
+            /** Jugador Id */
+            jugador_id: number;
+            /** Nombre */
+            nombre: string;
+            /** Cedula */
+            cedula: string;
+            /** Correo Electronico */
+            correo_electronico: string;
+            /** Disciplinas */
+            disciplinas: components["schemas"]["PerfilDisciplinaOut"][];
+        };
         /** PlantillaJugadorOut */
         PlantillaJugadorOut: {
             /** Equipo Id */
@@ -1027,6 +1469,35 @@ export interface components {
             /** Estado */
             estado: string;
         };
+        /** RegistroLoteFila */
+        RegistroLoteFila: {
+            /** Cedula */
+            cedula: string;
+            /** Nombre */
+            nombre: string;
+            /** Correo Electronico */
+            correo_electronico: string;
+            /** Dorsal */
+            dorsal?: number | null;
+        };
+        /**
+         * RegistroLoteRequest
+         * @description Mismo shape para /validar y /confirmar: confirmar SIEMPRE revalida
+         *     contra la base actual (EC-7), no confía en el snapshot que manda el
+         *     cliente — el cliente igual manda las filas "válidas" que vio, no solo
+         *     los ids, porque un jugador nuevo todavía no tiene id.
+         */
+        RegistroLoteRequest: {
+            /** Inscripcion Torneo Id */
+            inscripcion_torneo_id: number;
+            /**
+             * Fecha Inicio
+             * Format: date
+             */
+            fecha_inicio: string;
+            /** Filas */
+            filas: components["schemas"]["RegistroLoteFila"][];
+        };
         /** ResultadoPartidoOut */
         ResultadoPartidoOut: {
             /** Partido Id */
@@ -1075,8 +1546,10 @@ export interface components {
         TorneoCreate: {
             /** Nombre */
             nombre: string;
-            /** Disciplina */
-            disciplina: string;
+            /** Disciplina Id */
+            disciplina_id: number;
+            /** Modalidad Id */
+            modalidad_id?: number | null;
             /**
              * Fecha Inicio
              * Format: date
@@ -1092,8 +1565,10 @@ export interface components {
         TorneoOut: {
             /** Nombre */
             nombre: string;
-            /** Disciplina */
-            disciplina: string;
+            /** Disciplina Id */
+            disciplina_id: number;
+            /** Modalidad Id */
+            modalidad_id?: number | null;
             /**
              * Fecha Inicio
              * Format: date
@@ -1126,14 +1601,77 @@ export interface components {
         TorneoUpdate: {
             /** Nombre */
             nombre?: string | null;
-            /** Disciplina */
-            disciplina?: string | null;
+            /** Disciplina Id */
+            disciplina_id?: number | null;
+            /** Modalidad Id */
+            modalidad_id?: number | null;
             /** Fecha Inicio */
             fecha_inicio?: string | null;
             /** Fecha Fin */
             fecha_fin?: string | null;
             /** Estado */
             estado?: ("Activo" | "Inactivo" | "Finalizado") | null;
+        };
+        /** TraspasoCreate */
+        TraspasoCreate: {
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number;
+            /** Inscripcion Origen Id */
+            inscripcion_origen_id?: number | null;
+            /** Inscripcion Destino Id */
+            inscripcion_destino_id: number;
+            /** Dorsal Nuevo */
+            dorsal_nuevo?: number | null;
+            /** Motivo */
+            motivo?: string | null;
+        };
+        /** TraspasoOut */
+        TraspasoOut: {
+            /** Id */
+            id: number;
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number;
+            /** Inscripcion Origen Id */
+            inscripcion_origen_id: number | null;
+            /** Inscripcion Destino Id */
+            inscripcion_destino_id: number;
+            /** Dorsal Nuevo */
+            dorsal_nuevo: number | null;
+            /** Realizado Por */
+            realizado_por: number;
+            /** Motivo */
+            motivo: string | null;
+            /**
+             * Fecha Traspaso
+             * Format: date-time
+             */
+            fecha_traspaso: string;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Completado" | "Anulado";
+        };
+        /** TraspasoTrayectoriaOut */
+        TraspasoTrayectoriaOut: {
+            /** Id */
+            id: number;
+            /**
+             * Fecha Traspaso
+             * Format: date-time
+             */
+            fecha_traspaso: string;
+            /** Origen */
+            origen: string | null;
+            /** Destino */
+            destino: string;
+            /** Motivo */
+            motivo: string | null;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Completado" | "Anulado";
         };
         /** UsuarioCreate */
         UsuarioCreate: {
@@ -1189,6 +1727,13 @@ export interface components {
             estado?: ("Activo" | "Inactivo") | null;
             /** Password */
             password?: string | null;
+        };
+        /** ValidarLoteResponse */
+        ValidarLoteResponse: {
+            /** Validos */
+            validos: components["schemas"]["FilaValida"][];
+            /** Invalidos */
+            invalidos: components["schemas"]["FilaInvalida"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -1261,6 +1806,333 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsuarioOut"];
+                };
+            };
+        };
+    };
+    listar_disciplinas_api_v1_disciplinas_get: {
+        parameters: {
+            query?: {
+                skip?: number;
+                limit?: number;
+                estado?: ("Activo" | "Inactivo") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisciplinaOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_disciplina_api_v1_disciplinas_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisciplinaCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisciplinaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_disciplina_api_v1_disciplinas__disciplina_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                disciplina_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisciplinaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dar_de_baja_disciplina_api_v1_disciplinas__disciplina_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                disciplina_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisciplinaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    actualizar_disciplina_api_v1_disciplinas__disciplina_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                disciplina_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisciplinaUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisciplinaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_modalidades_api_v1_modalidades_get: {
+        parameters: {
+            query?: {
+                skip?: number;
+                limit?: number;
+                disciplina_id?: number | null;
+                estado?: ("Activo" | "Inactivo") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModalidadOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_modalidad_api_v1_modalidades_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModalidadCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModalidadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_modalidad_api_v1_modalidades__modalidad_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modalidad_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModalidadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dar_de_baja_modalidad_api_v1_modalidades__modalidad_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modalidad_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModalidadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    actualizar_modalidad_api_v1_modalidades__modalidad_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modalidad_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModalidadUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModalidadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1754,6 +2626,170 @@ export interface operations {
             };
         };
     };
+    obtener_perfil_de_jugador_api_v1_jugadores__jugador_id__perfil_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jugador_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerfilJugadorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_perfiles_api_v1_perfiles_get: {
+        parameters: {
+            query?: {
+                skip?: number;
+                limit?: number;
+                jugador_id?: number | null;
+                disciplina_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JugadorPerfilDisciplinaOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_perfil_api_v1_perfiles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JugadorPerfilDisciplinaCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JugadorPerfilDisciplinaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_perfil_api_v1_perfiles__perfil_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                perfil_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JugadorPerfilDisciplinaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    actualizar_perfil_api_v1_perfiles__perfil_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                perfil_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JugadorPerfilDisciplinaUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JugadorPerfilDisciplinaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listar_eventos_api_v1_eventos_get: {
         parameters: {
             query?: {
@@ -2216,8 +3252,8 @@ export interface operations {
     listar_plantilla_api_v1_plantillas_get: {
         parameters: {
             query?: {
-                equipo_id?: number | null;
-                jugador_id?: number | null;
+                inscripcion_torneo_id?: number | null;
+                jugador_perfil_id?: number | null;
             };
             header?: never;
             path?: never;
@@ -2364,6 +3400,198 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JugadorEquipoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validar_lote_api_v1_plantillas_lote_validar_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegistroLoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidarLoteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirmar_lote_api_v1_plantillas_lote_confirmar_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegistroLoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmarLoteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_traspasos_api_v1_traspasos_get: {
+        parameters: {
+            query?: {
+                jugador_perfil_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraspasoOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_traspaso_api_v1_traspasos_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TraspasoCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraspasoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_traspaso_api_v1_traspasos__traspaso_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                traspaso_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraspasoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    anular_traspaso_api_v1_traspasos__traspaso_id__anular_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                traspaso_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraspasoOut"];
                 };
             };
             /** @description Validation Error */

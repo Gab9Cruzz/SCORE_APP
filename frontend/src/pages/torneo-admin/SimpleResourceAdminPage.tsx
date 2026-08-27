@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { apiErrorMessage } from "../../api/client";
 import { ResourceForm, type ResourceFieldValue, type ResourceFormField } from "../../components/admin/ResourceForm";
@@ -21,6 +22,8 @@ interface SimpleResourceAdminPageProps<TOut extends RowBase> {
   emptyMessage?: string;
   /** roles-3-modulos-plan.md, Fase 4, D2a — ver ResourceTable.tsx. */
   isSelf?: (row: TOut) => boolean;
+  /** equipos-jugadores-plan.md, Fase 2, Etapa D — ver ResourceTable.tsx `extraActions`. */
+  renderRowExtra?: (row: TOut) => ReactNode;
 }
 
 /** Página de gestión CRUD para un recurso "simple" (Torneo, Equipo,
@@ -30,7 +33,8 @@ interface SimpleResourceAdminPageProps<TOut extends RowBase> {
  * esto — se desvían demasiado del patrón (ver PartidosAdmin.tsx,
  * InscripcionesAdmin.tsx, PlantillasAdmin.tsx). */
 export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResourceAdminPageProps<TOut>) {
-  const { resourceKey, basePath, title, createFields, editFields, columns, emptyMessage, isSelf } = props;
+  const { resourceKey, basePath, title, createFields, editFields, columns, emptyMessage, isSelf, renderRowExtra } =
+    props;
   const crud = useResourceCrud<TOut>({ resourceKey, basePath });
   const [modo, setModo] = useState<Modo<TOut>>({ tipo: "lista" });
 
@@ -100,6 +104,7 @@ export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResou
         onSoftDelete={(fila) => crud.softDelete.mutate(fila.id)}
         softDeletePending={crud.softDelete.isPending}
         isSelf={isSelf}
+        extraActions={renderRowExtra}
       />
     </div>
   );

@@ -30,6 +30,10 @@ interface ResourceTableProps<T extends RowConEstado> {
    * más probable de auto-lockout (el backend ya lo rechaza con 403, esto
    * evita el viaje redondo). Opcional: solo lo usa UsuariosAdmin.tsx. */
   isSelf?: (row: T) => boolean;
+  /** Acciones extra por fila, además de Editar/Dar de baja — ej. un link
+   * "Ver perfil" (equipos-jugadores-plan.md, Fase 2, Etapa D). Se
+   * renderiza en la misma celda de acciones. */
+  extraActions?: (row: T) => ReactNode;
 }
 
 /** Tabla genérica de listado para el módulo Torneo Admin
@@ -49,13 +53,14 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
     softDeletePending = false,
     estadosDeBaja = ["Inactivo", "Cancelado"],
     isSelf,
+    extraActions,
   } = props;
 
   if (isLoading) return <p>Cargando...</p>;
   if (isError) return <p className="error-text">No se pudo cargar la lista.</p>;
   if (rows.length === 0) return <p>{emptyMessage}</p>;
 
-  const tieneAcciones = Boolean(onSelect || onSoftDelete);
+  const tieneAcciones = Boolean(onSelect || onSoftDelete || extraActions);
 
   return (
     <div className="table-scroll">
@@ -86,6 +91,7 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
                       {softDeleteLabel}
                     </button>
                   )}
+                  {extraActions?.(row)}
                 </td>
               )}
             </tr>

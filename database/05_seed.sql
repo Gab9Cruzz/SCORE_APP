@@ -21,9 +21,15 @@ INSERT INTO EVENTOS (Nombre, Descripcion) VALUES
     ('Tarjeta Roja', 'Expulsión'),
     ('Cambio', 'Sustitución de jugador');
 
+-- Catálogo de disciplinas.
+-- Va ANTES que TORNEO: TORNEO.Disciplina_ID es NOT NULL (ver 01_schema.sql,
+-- ya no es el texto libre 'Fútbol' de antes).
+INSERT INTO DISCIPLINA (Nombre, Tipo) VALUES
+    ('Fútbol', 'Equipo');
+
 -- Torneo
-INSERT INTO TORNEO (Nombre, Disciplina, Fecha_Inicio, Fecha_Fin) VALUES
-    ('Copa Ecotec 2026', 'Fútbol', '2026-01-10', '2026-03-30');
+INSERT INTO TORNEO (Nombre, Disciplina_ID, Fecha_Inicio, Fecha_Fin) VALUES
+    ('Copa Ecotec 2026', (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol'), '2026-01-10', '2026-03-30');
 
 -- Equipos
 INSERT INTO EQUIPOS (Nombre) VALUES
@@ -31,33 +37,44 @@ INSERT INTO EQUIPOS (Nombre) VALUES
     ('Águilas del Sur'),
     ('Halcones United');
 
--- Jugadores
-INSERT INTO JUGADORES (Nombre) VALUES
-    ('Carlos Pérez'),
-    ('Luis Andrade'),
-    ('Mateo Salcedo'),
-    ('Diego Ramírez'),
-    ('Andrés Vera'),
-    ('Bryan Chávez');
+-- Jugadores.
+-- Cedula/Correo_Electronico son NOT NULL desde este plan (identidad de la
+-- persona, no del perfil por disciplina) — datos de prueba, no cédulas
+-- reales.
+INSERT INTO JUGADORES (Nombre, Cedula, Correo_Electronico) VALUES
+    ('Carlos Pérez',   '0900000001', 'carlos.perez@example.com'),
+    ('Luis Andrade',   '0900000002', 'luis.andrade@example.com'),
+    ('Mateo Salcedo',  '0900000003', 'mateo.salcedo@example.com'),
+    ('Diego Ramírez',  '0900000004', 'diego.ramirez@example.com'),
+    ('Andrés Vera',    '0900000005', 'andres.vera@example.com'),
+    ('Bryan Chávez',   '0900000006', 'bryan.chavez@example.com');
+
+-- Perfiles de jugador por disciplina.
+-- Van ANTES que JUGADOR_EQUIPO: el roster ahora referencia el perfil, no
+-- al jugador directo (ver 01_schema.sql).
+INSERT INTO JUGADOR_PERFIL_DISCIPLINA (Jugador_ID, Disciplina_ID)
+SELECT j.ID, (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol')
+  FROM JUGADORES j;
 
 -- Inscripciones al torneo.
 -- Van ANTES que los partidos: un partido exige que ambos equipos estén
 -- inscritos (lo valida fn_validar_equipos_inscritos en 06_triggers.sql).
+-- También son el ancla del roster que usa JUGADOR_EQUIPO abajo.
 INSERT INTO INSCRIPCIONES_TORNEO (Torneo_ID, Equipo_ID) VALUES
     (1, 1),
     (1, 2),
     (1, 3);
 
--- Jugador_Equipo (plantillas).
+-- Jugador_Equipo (plantillas): perfil de disciplina + roster del torneo.
 -- Van ANTES que los eventos: un evento exige que el jugador perteneciera
 -- a ese equipo en la fecha del partido (fn_validar_jugador_partido).
-INSERT INTO JUGADOR_EQUIPO (JUGADOR_ID, EQUIPO_ID, Dorsal, Fecha_Inicio) VALUES
-    (1, 1, 10, '2026-01-01'),
-    (2, 1, 7,  '2026-01-01'),
-    (3, 2, 9,  '2026-01-01'),
-    (4, 2, 5,  '2026-01-01'),
-    (5, 3, 11, '2026-01-01'),
-    (6, 3, 4,  '2026-01-01');
+INSERT INTO JUGADOR_EQUIPO (Jugador_Perfil_ID, Inscripcion_Torneo_ID, Dorsal, Fecha_Inicio) VALUES
+    ((SELECT ID FROM JUGADOR_PERFIL_DISCIPLINA WHERE Jugador_ID = 1), (SELECT ID FROM INSCRIPCIONES_TORNEO WHERE Torneo_ID = 1 AND Equipo_ID = 1), 10, '2026-01-01'),
+    ((SELECT ID FROM JUGADOR_PERFIL_DISCIPLINA WHERE Jugador_ID = 2), (SELECT ID FROM INSCRIPCIONES_TORNEO WHERE Torneo_ID = 1 AND Equipo_ID = 1), 7,  '2026-01-01'),
+    ((SELECT ID FROM JUGADOR_PERFIL_DISCIPLINA WHERE Jugador_ID = 3), (SELECT ID FROM INSCRIPCIONES_TORNEO WHERE Torneo_ID = 1 AND Equipo_ID = 2), 9,  '2026-01-01'),
+    ((SELECT ID FROM JUGADOR_PERFIL_DISCIPLINA WHERE Jugador_ID = 4), (SELECT ID FROM INSCRIPCIONES_TORNEO WHERE Torneo_ID = 1 AND Equipo_ID = 2), 5,  '2026-01-01'),
+    ((SELECT ID FROM JUGADOR_PERFIL_DISCIPLINA WHERE Jugador_ID = 5), (SELECT ID FROM INSCRIPCIONES_TORNEO WHERE Torneo_ID = 1 AND Equipo_ID = 3), 11, '2026-01-01'),
+    ((SELECT ID FROM JUGADOR_PERFIL_DISCIPLINA WHERE Jugador_ID = 6), (SELECT ID FROM INSCRIPCIONES_TORNEO WHERE Torneo_ID = 1 AND Equipo_ID = 3), 4,  '2026-01-01');
 
 -- Partidos
 INSERT INTO PARTIDOS (Torneo_ID, EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE, Fecha_Partido, Jornada, Estado) VALUES

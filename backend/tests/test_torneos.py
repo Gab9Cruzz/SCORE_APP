@@ -1,5 +1,10 @@
 from httpx import AsyncClient
 
+# disciplina_id=1 = "Fútbol" (05_seed.sql, único registro de DISCIPLINA
+# que carga el seed) — Tipo='Equipo', así que estos torneos no necesitan
+# modalidad_id (fn_validar_torneo_modalidad lo prohibiría si lo mandaran).
+DISCIPLINA_FUTBOL_ID = 1
+
 
 async def test_listar_torneos_es_publico(client: AsyncClient):
     # 05_seed.sql carga "Copa Ecotec 2026".
@@ -14,7 +19,7 @@ async def test_crear_torneo_sin_auth_falla(client: AsyncClient):
         "/api/v1/torneos",
         json={
             "nombre": "Liga Test",
-            "disciplina": "Fútbol",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
             "fecha_inicio": "2026-05-01",
             "fecha_fin": "2026-06-01",
         },
@@ -27,7 +32,7 @@ async def test_admin_crea_torneo(client: AsyncClient, admin_general_headers: dic
         "/api/v1/torneos",
         json={
             "nombre": "Liga Test",
-            "disciplina": "Fútbol",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
             "fecha_inicio": "2026-05-01",
             "fecha_fin": "2026-06-01",
         },
@@ -46,7 +51,7 @@ async def test_fecha_fin_anterior_a_inicio_es_rechazada(client: AsyncClient, adm
         "/api/v1/torneos",
         json={
             "nombre": "Torneo Invalido",
-            "disciplina": "Fútbol",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
             "fecha_inicio": "2026-06-01",
             "fecha_fin": "2026-05-01",
         },
@@ -60,7 +65,7 @@ async def test_baja_logica_de_torneo(client: AsyncClient, admin_general_headers:
         "/api/v1/torneos",
         json={
             "nombre": "Torneo A Borrar",
-            "disciplina": "Fútbol",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
             "fecha_inicio": "2026-05-01",
             "fecha_fin": "2026-06-01",
         },

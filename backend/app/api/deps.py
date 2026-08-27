@@ -31,6 +31,28 @@ async def get_current_user(
     return usuario
 
 
+async def get_current_user_optional(
+    token: str | None = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_db),
+) -> Usuario | None:
+    """Igual que `get_current_user`, pero nunca levanta 401 — devuelve None
+    si no hay token o es inválido. Para GETs que siguen siendo públicos
+    (no requieren login) pero necesitan distinguir "anónimo" de "logueado"
+    para decidir cuánto exponer en la respuesta (ver JugadorPublicOut,
+    equipos-jugadores-plan.md — PII como cédula/correo no debe salir para
+    un caller anónimo, pero el admin logueado sigue viéndola en la misma
+    ruta)."""
+    if token is None:
+        return None
+    payload = decode_access_token(token)
+    if payload is None or "sub" not in payload:
+        return None
+    usuario = await UsuarioRepository(session).get_by_username(payload["sub"])
+    if usuario is None or usuario.estado != "Activo":
+        return None
+    return usuario
+
+
 def require_roles(*roles: str) -> Callable:
     """Uso: Depends(require_roles("TorneoAdmin")) o Depends(require_roles("TorneoAdmin", "Arbitro")).
 

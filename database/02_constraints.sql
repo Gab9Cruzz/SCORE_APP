@@ -9,8 +9,26 @@
 -- inscripciones, partidos y eventos: no lo expongas desde la API.
 -- ============================================================
 
+-- DISCIPLINA
+ALTER TABLE DISCIPLINA
+    ADD CONSTRAINT unique_disciplina_nombre UNIQUE (Nombre),
+    ADD CONSTRAINT chk_disciplina_tipo CHECK (Tipo IN ('Equipo', 'Individual')),
+    ADD CONSTRAINT chk_disciplina_estado CHECK (Estado IN ('Activo', 'Inactivo'));
+
+-- MODALIDAD
+ALTER TABLE MODALIDAD
+    ADD CONSTRAINT fk_modalidad_disciplina FOREIGN KEY (Disciplina_ID) REFERENCES DISCIPLINA(ID) ON DELETE CASCADE,
+    ADD CONSTRAINT chk_modalidad_tamano CHECK (Tamano_Equipo > 0),
+    ADD CONSTRAINT chk_modalidad_estado CHECK (Estado IN ('Activo', 'Inactivo')),
+    ADD CONSTRAINT unique_modalidad_por_disciplina UNIQUE (Disciplina_ID, Nombre);
+
 -- TORNEO
+-- Disciplina_ID/Modalidad_ID: ON DELETE sin especificar (NO ACTION) a
+-- propósito — son catálogos que se dan de baja lógica (Estado), nunca se
+-- borran físicamente, así que no hace falta CASCADE ni SET NULL acá.
 ALTER TABLE TORNEO
+    ADD CONSTRAINT fk_torneo_disciplina FOREIGN KEY (Disciplina_ID) REFERENCES DISCIPLINA(ID),
+    ADD CONSTRAINT fk_torneo_modalidad FOREIGN KEY (Modalidad_ID) REFERENCES MODALIDAD(ID),
     ADD CONSTRAINT chk_torneo_estado CHECK (Estado IN ('Activo', 'Inactivo', 'Finalizado'));
 
 -- EQUIPOS
@@ -18,8 +36,17 @@ ALTER TABLE EQUIPOS
     ADD CONSTRAINT chk_equipos_estado CHECK (Estado IN ('Activo', 'Inactivo'));
 
 -- JUGADORES
+-- Correo_Electronico NO es UNIQUE a propósito (EC-12 del plan): dos
+-- cédulas distintas pueden compartir un correo familiar.
 ALTER TABLE JUGADORES
+    ADD CONSTRAINT unique_jugador_cedula UNIQUE (Cedula),
     ADD CONSTRAINT chk_jugadores_estado CHECK (Estado IN ('Activo', 'Inactivo'));
+
+-- JUGADOR_PERFIL_DISCIPLINA
+ALTER TABLE JUGADOR_PERFIL_DISCIPLINA
+    ADD CONSTRAINT fk_perfil_disciplina_jugador FOREIGN KEY (Jugador_ID) REFERENCES JUGADORES(ID) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_perfil_disciplina_disciplina FOREIGN KEY (Disciplina_ID) REFERENCES DISCIPLINA(ID),
+    ADD CONSTRAINT unique_perfil_por_disciplina UNIQUE (Jugador_ID, Disciplina_ID);
 
 -- INSCRIPCIONES_TORNEO
 ALTER TABLE INSCRIPCIONES_TORNEO
@@ -29,11 +56,32 @@ ALTER TABLE INSCRIPCIONES_TORNEO
     ADD CONSTRAINT unique_inscripcion UNIQUE (Torneo_ID, Equipo_ID);
 
 -- JUGADOR_EQUIPO
+-- unique_jugador_equipo: ya no es (JUGADOR_ID, EQUIPO_ID) sino (perfil,
+-- roster-de-torneo) — el mismo perfil puede tener varias filas históricas
+-- en el mismo roster (traspasos de ida y vuelta), nunca dos con la misma
+-- Fecha_Inicio.
+-- El dorsal único por roster vigente (antes uq_dorsal_por_equipo_vigente
+-- en 03_indexes.sql, ya existía) se mantiene como índice PARCIAL en vez
+-- del UNIQUE plano que sugiere el plan (EC-13): un UNIQUE sin condición
+-- de vigencia deja el dorsal bloqueado para siempre en ese roster incluso
+-- después de que el jugador se va — ver 03_indexes.sql.
 ALTER TABLE JUGADOR_EQUIPO
-    ADD CONSTRAINT fk_jugador_equipo_jugador FOREIGN KEY (JUGADOR_ID) REFERENCES JUGADORES(ID) ON DELETE CASCADE,
-    ADD CONSTRAINT fk_jugador_equipo_equipo FOREIGN KEY (EQUIPO_ID) REFERENCES EQUIPOS(ID) ON DELETE CASCADE,
-    ADD CONSTRAINT chk_jugador_equipo_estado CHECK (Estado IN ('Activo', 'Inactivo', 'Suspendido')),
-    ADD CONSTRAINT unique_jugador_equipo UNIQUE (JUGADOR_ID, EQUIPO_ID, Fecha_Inicio);
+    ADD CONSTRAINT fk_jugador_equipo_perfil FOREIGN KEY (Jugador_Perfil_ID) REFERENCES JUGADOR_PERFIL_DISCIPLINA(ID) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_jugador_equipo_inscripcion FOREIGN KEY (Inscripcion_Torneo_ID) REFERENCES INSCRIPCIONES_TORNEO(ID) ON DELETE CASCADE,
+    ADD CONSTRAINT chk_jugador_equipo_estado CHECK (Estado IN ('Activo', 'Inactivo', 'Suspendido', 'Traspasado')),
+    ADD CONSTRAINT unique_jugador_equipo UNIQUE (Jugador_Perfil_ID, Inscripcion_Torneo_ID, Fecha_Inicio);
+
+-- TRASPASOS
+-- Realizado_Por sin ON DELETE (NO ACTION): es un rastro de auditoría
+-- append-only, no debe poder perder silenciosamente quién hizo el
+-- traspaso porque alguien borró la fila de USUARIOS (que en operación
+-- normal tampoco se borra físicamente, ver comentario de cabecera).
+ALTER TABLE TRASPASOS
+    ADD CONSTRAINT fk_traspasos_perfil FOREIGN KEY (Jugador_Perfil_ID) REFERENCES JUGADOR_PERFIL_DISCIPLINA(ID),
+    ADD CONSTRAINT fk_traspasos_origen FOREIGN KEY (Inscripcion_Origen_ID) REFERENCES INSCRIPCIONES_TORNEO(ID),
+    ADD CONSTRAINT fk_traspasos_destino FOREIGN KEY (Inscripcion_Destino_ID) REFERENCES INSCRIPCIONES_TORNEO(ID),
+    ADD CONSTRAINT fk_traspasos_usuario FOREIGN KEY (Realizado_Por) REFERENCES USUARIOS(ID),
+    ADD CONSTRAINT chk_traspasos_estado CHECK (Estado IN ('Completado', 'Anulado'));
 
 -- PARTIDOS
 -- fk_partidos_arbitro: ON DELETE SET NULL, no CASCADE/RESTRICT — los

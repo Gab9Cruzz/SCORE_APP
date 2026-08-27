@@ -3,9 +3,12 @@ import { RequireRole } from "../../components/RequireRole";
 
 const PESTANIAS = [
   { to: "torneos", label: "Torneos" },
+  { to: "disciplinas", label: "Disciplinas" },
+  { to: "modalidades", label: "Modalidades" },
   { to: "equipos", label: "Equipos" },
   { to: "jugadores", label: "Jugadores" },
   { to: "plantillas", label: "Plantillas" },
+  { to: "traspasos", label: "Traspasos" },
   { to: "inscripciones", label: "Inscripciones" },
   { to: "partidos", label: "Partidos" },
 ];

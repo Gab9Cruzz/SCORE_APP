@@ -8,7 +8,13 @@ EstadoTorneo = Literal["Activo", "Inactivo", "Finalizado"]
 
 class TorneoBase(BaseModel):
     nombre: str
-    disciplina: str
+    disciplina_id: int
+    # NULL si Disciplina.Tipo='Equipo', obligatorio si es 'Individual' — lo
+    # exige fn_validar_torneo_modalidad (06_triggers.sql), no acá: cruza
+    # tablas, un validator de Pydantic no ve el Tipo de la disciplina sin
+    # una consulta a la base, y esta capa se queda deliberadamente sin
+    # acceso a la sesión (ver docstring de EventoPartidoService).
+    modalidad_id: int | None = None
     fecha_inicio: date
     fecha_fin: date
 
@@ -27,7 +33,8 @@ class TorneoCreate(TorneoBase):
 
 class TorneoUpdate(BaseModel):
     nombre: str | None = None
-    disciplina: str | None = None
+    disciplina_id: int | None = None
+    modalidad_id: int | None = None
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
     estado: EstadoTorneo | None = None

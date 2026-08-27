@@ -63,11 +63,25 @@ CREATE TRIGGER trg_usuarios_upd_fecha
 BEFORE UPDATE ON USUARIOS
 FOR EACH ROW EXECUTE FUNCTION fn_actualizar_fecha_modificacion();
 
+-- JUGADOR_PERFIL_DISCIPLINA también tiene Fecha_Modificacion.
+-- DISCIPLINA, MODALIDAD y TRASPASOS no la tienen (ver 01_schema.sql), así
+-- que no llevan este trigger.
+CREATE TRIGGER trg_perfil_disciplina_upd_fecha
+BEFORE UPDATE ON JUGADOR_PERFIL_DISCIPLINA
+FOR EACH ROW EXECUTE FUNCTION fn_actualizar_fecha_modificacion();
+
 -- ------------------------------------------------------------
 -- Función y trigger: coherencia de un evento de partido
 --   1. el EQUIPO_ID del evento es uno de los dos que disputan el partido
 --   2. el jugador pertenecía a ESE equipo, vigente en la fecha del partido
 --   3. si el evento es 'Cambio', el jugador que entra cumple lo mismo
+--
+-- Desde equipos-jugadores-plan.md: JUGADOR_EQUIPO ya no guarda
+-- JUGADOR_ID/EQUIPO_ID directo, sino (Jugador_Perfil_ID,
+-- Inscripcion_Torneo_ID). "El jugador pertenecía a ese equipo" ahora se
+-- resuelve: perfil de esa persona en la disciplina DEL TORNEO del
+-- partido, con una membresía activa cuyo roster (Inscripcion_Torneo_ID)
+-- ancla exactamente ese Torneo_ID + ese Equipo_ID.
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_validar_jugador_partido()
 RETURNS TRIGGER AS $$
@@ -75,6 +89,8 @@ DECLARE
     v_equipo_local INT;
     v_equipo_visitante INT;
     v_fecha_partido TIMESTAMP;
+    v_torneo_id INT;
+    v_disciplina_id INT;
     v_valido INT;
     v_es_cambio BOOLEAN;
 BEGIN
@@ -88,10 +104,11 @@ BEGIN
         END IF;
     END IF;
 
-    SELECT EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE, Fecha_Partido
-      INTO v_equipo_local, v_equipo_visitante, v_fecha_partido
-      FROM PARTIDOS
-     WHERE ID = NEW.PARTIDOS_ID;
+    SELECT p.EQUIPOS_ID_LOCAL, p.EQUIPOS_ID_VISITANTE, p.Fecha_Partido, p.Torneo_ID, t.Disciplina_ID
+      INTO v_equipo_local, v_equipo_visitante, v_fecha_partido, v_torneo_id, v_disciplina_id
+      FROM PARTIDOS p
+      JOIN TORNEO t ON t.ID = p.Torneo_ID
+     WHERE p.ID = NEW.PARTIDOS_ID;
 
     IF NEW.EQUIPO_ID NOT IN (v_equipo_local, v_equipo_visitante) THEN
         RAISE EXCEPTION 'El equipo indicado no disputa este partido.';
@@ -99,12 +116,16 @@ BEGIN
 
     SELECT COUNT(*)
       INTO v_valido
-      FROM JUGADOR_EQUIPO
-     WHERE JUGADOR_ID = NEW.JUGADOR_ID
-       AND EQUIPO_ID = NEW.EQUIPO_ID
-       AND Estado = 'Activo'
-       AND Fecha_Inicio <= v_fecha_partido::DATE
-       AND (Fecha_Fin IS NULL OR Fecha_Fin >= v_fecha_partido::DATE);
+      FROM JUGADOR_EQUIPO je
+      JOIN JUGADOR_PERFIL_DISCIPLINA jpd ON jpd.ID = je.Jugador_Perfil_ID
+      JOIN INSCRIPCIONES_TORNEO it ON it.ID = je.Inscripcion_Torneo_ID
+     WHERE jpd.Jugador_ID = NEW.JUGADOR_ID
+       AND jpd.Disciplina_ID = v_disciplina_id
+       AND it.Torneo_ID = v_torneo_id
+       AND it.Equipo_ID = NEW.EQUIPO_ID
+       AND je.Estado = 'Activo'
+       AND je.Fecha_Inicio <= v_fecha_partido::DATE
+       AND (je.Fecha_Fin IS NULL OR je.Fecha_Fin >= v_fecha_partido::DATE);
 
     IF v_valido = 0 THEN
         RAISE EXCEPTION 'El jugador no pertenecia a ese equipo en la fecha del partido.';
@@ -119,12 +140,16 @@ BEGIN
 
         SELECT COUNT(*)
           INTO v_valido
-          FROM JUGADOR_EQUIPO
-         WHERE JUGADOR_ID = NEW.JUGADOR_ID_ENTRA
-           AND EQUIPO_ID = NEW.EQUIPO_ID
-           AND Estado = 'Activo'
-           AND Fecha_Inicio <= v_fecha_partido::DATE
-           AND (Fecha_Fin IS NULL OR Fecha_Fin >= v_fecha_partido::DATE);
+          FROM JUGADOR_EQUIPO je
+          JOIN JUGADOR_PERFIL_DISCIPLINA jpd ON jpd.ID = je.Jugador_Perfil_ID
+          JOIN INSCRIPCIONES_TORNEO it ON it.ID = je.Inscripcion_Torneo_ID
+         WHERE jpd.Jugador_ID = NEW.JUGADOR_ID_ENTRA
+           AND jpd.Disciplina_ID = v_disciplina_id
+           AND it.Torneo_ID = v_torneo_id
+           AND it.Equipo_ID = NEW.EQUIPO_ID
+           AND je.Estado = 'Activo'
+           AND je.Fecha_Inicio <= v_fecha_partido::DATE
+           AND (je.Fecha_Fin IS NULL OR je.Fecha_Fin >= v_fecha_partido::DATE);
 
         IF v_valido = 0 THEN
             RAISE EXCEPTION 'El jugador que entra no pertenecia a ese equipo en la fecha del partido.';
@@ -176,6 +201,111 @@ BEFORE INSERT OR UPDATE OF TORNEO_ID, EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE ON 
 FOR EACH ROW EXECUTE FUNCTION fn_validar_equipos_inscritos();
 
 -- ------------------------------------------------------------
+-- Función y trigger: TORNEO.Modalidad_ID es coherente con
+-- DISCIPLINA.Tipo — obligatorio si es 'Individual', prohibido si es
+-- 'Equipo'. No se puede expresar con un CHECK simple porque cruza
+-- TORNEO/DISCIPLINA (mismo motivo que fn_validar_equipos_inscritos no es
+-- una FK: la regla vive en la combinación de dos tablas).
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_validar_torneo_modalidad()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_tipo VARCHAR(20);
+    v_modalidad_disciplina INT;
+BEGIN
+    SELECT Tipo INTO v_tipo FROM DISCIPLINA WHERE ID = NEW.Disciplina_ID;
+
+    IF v_tipo = 'Individual' AND NEW.Modalidad_ID IS NULL THEN
+        RAISE EXCEPTION 'Un torneo de disciplina individual requiere Modalidad_ID.';
+    END IF;
+
+    IF v_tipo = 'Equipo' AND NEW.Modalidad_ID IS NOT NULL THEN
+        RAISE EXCEPTION 'Un torneo de disciplina de equipo no admite Modalidad_ID.';
+    END IF;
+
+    IF NEW.Modalidad_ID IS NOT NULL THEN
+        SELECT Disciplina_ID INTO v_modalidad_disciplina FROM MODALIDAD WHERE ID = NEW.Modalidad_ID;
+        IF v_modalidad_disciplina <> NEW.Disciplina_ID THEN
+            RAISE EXCEPTION 'La modalidad indicada no pertenece a esta disciplina.';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_torneo_validar_modalidad
+BEFORE INSERT OR UPDATE OF Disciplina_ID, Modalidad_ID ON TORNEO
+FOR EACH ROW EXECUTE FUNCTION fn_validar_torneo_modalidad();
+
+-- ------------------------------------------------------------
+-- Función y trigger: exclusividad de un jugador por torneo.
+-- Un mismo perfil de disciplina no puede tener dos membresías Activo al
+-- mismo tiempo dentro del mismo TORNEO (aunque sea en dos equipos
+-- distintos). No es un UNIQUE plano porque Torneo_ID no vive directo en
+-- JUGADOR_EQUIPO — se deriva vía INSCRIPCIONES_TORNEO, evitando
+-- denormalizar. El backend atrapa la excepción 'jugador_ya_activo_en_este_torneo'
+-- y la traduce al mensaje de la sección Inválidos de la pantalla de
+-- registro por lote (ver Fase 2 del plan) — la base es la fuente de
+-- verdad, no un chequeo de aplicación saltable desde un script/seed.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_validar_exclusividad_torneo()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_conflicto INT;
+BEGIN
+    IF NEW.Estado = 'Activo' THEN
+        SELECT COUNT(*) INTO v_conflicto
+        FROM JUGADOR_EQUIPO je
+        JOIN INSCRIPCIONES_TORNEO it_new ON it_new.ID = NEW.Inscripcion_Torneo_ID
+        JOIN INSCRIPCIONES_TORNEO it_je  ON it_je.ID = je.Inscripcion_Torneo_ID
+        WHERE je.Jugador_Perfil_ID = NEW.Jugador_Perfil_ID
+          AND je.Estado = 'Activo'
+          AND je.ID <> COALESCE(NEW.ID, -1)
+          AND it_je.Torneo_ID = it_new.Torneo_ID;
+
+        IF v_conflicto > 0 THEN
+            RAISE EXCEPTION 'jugador_ya_activo_en_este_torneo';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_jugador_equipo_exclusividad
+BEFORE INSERT OR UPDATE ON JUGADOR_EQUIPO
+FOR EACH ROW EXECUTE FUNCTION fn_validar_exclusividad_torneo();
+
+-- ------------------------------------------------------------
+-- Función y trigger: agencia libre automática al finalizar un torneo.
+-- Cierra (Estado='Inactivo') todas las membresías Activo de ese torneo.
+-- NO toca JUGADOR_PERFIL_DISCIPLINA: no tiene columna de estado
+-- activo/libre que "cerrar" — ese estado es derivado (ver
+-- vw_estado_perfil_disciplina), así que un jugador con membresía activa
+-- en OTRO torneo de la misma disciplina no queda libre por error (EC-10
+-- del plan) — no hay campo que este trigger pudiera olvidar actualizar.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_cerrar_torneo_libera_jugadores()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.Estado = 'Finalizado' AND OLD.Estado <> 'Finalizado' THEN
+        UPDATE JUGADOR_EQUIPO je
+        SET Estado = 'Inactivo', Fecha_Fin = CURRENT_DATE
+        FROM INSCRIPCIONES_TORNEO it
+        WHERE je.Inscripcion_Torneo_ID = it.ID
+          AND it.Torneo_ID = NEW.ID
+          AND je.Estado = 'Activo';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_torneo_finalizado_libera
+AFTER UPDATE ON TORNEO
+FOR EACH ROW EXECUTE FUNCTION fn_cerrar_torneo_libera_jugadores();
+
+-- ------------------------------------------------------------
 -- Verificación final
 -- Los triggers se crearon después del seed, así que los datos ya
 -- cargados no pasaron por ellos. Este bloque los revalida contra las
@@ -208,16 +338,23 @@ BEGIN
     END IF;
 
     -- 3. Eventos cuyo jugador no pertenecía a ese equipo en esa fecha
+    -- (vía perfil de disciplina + roster de ese torneo, ver
+    -- fn_validar_jugador_partido)
     SELECT COUNT(*) INTO v_malos
       FROM EVENTOS_PARTIDO ep
       JOIN PARTIDOS p ON p.ID = ep.PARTIDOS_ID
+      JOIN TORNEO t ON t.ID = p.Torneo_ID
      WHERE NOT EXISTS (
             SELECT 1 FROM JUGADOR_EQUIPO je
-             WHERE je.JUGADOR_ID = ep.JUGADOR_ID
-               AND je.EQUIPO_ID = ep.EQUIPO_ID
-               AND je.Estado = 'Activo'
-               AND je.Fecha_Inicio <= p.Fecha_Partido::DATE
-               AND (je.Fecha_Fin IS NULL OR je.Fecha_Fin >= p.Fecha_Partido::DATE));
+             JOIN JUGADOR_PERFIL_DISCIPLINA jpd ON jpd.ID = je.Jugador_Perfil_ID
+             JOIN INSCRIPCIONES_TORNEO it ON it.ID = je.Inscripcion_Torneo_ID
+            WHERE jpd.Jugador_ID = ep.JUGADOR_ID
+              AND jpd.Disciplina_ID = t.Disciplina_ID
+              AND it.Torneo_ID = p.Torneo_ID
+              AND it.Equipo_ID = ep.EQUIPO_ID
+              AND je.Estado = 'Activo'
+              AND je.Fecha_Inicio <= p.Fecha_Partido::DATE
+              AND (je.Fecha_Fin IS NULL OR je.Fecha_Fin >= p.Fecha_Partido::DATE));
     IF v_malos > 0 THEN
         RAISE EXCEPTION 'Seed invalido: % evento(s) con jugador ajeno al equipo.', v_malos;
     END IF;

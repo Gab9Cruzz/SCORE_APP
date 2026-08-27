@@ -70,22 +70,56 @@ ORDER BY p.Fecha_Partido;
 
 -- ------------------------------------------------------------
 -- Plantilla vigente por equipo, con dorsal
+--
+-- JUGADOR_EQUIPO ya no referencia JUGADOR_ID/EQUIPO_ID directo: el roster
+-- ahora es (Jugador_Perfil_ID, Inscripcion_Torneo_ID). Se llega a la
+-- persona vía JUGADOR_PERFIL_DISCIPLINA y al equipo vía
+-- INSCRIPCIONES_TORNEO — ver docs/plans/equipos-jugadores-plan.md.
+-- Se agrega Torneo_ID: un equipo puede estar inscrito en varios torneos a
+-- la vez (roster distinto en cada uno), así que Equipo_ID solo ya no
+-- identifica una plantilla única.
 -- ------------------------------------------------------------
 CREATE OR REPLACE VIEW vw_jugadores_activos_por_equipo AS
 SELECT
-    e.ID      AS Equipo_ID,
-    e.Nombre  AS Equipo,
-    j.ID      AS Jugador_ID,
-    j.Nombre  AS Jugador,
+    e.ID       AS Equipo_ID,
+    e.Nombre   AS Equipo,
+    it.Torneo_ID,
+    j.ID       AS Jugador_ID,
+    j.Nombre   AS Jugador,
     je.Dorsal,
     je.Fecha_Inicio
 FROM JUGADOR_EQUIPO je
-JOIN JUGADORES j ON j.ID = je.JUGADOR_ID
-JOIN EQUIPOS   e ON e.ID = je.EQUIPO_ID
+JOIN JUGADOR_PERFIL_DISCIPLINA jpd ON jpd.ID = je.Jugador_Perfil_ID
+JOIN JUGADORES j             ON j.ID  = jpd.Jugador_ID
+JOIN INSCRIPCIONES_TORNEO it ON it.ID = je.Inscripcion_Torneo_ID
+JOIN EQUIPOS   e             ON e.ID  = it.Equipo_ID
 WHERE je.Estado = 'Activo'
   AND je.Fecha_Fin IS NULL
   AND j.Estado = 'Activo'
   AND e.Estado = 'Activo';
+
+-- ------------------------------------------------------------
+-- Estado del perfil de jugador por disciplina: Suspendido / Activo /
+-- Libre. Derivado, no almacenado (ver comentario en
+-- JUGADOR_PERFIL_DISCIPLINA, 01_schema.sql, y EC-10/EC-11 del plan): así
+-- "agencia libre" al finalizar un torneo no tiene una columna que
+-- olvidar sincronizar, y un jugador con membresía activa en OTRO torneo
+-- de la misma disciplina no queda libre por error.
+-- ------------------------------------------------------------
+CREATE OR REPLACE VIEW vw_estado_perfil_disciplina AS
+SELECT
+    jpd.ID AS Jugador_Perfil_ID,
+    jpd.Jugador_ID,
+    jpd.Disciplina_ID,
+    CASE
+        WHEN jpd.Suspendido THEN 'Suspendido'
+        WHEN EXISTS (
+            SELECT 1 FROM JUGADOR_EQUIPO je
+             WHERE je.Jugador_Perfil_ID = jpd.ID AND je.Estado = 'Activo'
+        ) THEN 'Activo'
+        ELSE 'Libre'
+    END AS Estado
+FROM JUGADOR_PERFIL_DISCIPLINA jpd;
 
 -- ------------------------------------------------------------
 -- Goleadores
@@ -171,3 +205,31 @@ FROM lados l
 JOIN EQUIPOS e ON e.ID = l.Equipo_ID
 GROUP BY l.Torneo_ID, l.Equipo_ID, e.Nombre
 ORDER BY l.Torneo_ID, PTS DESC, DG DESC, GF DESC, Equipo;
+
+-- ------------------------------------------------------------
+-- Goleadores consolidados por disciplina, cross-torneo.
+--
+-- vw_goles_acreditados cuenta por JUGADOR_ID (persona), no por perfil —
+-- una misma persona con perfiles en Fútbol y Tenis solo tiene un
+-- JUGADOR_ID. Sin el segundo JOIN contra TORNEO (que ancla el gol a la
+-- disciplina de SU torneo), un gol de fútbol se contaría también en el
+-- perfil de tenis de la misma persona.
+--
+-- COUNT(t.ID), no COUNT(ga.Evento_Partido_ID): con un LEFT JOIN encadenado
+-- así, un gol de OTRA disciplina sigue presente en la fila (con t.* en
+-- NULL) — hay que contar la columna que solo es NOT NULL cuando la
+-- disciplina del torneo del gol coincide con la del perfil, o el conteo
+-- incluye goles de la disciplina equivocada.
+-- ------------------------------------------------------------
+CREATE OR REPLACE VIEW vw_goleadores_por_disciplina AS
+SELECT
+    jpd.ID AS Jugador_Perfil_ID,
+    j.Nombre AS Jugador,
+    d.Nombre AS Disciplina,
+    COUNT(t.ID) AS Goles_Totales
+FROM JUGADOR_PERFIL_DISCIPLINA jpd
+JOIN JUGADORES j ON j.ID = jpd.Jugador_ID
+JOIN DISCIPLINA d ON d.ID = jpd.Disciplina_ID
+LEFT JOIN vw_goles_acreditados ga ON ga.JUGADOR_ID = jpd.Jugador_ID AND ga.Tipo_Gol = 'Gol'
+LEFT JOIN TORNEO t ON t.ID = ga.TORNEO_ID AND t.Disciplina_ID = jpd.Disciplina_ID
+GROUP BY jpd.ID, j.Nombre, d.Nombre;

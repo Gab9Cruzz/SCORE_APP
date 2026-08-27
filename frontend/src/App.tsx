@@ -7,11 +7,16 @@ import { LoginPage } from "./pages/Login";
 import { PartidoEnVivoPage } from "./pages/PartidoEnVivo";
 import { MisPartidosPage } from "./pages/arbitro/MisPartidos";
 import { UsuariosAdminPage } from "./pages/admin/UsuariosAdmin";
+import { DisciplinasAdminPage } from "./pages/torneo-admin/DisciplinasAdmin";
 import { EquiposAdminPage } from "./pages/torneo-admin/EquiposAdmin";
 import { InscripcionesAdminPage } from "./pages/torneo-admin/InscripcionesAdmin";
 import { JugadoresAdminPage } from "./pages/torneo-admin/JugadoresAdmin";
+import { ModalidadesAdminPage } from "./pages/torneo-admin/ModalidadesAdmin";
 import { PartidosAdminPage } from "./pages/torneo-admin/PartidosAdmin";
+import { PerfilJugadorAdminPage } from "./pages/torneo-admin/PerfilJugadorAdmin";
 import { PlantillasAdminPage } from "./pages/torneo-admin/PlantillasAdmin";
+import { RegistroLoteAdminPage } from "./pages/torneo-admin/RegistroLoteAdmin";
+import { TraspasosAdminPage } from "./pages/torneo-admin/TraspasosAdmin";
 import { TorneoAdminLayout } from "./pages/torneo-admin/TorneoAdminLayout";
 import { TorneosAdminPage } from "./pages/torneo-admin/TorneosAdmin";
 
@@ -73,9 +78,14 @@ export function App() {
           <Route path="/torneo-admin" element={<TorneoAdminLayout />}>
             <Route index element={<Navigate to="torneos" replace />} />
             <Route path="torneos" element={<TorneosAdminPage />} />
+            <Route path="disciplinas" element={<DisciplinasAdminPage />} />
+            <Route path="modalidades" element={<ModalidadesAdminPage />} />
             <Route path="equipos" element={<EquiposAdminPage />} />
             <Route path="jugadores" element={<JugadoresAdminPage />} />
+            <Route path="jugadores/:jugadorId/perfil" element={<PerfilJugadorAdminPage />} />
             <Route path="plantillas" element={<PlantillasAdminPage />} />
+            <Route path="plantillas/lote" element={<RegistroLoteAdminPage />} />
+            <Route path="traspasos" element={<TraspasosAdminPage />} />
             <Route path="inscripciones" element={<InscripcionesAdminPage />} />
             <Route path="partidos" element={<PartidosAdminPage />} />
           </Route>
