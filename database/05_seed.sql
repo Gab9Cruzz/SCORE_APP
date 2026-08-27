@@ -27,9 +27,14 @@ INSERT INTO EVENTOS (Nombre, Descripcion) VALUES
 INSERT INTO DISCIPLINA (Nombre, Tipo) VALUES
     ('Fútbol', 'Equipo');
 
+-- Torneo Grupo — torneos-admin-plan.md, Fase 1/3. Cada TORNEO es una
+-- edición de su grupo; "Copa Ecotec" tiene una sola edición cargada hoy.
+INSERT INTO TORNEO_GRUPO (Nombre) VALUES
+    ('Copa Ecotec');
+
 -- Torneo
-INSERT INTO TORNEO (Nombre, Disciplina_ID, Fecha_Inicio, Fecha_Fin) VALUES
-    ('Copa Ecotec 2026', (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol'), '2026-01-10', '2026-03-30');
+INSERT INTO TORNEO (Nombre, Disciplina_ID, Torneo_Grupo_ID, Numero_Edicion, Fecha_Inicio, Fecha_Fin) VALUES
+    ('Copa Ecotec 2026', (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol'), (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Copa Ecotec'), 1, '2026-01-10', '2026-03-30');
 
 -- Equipos
 INSERT INTO EQUIPOS (Nombre) VALUES

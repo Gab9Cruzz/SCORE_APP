@@ -12,9 +12,14 @@ router = APIRouter(prefix="/traspasos", tags=["Traspasos"])
 
 @router.get("", response_model=list[TraspasoOut])
 async def listar_traspasos(
-    jugador_perfil_id: int | None = None, session: AsyncSession = Depends(get_db)
+    jugador_perfil_id: int | None = None,
+    torneo_id: int | None = None,
+    session: AsyncSession = Depends(get_db),
 ) -> list[TraspasoOut]:
-    return await TraspasoService(session).list(jugador_perfil_id=jugador_perfil_id)
+    """`torneo_id` filtra por el torneo del equipo DESTINO (ver
+    TraspasoRepository.listar_por_torneo) — dashboard scoped por torneo
+    (torneos-admin-plan.md, D-Eng-3)."""
+    return await TraspasoService(session).list(jugador_perfil_id=jugador_perfil_id, torneo_id=torneo_id)
 
 
 @router.get("/{traspaso_id}", response_model=TraspasoOut)

@@ -14,9 +14,14 @@ async def listar_torneos(
     skip: int = 0,
     limit: int = Query(default=100, le=200),
     estado: EstadoTorneo | None = None,
+    torneo_grupo_id: int | None = None,
     session: AsyncSession = Depends(get_db),
 ) -> list[TorneoOut]:
-    return await TorneoService(session).list(skip=skip, limit=limit, estado=estado)
+    """`torneo_grupo_id` filtra a las ediciones de un mismo grupo — lo usa
+    el selector de Estadísticas (torneos-admin-plan.md, Fase 2 parte B)."""
+    return await TorneoService(session).list(
+        skip=skip, limit=limit, estado=estado, torneo_grupo_id=torneo_grupo_id
+    )
 
 
 @router.get("/{torneo_id}", response_model=TorneoOut)

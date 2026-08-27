@@ -119,7 +119,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar Torneos */
+        /**
+         * Listar Torneos
+         * @description `torneo_grupo_id` filtra a las ediciones de un mismo grupo — lo usa
+         *     el selector de Estadísticas (torneos-admin-plan.md, Fase 2 parte B).
+         */
         get: operations["listar_torneos_api_v1_torneos_get"];
         put?: never;
         /** Crear Torneo */
@@ -151,6 +155,51 @@ export interface paths {
         head?: never;
         /** Actualizar Torneo */
         patch: operations["actualizar_torneo_api_v1_torneos__torneo_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/torneo-grupos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Torneo Grupos
+         * @description Tarjeta por grupo con sus ediciones (Fase 2, paso 1 del journey) —
+         *     "N ediciones" y cuál es la más reciente/activa se calculan acá, no en
+         *     cada componente de frontend que necesite la lista (D-Eng-1).
+         */
+        get: operations["listar_torneo_grupos_api_v1_torneo_grupos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/torneo-grupos/{torneo_grupo_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtener Torneo Grupo */
+        get: operations["obtener_torneo_grupo_api_v1_torneo_grupos__torneo_grupo_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Renombrar Torneo Grupo
+         * @description EC-25: renombrar un grupo con ediciones ya finalizadas está
+         *     permitido sin restricción — el nombre se compone en runtime en cada
+         *     edición, así que esto alcanza a todas de una.
+         */
+        patch: operations["renombrar_torneo_grupo_api_v1_torneo_grupos__torneo_grupo_id__patch"];
         trace?: never;
     };
     "/api/v1/equipos": {
@@ -237,7 +286,7 @@ export interface paths {
         /**
          * Obtener Perfil De Jugador
          * @description Stats + trayectoria consolidadas por disciplina (equipos-jugadores-plan.md,
-         *     Fase 2, Etapa D). Público, como el resto de los GET de este router.
+         *     Fase 2, Etapa D).
          */
         get: operations["obtener_perfil_de_jugador_api_v1_jugadores__jugador_id__perfil_get"];
         put?: never;
@@ -440,7 +489,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar Plantilla */
+        /**
+         * Listar Plantilla
+         * @description `torneo_id` filtra a los vínculos de ESE torneo (todos sus equipos) —
+         *     lo usa el dashboard scoped por torneo (torneos-admin-plan.md, D-Eng-3).
+         *     Antes de esto el GET devolvía el sistema completo sin filtrar.
+         */
         get: operations["listar_plantilla_api_v1_plantillas_get"];
         put?: never;
         /**
@@ -543,7 +597,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar Traspasos */
+        /**
+         * Listar Traspasos
+         * @description `torneo_id` filtra por el torneo del equipo DESTINO (ver
+         *     TraspasoRepository.listar_por_torneo) — dashboard scoped por torneo
+         *     (torneos-admin-plan.md, D-Eng-3).
+         */
         get: operations["listar_traspasos_api_v1_traspasos_get"];
         put?: never;
         /**
@@ -881,25 +940,34 @@ export interface components {
             /** Estado */
             estado?: ("Activo" | "Inactivo") | null;
         };
-        /** EquipoActivoOut */
-        EquipoActivoOut: {
-            /** Inscripcion Torneo Id */
-            inscripcion_torneo_id: number;
-            /** Torneo Id */
-            torneo_id: number;
-            /** Torneo */
-            torneo: string;
-            /** Equipo Id */
-            equipo_id: number;
-            /** Equipo */
-            equipo: string;
-            /** Dorsal */
-            dorsal: number | null;
+        /**
+         * EdicionResumen
+         * @description Fila liviana para el selector de ediciones (Fase 2, parte B del
+         *     plan) — evita mandar el TorneoOut completo (disciplina_id,
+         *     modalidad_id...) cuando el frontend solo necesita poblar el
+         *     desplegable "Edición: [...]".
+         */
+        EdicionResumen: {
+            /** Id */
+            id: number;
+            /** Numero Edicion */
+            numero_edicion: number;
+            /** Disciplina Id */
+            disciplina_id: number;
+            /** Modalidad Id */
+            modalidad_id: number | null;
+            /** Estado */
+            estado: string;
             /**
              * Fecha Inicio
              * Format: date
              */
             fecha_inicio: string;
+            /**
+             * Fecha Fin
+             * Format: date
+             */
+            fecha_fin: string;
         };
         /** EquipoCreate */
         EquipoCreate: {
@@ -1363,39 +1431,6 @@ export interface components {
             /** Arbitro Id */
             arbitro_id?: number | null;
         };
-        /** PerfilDisciplinaOut */
-        PerfilDisciplinaOut: {
-            /** Jugador Perfil Id */
-            jugador_perfil_id: number;
-            /** Disciplina Id */
-            disciplina_id: number;
-            /** Disciplina */
-            disciplina: string;
-            /**
-             * Estado
-             * @enum {string}
-             */
-            estado: "Libre" | "Activo" | "Suspendido";
-            /** Goles Totales */
-            goles_totales: number;
-            /** Equipos Activos */
-            equipos_activos: components["schemas"]["EquipoActivoOut"][];
-            /** Trayectoria */
-            trayectoria: components["schemas"]["TraspasoTrayectoriaOut"][];
-        };
-        /** PerfilJugadorOut */
-        PerfilJugadorOut: {
-            /** Jugador Id */
-            jugador_id: number;
-            /** Nombre */
-            nombre: string;
-            /** Cedula */
-            cedula: string;
-            /** Correo Electronico */
-            correo_electronico: string;
-            /** Disciplinas */
-            disciplinas: components["schemas"]["PerfilDisciplinaOut"][];
-        };
         /** PlantillaJugadorOut */
         PlantillaJugadorOut: {
             /** Equipo Id */
@@ -1542,10 +1577,21 @@ export interface components {
             /** Rol */
             rol: string;
         };
-        /** TorneoCreate */
+        /**
+         * TorneoCreate
+         * @description Exactamente uno de los dos (torneos-admin-plan.md, Fase 1/3):
+         *     - `torneo_grupo_id`: esto es una EDICIÓN NUEVA de un grupo ya
+         *       existente — TorneoService.create() calcula numero_edicion como
+         *       MAX(del grupo) + 1, nunca lo manda el cliente.
+         *     - `torneo_grupo_nombre`: crea un TORNEO_GRUPO nuevo (numero_edicion=1).
+         *       Siempre crea un grupo — si el nombre tipeado coincide con uno ya
+         *       existente, es responsabilidad del frontend detectarlo y mandar
+         *       `torneo_grupo_id` en su lugar (journey, paso 1: el admin elige un
+         *       grupo existente desde la tarjeta, no lo escribe de nuevo).
+         */
         TorneoCreate: {
             /** Nombre */
-            nombre: string;
+            nombre?: string | null;
             /** Disciplina Id */
             disciplina_id: number;
             /** Modalidad Id */
@@ -1560,6 +1606,61 @@ export interface components {
              * Format: date
              */
             fecha_fin: string;
+            /** Torneo Grupo Id */
+            torneo_grupo_id?: number | null;
+            /** Torneo Grupo Nombre */
+            torneo_grupo_nombre?: string | null;
+        };
+        /**
+         * TorneoGrupoConEdiciones
+         * @description Lo que consume la tarjeta de la Pestaña Torneos (Fase 2, paso 1 del
+         *     journey): un grupo + sus ediciones, ordenadas de más reciente a más
+         *     antigua (mismo orden que necesita el desplegable de Estadísticas).
+         */
+        TorneoGrupoConEdiciones: {
+            /** Id */
+            id: number;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Fecha Registro
+             * Format: date-time
+             */
+            fecha_registro: string;
+            /**
+             * Fecha Modificacion
+             * Format: date-time
+             */
+            fecha_modificacion: string;
+            /** Ediciones */
+            ediciones: components["schemas"]["EdicionResumen"][];
+        };
+        /** TorneoGrupoOut */
+        TorneoGrupoOut: {
+            /** Id */
+            id: number;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Fecha Registro
+             * Format: date-time
+             */
+            fecha_registro: string;
+            /**
+             * Fecha Modificacion
+             * Format: date-time
+             */
+            fecha_modificacion: string;
+        };
+        /**
+         * TorneoGrupoUpdate
+         * @description Solo renombrar — torneos-admin-plan.md, EC-25: permitido sin
+         *     restricción, actualiza el nombre mostrado de todas sus ediciones
+         *     porque se compone en runtime (nunca se guarda concatenado).
+         */
+        TorneoGrupoUpdate: {
+            /** Nombre */
+            nombre: string;
         };
         /** TorneoOut */
         TorneoOut: {
@@ -1581,6 +1682,10 @@ export interface components {
             fecha_fin: string;
             /** Id */
             id: number;
+            /** Torneo Grupo Id */
+            torneo_grupo_id: number;
+            /** Numero Edicion */
+            numero_edicion: number;
             /**
              * Estado
              * @enum {string}
@@ -1646,27 +1751,6 @@ export interface components {
              * Format: date-time
              */
             fecha_traspaso: string;
-            /**
-             * Estado
-             * @enum {string}
-             */
-            estado: "Completado" | "Anulado";
-        };
-        /** TraspasoTrayectoriaOut */
-        TraspasoTrayectoriaOut: {
-            /** Id */
-            id: number;
-            /**
-             * Fecha Traspaso
-             * Format: date-time
-             */
-            fecha_traspaso: string;
-            /** Origen */
-            origen: string | null;
-            /** Destino */
-            destino: string;
-            /** Motivo */
-            motivo: string | null;
             /**
              * Estado
              * @enum {string}
@@ -2143,6 +2227,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 estado?: ("Activo" | "Inactivo" | "Finalizado") | null;
+                torneo_grupo_id?: number | null;
             };
             header?: never;
             path?: never;
@@ -2287,6 +2372,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TorneoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_torneo_grupos_api_v1_torneo_grupos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TorneoGrupoConEdiciones"][];
+                };
+            };
+        };
+    };
+    obtener_torneo_grupo_api_v1_torneo_grupos__torneo_grupo_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                torneo_grupo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TorneoGrupoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    renombrar_torneo_grupo_api_v1_torneo_grupos__torneo_grupo_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                torneo_grupo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TorneoGrupoUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TorneoGrupoOut"];
                 };
             };
             /** @description Validation Error */
@@ -2482,7 +2653,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JugadorOut"][];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -2546,7 +2717,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JugadorOut"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -2643,7 +2814,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PerfilJugadorOut"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -3254,6 +3425,7 @@ export interface operations {
             query?: {
                 inscripcion_torneo_id?: number | null;
                 jugador_perfil_id?: number | null;
+                torneo_id?: number | null;
             };
             header?: never;
             path?: never;
@@ -3483,6 +3655,7 @@ export interface operations {
         parameters: {
             query?: {
                 jugador_perfil_id?: number | null;
+                torneo_id?: number | null;
             };
             header?: never;
             path?: never;

@@ -11,8 +11,9 @@ import { api } from "../api/client";
  *
  * InscripcionTorneo y JugadorEquipo se desvían de esta forma (sin DELETE
  * plano, sin skip/limit/estado en el GET) — usan `customAction` para sus
- * casos especiales en vez de `update`/`softDelete`, ver PlantillasAdmin.tsx
- * e InscripcionesAdmin.tsx.
+ * casos especiales en vez de `update`/`softDelete`, ver
+ * torneo-dashboard/PlantillasDelTorneo.tsx y torneo-dashboard/EquiposDelTorneo.tsx
+ * (cancelar una inscripción).
  *
  * Los paths se pasan como string plano, no como el literal tipado que
  * openapi-fetch preferiría (`keyof paths`) — a propósito: una función

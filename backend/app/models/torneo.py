@@ -19,6 +19,12 @@ class Torneo(TimestampMixin, Base):
     nombre: Mapped[str] = mapped_column(String(100))
     disciplina_id: Mapped[int] = mapped_column(ForeignKey("disciplina.id"))
     modalidad_id: Mapped[int | None] = mapped_column(ForeignKey("modalidad.id"))
+    # Cada Torneo es UNA edición de su grupo (torneos-admin-plan.md, Fase 1).
+    # numero_edicion es único por grupo (unique_edicion_por_grupo,
+    # 02_constraints.sql) — lo asigna TorneoService.create() como
+    # MAX(numero_edicion del grupo) + 1, nunca lo manda el cliente.
+    torneo_grupo_id: Mapped[int] = mapped_column(ForeignKey("torneo_grupo.id"))
+    numero_edicion: Mapped[int] = mapped_column(default=1)
     fecha_inicio: Mapped[date]
     fecha_fin: Mapped[date]
     # Valores válidos: Activo, Inactivo, Finalizado (chk_torneo_estado, 02_constraints.sql)

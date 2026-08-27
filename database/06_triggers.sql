@@ -31,6 +31,14 @@ CREATE TRIGGER trg_torneo_upd_fecha
 BEFORE UPDATE ON TORNEO
 FOR EACH ROW EXECUTE FUNCTION fn_actualizar_fecha_modificacion();
 
+-- TORNEO_GRUPO también tiene Fecha_Modificacion — a diferencia de
+-- DISCIPLINA/MODALIDAD (catálogos que casi no cambian), un grupo de
+-- torneo SÍ se espera que el admin renombre alguna vez (torneos-admin-plan.md,
+-- EC-25), vale la pena trazar cuándo.
+CREATE TRIGGER trg_torneo_grupo_upd_fecha
+BEFORE UPDATE ON TORNEO_GRUPO
+FOR EACH ROW EXECUTE FUNCTION fn_actualizar_fecha_modificacion();
+
 CREATE TRIGGER trg_equipos_upd_fecha
 BEFORE UPDATE ON EQUIPOS
 FOR EACH ROW EXECUTE FUNCTION fn_actualizar_fecha_modificacion();

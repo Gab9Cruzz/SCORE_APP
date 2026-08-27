@@ -17,7 +17,7 @@ export function createTestQueryClient(): QueryClient {
 /** Wrapper para `renderHook`/`render` — cada llamada arma su propio
  * QueryClient, así un test no contamina el cache de otro. Incluye
  * `MemoryRouter`: varias páginas de torneo-admin usan `Link`/`useNavigate`
- * (PlantillasAdmin, RegistroLoteAdmin, JugadoresAdmin...) y sin un Router
+ * (PlantillasDelTorneo, RegistroLoteAdmin, JugadoresAdmin...) y sin un Router
  * alrededor esos hooks tiran en el render, no solo al navegar. Ningún test
  * de este wrapper necesita rutas anidadas reales — para eso está
  * `App.routing.test.tsx`, que arma su propio `MemoryRouter` aparte. */

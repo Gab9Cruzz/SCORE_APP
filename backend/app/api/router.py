@@ -14,6 +14,7 @@ from app.api.routes import (
     perfiles,
     plantillas,
     registro_lote,
+    torneo_grupos,
     torneos,
     traspasos,
     usuarios,
@@ -24,6 +25,7 @@ api_router.include_router(auth.router)
 api_router.include_router(disciplinas.router)
 api_router.include_router(modalidades.router)
 api_router.include_router(torneos.router)
+api_router.include_router(torneo_grupos.router)
 api_router.include_router(equipos.router)
 api_router.include_router(jugadores.router)
 api_router.include_router(perfiles.router)

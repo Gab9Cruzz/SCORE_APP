@@ -42,6 +42,22 @@ async def test_listar_plantilla_de_equipo(client: AsyncClient):
     assert len(resp.json()) == 2
 
 
+async def test_filtrar_plantilla_por_torneo(client: AsyncClient):
+    # torneo_id trae TODOS los equipos de ese torneo (Tiburones + Águilas +
+    # Halcones, 05_seed.sql), a diferencia de inscripcion_torneo_id que
+    # trae solo uno — dashboard scoped por torneo (torneos-admin-plan.md,
+    # D-Eng-3). Antes de este filtro, el GET sin ningún query param
+    # devolvía el sistema completo sin forma de acotarlo por torneo.
+    resp = await client.get("/api/v1/plantillas", params={"torneo_id": 1})
+    assert resp.status_code == 200
+    inscripciones_vistas = {f["inscripcion_torneo_id"] for f in resp.json()}
+    assert inscripciones_vistas == {1, 2, 3}  # las 3 inscripciones del seed son del torneo 1
+
+    resp = await client.get("/api/v1/plantillas", params={"torneo_id": 999999})
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 async def test_admin_da_de_alta_jugador_en_equipo(client: AsyncClient, admin_general_headers: dict[str, str]):
     perfil_id = await _crear_perfil(client, admin_general_headers, "Fichaje Nuevo")
 

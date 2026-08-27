@@ -23,7 +23,11 @@ export interface ResourceFormField {
 }
 
 interface ResourceFormProps {
-  fields: ResourceFormField[];
+  /** También puede ser una función de los valores actuales — para campos
+   * condicionados entre sí (torneos-admin-plan.md, Fase 2: Modalidad solo
+   * se muestra si la Disciplina elegida es "Individual"). Un array plano
+   * sigue funcionando igual que antes para el resto de las páginas. */
+  fields: ResourceFormField[] | ((values: Record<string, ResourceFieldValue>) => ResourceFormField[]);
   initialValues?: Record<string, ResourceFieldValue>;
   onSubmit: (values: Record<string, ResourceFieldValue>) => void;
   submitting: boolean;
@@ -50,11 +54,13 @@ export function ResourceForm(props: ResourceFormProps) {
 
   const [values, setValues] = useState<Record<string, ResourceFieldValue>>(() => initialValues ?? {});
 
+  const resolvedFields = typeof fields === "function" ? fields(values) : fields;
+
   function setField(name: string, value: ResourceFieldValue) {
     setValues((v) => ({ ...v, [name]: value }));
   }
 
-  const puedeEnviar = fields.every((f) => {
+  const puedeEnviar = resolvedFields.every((f) => {
     if (!f.required) return true;
     const v = values[f.name];
     return v !== null && v !== undefined && v !== "";
@@ -63,12 +69,22 @@ export function ResourceForm(props: ResourceFormProps) {
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!puedeEnviar) return;
-    onSubmit(values);
+    // EC-24 (torneos-admin-plan.md): si un campo condicional dejó de estar
+    // presente (ej. Modalidad al volver a una disciplina de tipo Equipo),
+    // su valor viejo se filtra ACÁ, al mandar — no alcanza con ocultar el
+    // input, o el submit mandaría un valor "fantasma" que el admin ya no
+    // puede ver ni corregir en pantalla. Se filtra en vez de limpiar el
+    // estado con un efecto: si el admin vuelve a la disciplina donde ese
+    // campo sí aplica, recupera lo que había tipeado antes.
+    const nombresVigentes = new Set(resolvedFields.map((f) => f.name));
+    const valoresVigentes: Record<string, ResourceFieldValue> = {};
+    for (const [k, v] of Object.entries(values)) if (nombresVigentes.has(k)) valoresVigentes[k] = v;
+    onSubmit(valoresVigentes);
   }
 
   return (
     <form className="resource-form" onSubmit={handleSubmit}>
-      {fields.map((f) => {
+      {resolvedFields.map((f) => {
         if (f.type === "reference") {
           return (
             <label key={f.name}>

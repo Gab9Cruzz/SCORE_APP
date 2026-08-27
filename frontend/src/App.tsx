@@ -9,16 +9,18 @@ import { MisPartidosPage } from "./pages/arbitro/MisPartidos";
 import { UsuariosAdminPage } from "./pages/admin/UsuariosAdmin";
 import { DisciplinasAdminPage } from "./pages/torneo-admin/DisciplinasAdmin";
 import { EquiposAdminPage } from "./pages/torneo-admin/EquiposAdmin";
-import { InscripcionesAdminPage } from "./pages/torneo-admin/InscripcionesAdmin";
 import { JugadoresAdminPage } from "./pages/torneo-admin/JugadoresAdmin";
 import { ModalidadesAdminPage } from "./pages/torneo-admin/ModalidadesAdmin";
-import { PartidosAdminPage } from "./pages/torneo-admin/PartidosAdmin";
 import { PerfilJugadorAdminPage } from "./pages/torneo-admin/PerfilJugadorAdmin";
-import { PlantillasAdminPage } from "./pages/torneo-admin/PlantillasAdmin";
 import { RegistroLoteAdminPage } from "./pages/torneo-admin/RegistroLoteAdmin";
-import { TraspasosAdminPage } from "./pages/torneo-admin/TraspasosAdmin";
 import { TorneoAdminLayout } from "./pages/torneo-admin/TorneoAdminLayout";
 import { TorneosAdminPage } from "./pages/torneo-admin/TorneosAdmin";
+import { EquiposDelTorneoPage } from "./pages/torneo-admin/torneo-dashboard/EquiposDelTorneo";
+import { EstadisticasDelTorneoPage } from "./pages/torneo-admin/torneo-dashboard/EstadisticasDelTorneo";
+import { PartidosDelTorneoPage } from "./pages/torneo-admin/torneo-dashboard/PartidosDelTorneo";
+import { PlantillasDelTorneoPage } from "./pages/torneo-admin/torneo-dashboard/PlantillasDelTorneo";
+import { TorneoDashboardPage } from "./pages/torneo-admin/torneo-dashboard/TorneoDashboard";
+import { TraspasosDelTorneoPage } from "./pages/torneo-admin/torneo-dashboard/TraspasosDelTorneo";
 
 export function App() {
   return (
@@ -78,16 +80,29 @@ export function App() {
           <Route path="/torneo-admin" element={<TorneoAdminLayout />}>
             <Route index element={<Navigate to="torneos" replace />} />
             <Route path="torneos" element={<TorneosAdminPage />} />
+            {/* Dashboard scoped de UNA edición puntual (torneos-admin-plan.md,
+                Fase 2): "Ver Torneo" desde la tarjeta de arriba entra acá.
+                No es una pestaña de PESTANIAS — mismo criterio que
+                jugadores/:jugadorId/perfil, alcanzable solo por link, no
+                por tab. */}
+            <Route path="torneos/:torneoId" element={<TorneoDashboardPage />}>
+              <Route index element={<Navigate to="equipos" replace />} />
+              <Route path="equipos" element={<EquiposDelTorneoPage />} />
+              <Route path="plantillas" element={<PlantillasDelTorneoPage />} />
+              <Route path="traspasos" element={<TraspasosDelTorneoPage />} />
+              <Route path="partidos" element={<PartidosDelTorneoPage />} />
+              <Route path="estadisticas" element={<EstadisticasDelTorneoPage />} />
+            </Route>
             <Route path="disciplinas" element={<DisciplinasAdminPage />} />
             <Route path="modalidades" element={<ModalidadesAdminPage />} />
             <Route path="equipos" element={<EquiposAdminPage />} />
             <Route path="jugadores" element={<JugadoresAdminPage />} />
             <Route path="jugadores/:jugadorId/perfil" element={<PerfilJugadorAdminPage />} />
-            <Route path="plantillas" element={<PlantillasAdminPage />} />
+            {/* Alcanzable solo desde el modal "Agregar Equipo" o el botón
+                "+ Registro por lote" del dashboard scoped (ver
+                RegistroLoteAdmin.tsx) — ya no hay pestaña global de
+                Plantillas desde la que se llegaba antes (Fase 3). */}
             <Route path="plantillas/lote" element={<RegistroLoteAdminPage />} />
-            <Route path="traspasos" element={<TraspasosAdminPage />} />
-            <Route path="inscripciones" element={<InscripcionesAdminPage />} />
-            <Route path="partidos" element={<PartidosAdminPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

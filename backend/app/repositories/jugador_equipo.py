@@ -29,6 +29,23 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
             {"jugador_perfil_id": jugador_perfil_id, "torneo_id": torneo_id},
         )
 
+    async def listar_por_torneo(self, torneo_id: int, skip: int = 0, limit: int = 100) -> list[JugadorEquipo]:
+        """Torneo_ID no vive directo en esta tabla (Fase 1) — mismo join que
+        get_activo_en_torneo. Usado por el dashboard scoped de
+        torneos-admin-plan.md (D-Eng-3): sin este filtro, la sub-pestaña
+        "Plantillas" del panel de un torneo mostraba TODO el sistema, no
+        solo lo de ese torneo."""
+        stmt = (
+            select(JugadorEquipo)
+            .join(InscripcionTorneo, InscripcionTorneo.id == JugadorEquipo.inscripcion_torneo_id)
+            .where(InscripcionTorneo.torneo_id == torneo_id)
+            .order_by(JugadorEquipo.id)
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_activo_en_torneo(self, jugador_perfil_id: int, torneo_id: int) -> JugadorEquipo | None:
         """Join con INSCRIPCIONES_TORNEO: Torneo_ID no vive directo acá (Fase 1).
         Mismo criterio que fn_validar_exclusividad_torneo (06_triggers.sql) —

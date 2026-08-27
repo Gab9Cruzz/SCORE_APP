@@ -26,9 +26,15 @@ ALTER TABLE MODALIDAD
 -- Disciplina_ID/Modalidad_ID: ON DELETE sin especificar (NO ACTION) a
 -- propósito — son catálogos que se dan de baja lógica (Estado), nunca se
 -- borran físicamente, así que no hace falta CASCADE ni SET NULL acá.
+-- Torneo_Grupo_ID: ON DELETE CASCADE — a diferencia de Disciplina/Modalidad,
+-- un TORNEO_GRUPO sin ninguna edición no tiene razón de existir (no es un
+-- catálogo compartido, es un agrupador 1:N de sus propias ediciones).
 ALTER TABLE TORNEO
     ADD CONSTRAINT fk_torneo_disciplina FOREIGN KEY (Disciplina_ID) REFERENCES DISCIPLINA(ID),
     ADD CONSTRAINT fk_torneo_modalidad FOREIGN KEY (Modalidad_ID) REFERENCES MODALIDAD(ID),
+    ADD CONSTRAINT fk_torneo_grupo FOREIGN KEY (Torneo_Grupo_ID) REFERENCES TORNEO_GRUPO(ID) ON DELETE CASCADE,
+    ADD CONSTRAINT chk_torneo_numero_edicion CHECK (Numero_Edicion > 0),
+    ADD CONSTRAINT unique_edicion_por_grupo UNIQUE (Torneo_Grupo_ID, Numero_Edicion),
     ADD CONSTRAINT chk_torneo_estado CHECK (Estado IN ('Activo', 'Inactivo', 'Finalizado'));
 
 -- EQUIPOS

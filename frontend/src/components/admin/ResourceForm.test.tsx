@@ -100,4 +100,47 @@ describe("ResourceForm", () => {
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(onCancel).toHaveBeenCalled();
   });
+
+  // torneos-admin-plan.md, Fase 2: campo Modalidad condicional a la
+  // Disciplina elegida.
+  describe("fields como función (campos condicionales)", () => {
+    const camposCondicionales = (values: Record<string, string | number | null>): ResourceFormField[] => [
+      {
+        name: "disciplina",
+        label: "Disciplina",
+        type: "select",
+        choices: ["Equipo", "Individual"],
+      },
+      ...(values.disciplina === "Individual"
+        ? [{ name: "modalidad", label: "Modalidad", type: "select", choices: ["Individual", "Dobles"] } as ResourceFormField]
+        : []),
+    ];
+
+    it("no muestra Modalidad por defecto (disciplina de tipo Equipo)", () => {
+      render(<ResourceForm fields={camposCondicionales} onSubmit={() => {}} submitting={false} submitError={null} />);
+      expect(screen.queryByLabelText("Modalidad")).not.toBeInTheDocument();
+    });
+
+    it("muestra Modalidad al elegir una disciplina Individual", async () => {
+      const user = userEvent.setup();
+      render(<ResourceForm fields={camposCondicionales} onSubmit={() => {}} submitting={false} submitError={null} />);
+      await user.selectOptions(screen.getByLabelText("Disciplina"), "Individual");
+      expect(screen.getByLabelText("Modalidad")).toBeInTheDocument();
+    });
+
+    it("EC-24: limpia Modalidad si se vuelve a una disciplina de tipo Equipo", async () => {
+      const user = userEvent.setup();
+      const onSubmit = vi.fn();
+      render(<ResourceForm fields={camposCondicionales} onSubmit={onSubmit} submitting={false} submitError={null} />);
+
+      await user.selectOptions(screen.getByLabelText("Disciplina"), "Individual");
+      await user.selectOptions(screen.getByLabelText("Modalidad"), "Dobles");
+      await user.selectOptions(screen.getByLabelText("Disciplina"), "Equipo");
+
+      expect(screen.queryByLabelText("Modalidad")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Guardar" }));
+      // No debe quedar un "modalidad": "Dobles" fantasma en el submit.
+      expect(onSubmit).toHaveBeenCalledWith({ disciplina: "Equipo" });
+    });
+  });
 });

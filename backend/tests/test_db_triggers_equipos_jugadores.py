@@ -23,6 +23,7 @@ from app.models.jugador import Jugador
 from app.models.jugador_equipo import JugadorEquipo
 from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
 from app.models.torneo import Torneo
+from app.models.torneo_grupo import TorneoGrupo
 
 INSCRIPCION_TIBURONES = 1
 INSCRIPCION_AGUILAS = 2
@@ -102,8 +103,16 @@ async def test_ec10_agencia_libre_no_afecta_membresia_activa_en_otro_torneo(db_s
     ninguno que exponga ese cambio de estado — el contrato es de la base."""
     perfil_id = await _perfil_id_de(db_session, jugador_id=1)  # Carlos Pérez, Activo en Tiburones/torneo 1
 
+    grupo_2 = TorneoGrupo(nombre="Copa Paralela")
+    db_session.add(grupo_2)
+    await db_session.flush()
+
     torneo_2 = Torneo(
-        nombre="Copa Paralela 2026", disciplina_id=1, fecha_inicio=date(2026, 2, 1), fecha_fin=date(2026, 4, 1)
+        nombre="Copa Paralela 2026",
+        disciplina_id=1,
+        torneo_grupo_id=grupo_2.id,
+        fecha_inicio=date(2026, 2, 1),
+        fecha_fin=date(2026, 4, 1),
     )
     db_session.add(torneo_2)
     await db_session.flush()

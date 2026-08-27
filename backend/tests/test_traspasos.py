@@ -45,6 +45,34 @@ async def test_traspaso_normal_cierra_origen_y_abre_destino(
     assert fila_destino["dorsal"] == 99
 
 
+async def test_filtrar_traspasos_por_torneo(client: AsyncClient, admin_general_headers: dict[str, str]):
+    # torneo_id filtra por el torneo del equipo DESTINO (D-Eng-3 del plan:
+    # el GET no filtraba nada antes de esto).
+    perfil_id = await _perfil_de_carlos(client)
+    resp = await client.post(
+        "/api/v1/traspasos",
+        json={
+            "jugador_perfil_id": perfil_id,
+            "inscripcion_origen_id": INSCRIPCION_TIBURONES,
+            "inscripcion_destino_id": INSCRIPCION_AGUILAS,
+            "dorsal_nuevo": 55,
+            "motivo": "Prueba filtro por torneo",
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    traspaso_id = resp.json()["id"]
+
+    # Águilas del Sur (destino) es del torneo 1, igual que Tiburones (05_seed.sql).
+    resp = await client.get("/api/v1/traspasos", params={"torneo_id": 1})
+    assert resp.status_code == 200
+    assert any(t["id"] == traspaso_id for t in resp.json())
+
+    resp = await client.get("/api/v1/traspasos", params={"torneo_id": 999999})
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 async def test_traspaso_desde_libre_sin_origen(client: AsyncClient, admin_general_headers: dict[str, str]):
     resp = await client.post(
         "/api/v1/jugadores",

@@ -1,0 +1,284 @@
+import { useMemo, useState } from "react";
+import { useOutletContext } from "react-router-dom";
+import { apiErrorMessage } from "../../../api/client";
+import { ResourceForm, type ResourceFieldValue } from "../../../components/admin/ResourceForm";
+import { ResourceTable } from "../../../components/admin/ResourceTable";
+import { useResourceCrud } from "../../../hooks/useResourceCrud";
+import type { TorneoDashboardContext } from "./TorneoDashboard";
+
+interface PartidoRow {
+  id: number;
+  equipos_id_local: number;
+  equipos_id_visitante: number;
+  fecha_partido: string;
+  jornada: number | null;
+  fase: string;
+  grupo: string | null;
+  estado: string;
+  arbitro_id: number | null;
+}
+interface EquipoRow {
+  id: number;
+  nombre: string;
+}
+interface InscripcionRow {
+  id: number;
+  equipo_id: number;
+  estado: string;
+}
+interface UsuarioRow {
+  id: number;
+  username: string;
+  nombre: string;
+}
+
+const FASES = ["Regular", "Grupos", "Octavos", "Cuartos", "Semifinal", "Final", "Tercer puesto"];
+const ESTADOS = ["Programado", "En curso", "Finalizado", "Cancelado"];
+
+type Modo = { tipo: "lista" } | { tipo: "crear" } | { tipo: "editar"; fila: PartidoRow };
+
+const formatearFecha = (iso: string) => new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
+
+/** Sub-pestaña "Partidos" del dashboard scoped — mismo alcance funcional
+ * que la extinta pestaña global PartidosAdmin.tsx (Fase 3: consolidación).
+ * torneo_id ya no se pregunta (es el de este dashboard); el picker de
+ * equipos sigue acotado a los inscritos y no cancelados, como ya hacía la
+ * página global (trg_partidos_validar_inscripcion en 06_triggers.sql
+ * rechaza si no, esto es solo UX). */
+export function PartidosDelTorneoPage() {
+  const { torneoId, torneoContexto } = useOutletContext<TorneoDashboardContext>();
+  const [modo, setModo] = useState<Modo>({ tipo: "lista" });
+
+  const crud = useResourceCrud<PartidoRow>({
+    resourceKey: "partidos",
+    basePath: "/api/v1/partidos",
+    listParams: { torneo_id: torneoId },
+  });
+  const equipos = useResourceCrud<EquipoRow>({ resourceKey: "equipos", basePath: "/api/v1/equipos" });
+  const inscritos = useResourceCrud<InscripcionRow>({
+    resourceKey: "inscripciones",
+    basePath: "/api/v1/inscripciones",
+    listParams: { torneo_id: torneoId },
+  });
+
+  const nombreEquipo = useMemo(
+    () => new Map((equipos.listQuery.data ?? []).map((e) => [e.id, e.nombre])),
+    [equipos.listQuery.data],
+  );
+  const equiposInscritos = useMemo(() => {
+    const filas = inscritos.listQuery.data ?? [];
+    return filas
+      .filter((i) => i.estado === "Inscrito" || i.estado === "Confirmado")
+      .map((i) => ({ value: i.equipo_id, label: nombreEquipo.get(i.equipo_id) ?? `#${i.equipo_id}` }));
+  }, [inscritos.listQuery.data, nombreEquipo]);
+
+  function volver() {
+    setModo({ tipo: "lista" });
+  }
+
+  if (modo.tipo === "crear") {
+    return (
+      <CrearPartidoDelTorneo
+        torneoId={torneoId}
+        torneoContexto={torneoContexto}
+        equiposInscritos={equiposInscritos}
+        cargandoEquipos={inscritos.listQuery.isLoading}
+        onDone={volver}
+        onCancel={volver}
+      />
+    );
+  }
+  if (modo.tipo === "editar") {
+    return <EditarPartidoDelTorneo fila={modo.fila} onDone={volver} onCancel={volver} />;
+  }
+
+  return (
+    <div>
+      <div className="page__header">
+        <h2>Partidos de esta edición</h2>
+        <button type="button" onClick={() => setModo({ tipo: "crear" })}>
+          + Nuevo
+        </button>
+      </div>
+      <ResourceTable<PartidoRow>
+        rows={crud.listQuery.data ?? []}
+        columns={[
+          {
+            key: "partido",
+            label: "Partido",
+            render: (r) => `${nombreEquipo.get(r.equipos_id_local) ?? "?"} vs ${nombreEquipo.get(r.equipos_id_visitante) ?? "?"}`,
+          },
+          { key: "fecha_partido", label: "Fecha", render: (r) => formatearFecha(r.fecha_partido) },
+          { key: "fase", label: "Fase" },
+          { key: "estado", label: "Estado" },
+        ]}
+        isLoading={crud.listQuery.isLoading}
+        isError={crud.listQuery.isError}
+        emptyMessage="Sin partidos programados todavía en esta edición."
+        onSelect={(fila) => setModo({ tipo: "editar", fila })}
+        onSoftDelete={(fila) => crud.softDelete.mutate(fila.id)}
+        softDeleteLabel="Cancelar"
+        softDeletePending={crud.softDelete.isPending}
+        estadosDeBaja={["Cancelado"]}
+      />
+    </div>
+  );
+}
+
+interface CrearPartidoProps {
+  torneoId: number;
+  torneoContexto: string;
+  equiposInscritos: { value: number; label: string }[];
+  cargandoEquipos: boolean;
+  onDone: () => void;
+  onCancel: () => void;
+}
+
+function CrearPartidoDelTorneo({ torneoId, torneoContexto, equiposInscritos, cargandoEquipos, onDone, onCancel }: CrearPartidoProps) {
+  const [equipoLocal, setEquipoLocal] = useState<number | null>(null);
+  const [equipoVisitante, setEquipoVisitante] = useState<number | null>(null);
+  const [fechaPartido, setFechaPartido] = useState("");
+  const [jornada, setJornada] = useState("");
+  const [fase, setFase] = useState("Regular");
+  const [grupo, setGrupo] = useState("");
+
+  const crud = useResourceCrud<PartidoRow>({ resourceKey: "partidos", basePath: "/api/v1/partidos" });
+
+  const puedeConfirmar = equipoLocal !== null && equipoVisitante !== null && equipoLocal !== equipoVisitante && fechaPartido !== "";
+
+  function confirmar() {
+    if (!puedeConfirmar) return;
+    crud.create.mutate(
+      {
+        torneo_id: torneoId,
+        equipos_id_local: equipoLocal,
+        equipos_id_visitante: equipoVisitante,
+        fecha_partido: fechaPartido,
+        jornada: jornada ? Number(jornada) : null,
+        fase,
+        grupo: grupo || null,
+      } as never,
+      { onSuccess: onDone },
+    );
+  }
+
+  return (
+    <div>
+      <h2>Nuevo partido — {torneoContexto}</h2>
+      <div className="resource-form">
+        {!cargandoEquipos && equiposInscritos.length < 2 && (
+          <p className="error-text">Este torneo tiene menos de 2 equipos inscritos — inscribí equipos antes de programar un partido.</p>
+        )}
+        <label>
+          Equipo local
+          <select
+            value={equipoLocal ?? ""}
+            onChange={(e) => setEquipoLocal(e.target.value ? Number(e.target.value) : null)}
+            disabled={cargandoEquipos}
+          >
+            <option value="">{cargandoEquipos ? "Cargando..." : "Elegir..."}</option>
+            {equiposInscritos.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Equipo visitante
+          <select
+            value={equipoVisitante ?? ""}
+            onChange={(e) => setEquipoVisitante(e.target.value ? Number(e.target.value) : null)}
+            disabled={cargandoEquipos}
+          >
+            <option value="">{cargandoEquipos ? "Cargando..." : "Elegir..."}</option>
+            {equiposInscritos
+              .filter((o) => o.value !== equipoLocal)
+              .map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
+          Fecha y hora
+          <input type="datetime-local" value={fechaPartido} onChange={(e) => setFechaPartido(e.target.value)} />
+        </label>
+        <label>
+          Jornada
+          <input type="number" value={jornada} onChange={(e) => setJornada(e.target.value)} />
+        </label>
+        <label>
+          Fase
+          <select value={fase} onChange={(e) => setFase(e.target.value)}>
+            {FASES.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Grupo
+          <input type="text" value={grupo} onChange={(e) => setGrupo(e.target.value)} />
+        </label>
+        {crud.create.isError && <p className="error-text">{apiErrorMessage(crud.create.error)}</p>}
+        <div className="resource-form__actions">
+          <button type="button" className="link-button" onClick={onCancel}>
+            Cancelar
+          </button>
+          <button type="button" onClick={confirmar} disabled={!puedeConfirmar || crud.create.isPending}>
+            {crud.create.isPending ? "Guardando..." : "Crear partido"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditarPartidoDelTorneo({ fila, onDone, onCancel }: { fila: PartidoRow; onDone: () => void; onCancel: () => void }) {
+  const crud = useResourceCrud<PartidoRow>({ resourceKey: "partidos", basePath: "/api/v1/partidos" });
+  const arbitros = useResourceCrud<UsuarioRow>({
+    resourceKey: "usuarios-arbitros",
+    basePath: "/api/v1/usuarios",
+    listParams: { rol: "Arbitro" },
+  });
+
+  const initialValues: Record<string, ResourceFieldValue> = {
+    fecha_partido: fila.fecha_partido.slice(0, 16),
+    jornada: fila.jornada,
+    fase: fila.fase,
+    grupo: fila.grupo,
+    estado: fila.estado,
+    arbitro_id: fila.arbitro_id,
+  };
+
+  return (
+    <div>
+      <h2>Editar partido #{fila.id}</h2>
+      <ResourceForm
+        fields={[
+          { name: "fecha_partido", label: "Fecha y hora", type: "datetime", required: true },
+          { name: "jornada", label: "Jornada", type: "number" },
+          { name: "fase", label: "Fase", type: "select", choices: FASES },
+          { name: "grupo", label: "Grupo", type: "text" },
+          { name: "estado", label: "Estado", type: "select", choices: ESTADOS },
+          {
+            name: "arbitro_id",
+            label: "Árbitro asignado",
+            type: "reference",
+            optionsLoading: arbitros.listQuery.isLoading,
+            options: (arbitros.listQuery.data ?? []).map((a) => ({ value: a.id, label: `${a.nombre} (${a.username})` })),
+          },
+        ]}
+        initialValues={initialValues}
+        onSubmit={(values) => crud.update.mutate({ id: fila.id, body: values as never }, { onSuccess: onDone })}
+        submitting={crud.update.isPending}
+        submitError={crud.update.isError ? apiErrorMessage(crud.update.error) : null}
+        submitLabel="Guardar cambios"
+        onCancel={onCancel}
+      />
+    </div>
+  );
+}

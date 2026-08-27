@@ -20,10 +20,14 @@ router = APIRouter(prefix="/plantillas", tags=["Plantillas"])
 async def listar_plantilla(
     inscripcion_torneo_id: int | None = None,
     jugador_perfil_id: int | None = None,
+    torneo_id: int | None = None,
     session: AsyncSession = Depends(get_db),
 ) -> list[JugadorEquipoOut]:
+    """`torneo_id` filtra a los vínculos de ESE torneo (todos sus equipos) —
+    lo usa el dashboard scoped por torneo (torneos-admin-plan.md, D-Eng-3).
+    Antes de esto el GET devolvía el sistema completo sin filtrar."""
     return await JugadorEquipoService(session).list(
-        inscripcion_torneo_id=inscripcion_torneo_id, jugador_perfil_id=jugador_perfil_id
+        inscripcion_torneo_id=inscripcion_torneo_id, jugador_perfil_id=jugador_perfil_id, torneo_id=torneo_id
     )
 
 

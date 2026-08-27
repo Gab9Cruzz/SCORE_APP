@@ -36,6 +36,19 @@ CREATE TABLE MODALIDAD (
     Estado VARCHAR(20) DEFAULT 'Activo'
 );
 
+-- Agrupa las ediciones de un mismo torneo a través del tiempo (ej. "Liga
+-- Relámpago" agrupa su Edición 1, Edición 2, ...) — docs/plans/torneos-admin-plan.md,
+-- Fase 1/3. El nombre mostrado de una edición se COMPONE en el momento
+-- ("{Nombre} - Edición {Numero_Edicion}"), nunca se guarda concatenado en
+-- TORNEO.Nombre: si el grupo se renombra después, todas sus ediciones
+-- reflejan el nombre nuevo sin tener que tocar cada fila de TORNEO.
+CREATE TABLE TORNEO_GRUPO (
+    ID SERIAL PRIMARY KEY,
+    Nombre VARCHAR(100) NOT NULL,
+    Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE TORNEO (
     ID SERIAL PRIMARY KEY,
     Nombre VARCHAR(100) NOT NULL,
@@ -44,6 +57,12 @@ CREATE TABLE TORNEO (
     -- No se puede expresar con un CHECK simple (cruza tablas) — lo valida
     -- fn_validar_torneo_modalidad en 06_triggers.sql.
     Modalidad_ID INT,
+    -- Cada TORNEO es UNA edición de su TORNEO_GRUPO. Numero_Edicion es
+    -- único por grupo (unique_edicion_por_grupo, 02_constraints.sql) — lo
+    -- asigna el service layer como MAX(Numero_Edicion del grupo) + 1 al
+    -- crear una edición nueva, nunca lo tipea el admin a mano.
+    Torneo_Grupo_ID INT NOT NULL,
+    Numero_Edicion INT NOT NULL DEFAULT 1,
     Fecha_Inicio DATE NOT NULL,
     Fecha_Fin DATE NOT NULL,
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

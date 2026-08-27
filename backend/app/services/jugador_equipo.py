@@ -23,7 +23,14 @@ class JugadorEquipoService:
         limit: int = 100,
         inscripcion_torneo_id: int | None = None,
         jugador_perfil_id: int | None = None,
+        torneo_id: int | None = None,
     ) -> list[JugadorEquipo]:
+        # torneo_id necesita un join (no vive directo en la fila, ver
+        # JugadorEquipoRepository.listar_por_torneo) — no se puede combinar
+        # con el filtro genérico de BaseRepository.list en la misma
+        # consulta, así que es una rama aparte (D-Eng-3 del plan).
+        if torneo_id is not None:
+            return await self.repo.listar_por_torneo(torneo_id, skip=skip, limit=limit)
         return await self.repo.list(
             skip=skip,
             limit=limit,

@@ -22,7 +22,17 @@ class TraspasoService:
     async def get(self, id_: int) -> Traspaso:
         return await self.repo.get_or_404(id_)
 
-    async def list(self, skip: int = 0, limit: int = 100, jugador_perfil_id: int | None = None) -> list[Traspaso]:
+    async def list(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        jugador_perfil_id: int | None = None,
+        torneo_id: int | None = None,
+    ) -> list[Traspaso]:
+        # Mismo criterio que JugadorEquipoService.list: torneo_id necesita
+        # un join, rama aparte del filtro genérico (D-Eng-3 del plan).
+        if torneo_id is not None:
+            return await self.repo.listar_por_torneo(torneo_id, skip=skip, limit=limit)
         return await self.repo.list(skip=skip, limit=limit, jugador_perfil_id=jugador_perfil_id)
 
     async def crear(self, data: TraspasoCreate, usuario_actual_id: int) -> Traspaso:

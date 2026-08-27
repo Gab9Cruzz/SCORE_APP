@@ -1,8 +1,42 @@
 import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { api, apiErrorMessage } from "../../api/client";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
+
+/** Contexto que llega desde el modal "Agregar Equipo" (torneos-admin-plan.md,
+ * Fase 2, journey paso 5): el torneo/equipo ya se resolvieron ahí (se creó
+ * el equipo y su inscripción antes de llegar acá), así que este formulario
+ * no vuelve a pedirlos — la fecha de inicio se asume "hoy", sin pedirla
+ * tampoco (fricción cero). Sin este state (navegación directa a
+ * /torneo-admin/plantillas/lote, como hoy) el formulario se comporta
+ * exactamente igual que antes. */
+export interface RegistroLotePreResuelto {
+  inscripcionTorneoId: number;
+  /** Texto para mostrar en vez del selector — ej. "Halcones FC — Liga Relámpago Ed. 2". */
+  contexto: string;
+  /** A dónde vuelven los botones "Cancelar"/"Volver" — el dashboard del
+   * torneo en vez de la pestaña global de Plantillas. */
+  volverA: string;
+}
+
+/** A mitad de camino entre el pre-resuelto de arriba y el formulario
+ * totalmente libre (Fase 3: consolidación — sin pestaña global de
+ * Plantillas, el botón "+ Registro por lote" del dashboard todavía
+ * necesita dejar elegir CUÁL equipo de este torneo, pero no tiene sentido
+ * ofrecer el sistema entero de vuelta). El selector "Torneo — Equipo" se
+ * reduce a solo "Equipo", ya filtrado a las inscripciones de este torneo. */
+export interface RegistroLoteAlcanceTorneo {
+  torneoId: number;
+  volverA: string;
+}
+
+function esPreResuelto(v: unknown): v is RegistroLotePreResuelto {
+  return !!v && typeof v === "object" && "inscripcionTorneoId" in v;
+}
+function esAlcanceTorneo(v: unknown): v is RegistroLoteAlcanceTorneo {
+  return !!v && typeof v === "object" && "torneoId" in v && !("inscripcionTorneoId" in v);
+}
 
 interface Fila {
   cedula: string;
@@ -63,16 +97,39 @@ function filasParaEnvio(filas: Fila[]) {
  * devuelven 200 siempre con resultados mixtos, no un objeto creado). */
 export function RegistroLoteAdminPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const preResuelto = esPreResuelto(location.state) ? location.state : null;
+  const alcanceTorneo = esAlcanceTorneo(location.state) ? location.state : null;
+
   const [modo, setModo] = useState<Modo>({ tipo: "formulario" });
   const [filas, setFilas] = useState<Fila[]>([{ ...FILA_VACIA }]);
-  const [inscripcionTorneoId, setInscripcionTorneoId] = useState<number | null>(null);
-  const [fechaInicio, setFechaInicio] = useState("");
+  const [inscripcionTorneoId, setInscripcionTorneoId] = useState<number | null>(
+    preResuelto?.inscripcionTorneoId ?? null,
+  );
+  const [fechaInicio, setFechaInicio] = useState(preResuelto ? new Date().toISOString().slice(0, 10) : "");
 
-  const equipos = useResourceCrud<EquipoRow>({ resourceKey: "equipos", basePath: "/api/v1/equipos" });
-  const torneos = useResourceCrud<TorneoRow>({ resourceKey: "torneos", basePath: "/api/v1/torneos" });
+  const volverDestino = preResuelto?.volverA ?? alcanceTorneo?.volverA ?? "/torneo-admin/torneos";
+  const volverLabel = preResuelto || alcanceTorneo ? "Volver al Torneo" : "Volver a Plantillas";
+
+  // Sin esto, entrar acá desde el modal "Agregar Equipo" (o desde el
+  // dashboard scoped, alcanceTorneo) seguía disparando GETs sin filtrar
+  // que este modo ya no usa para nada — el selector que los necesitaba no
+  // se renderiza, o se renderiza ya acotado (ver abajo).
+  const equipos = useResourceCrud<EquipoRow>({
+    resourceKey: "equipos",
+    basePath: "/api/v1/equipos",
+    enabled: !preResuelto,
+  });
+  const torneos = useResourceCrud<TorneoRow>({
+    resourceKey: "torneos",
+    basePath: "/api/v1/torneos",
+    enabled: !preResuelto && !alcanceTorneo,
+  });
   const inscripciones = useResourceCrud<InscripcionRow>({
     resourceKey: "inscripciones",
     basePath: "/api/v1/inscripciones",
+    listParams: alcanceTorneo ? { torneo_id: alcanceTorneo.torneoId } : undefined,
+    enabled: !preResuelto,
   });
 
   const nombreEquipo = useMemo(
@@ -84,6 +141,10 @@ export function RegistroLoteAdminPage() {
     [torneos.listQuery.data],
   );
   function etiquetaInscripcion(i: InscripcionRow): string {
+    // alcanceTorneo: el torneo ya se sabe (viene en el contexto de la
+    // sub-pestaña Plantillas del dashboard), repetirlo en cada opción del
+    // selector es ruido.
+    if (alcanceTorneo) return nombreEquipo.get(i.equipo_id) ?? `Equipo #${i.equipo_id}`;
     return `${nombreTorneo.get(i.torneo_id) ?? `Torneo #${i.torneo_id}`} — ${nombreEquipo.get(i.equipo_id) ?? `Equipo #${i.equipo_id}`}`;
   }
 
@@ -142,27 +203,33 @@ export function RegistroLoteAdminPage() {
     return (
       <div className="page">
         <h1>Registro por lote</h1>
-        <div className="resource-form">
-          <label>
-            Torneo — Equipo
-            <select
-              value={inscripcionTorneoId ?? ""}
-              onChange={(e) => setInscripcionTorneoId(e.target.value ? Number(e.target.value) : null)}
-              disabled={inscripciones.listQuery.isLoading}
-            >
-              <option value="">Elegir...</option>
-              {(inscripciones.listQuery.data ?? []).map((i) => (
-                <option key={i.id} value={i.id}>
-                  {etiquetaInscripcion(i)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Fecha de inicio
-            <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
-          </label>
-        </div>
+        {preResuelto ? (
+          <p className="muted">
+            Equipo: <strong>{preResuelto.contexto}</strong>
+          </p>
+        ) : (
+          <div className="resource-form">
+            <label>
+              {alcanceTorneo ? "Equipo" : "Torneo — Equipo"}
+              <select
+                value={inscripcionTorneoId ?? ""}
+                onChange={(e) => setInscripcionTorneoId(e.target.value ? Number(e.target.value) : null)}
+                disabled={inscripciones.listQuery.isLoading}
+              >
+                <option value="">Elegir...</option>
+                {(inscripciones.listQuery.data ?? []).map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {etiquetaInscripcion(i)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Fecha de inicio
+              <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
+            </label>
+          </div>
+        )}
 
         <div className="table-scroll">
           <table>
@@ -233,7 +300,7 @@ export function RegistroLoteAdminPage() {
         )}
 
         <div className="resource-form__actions">
-          <button type="button" className="link-button" onClick={() => navigate("/torneo-admin/plantillas")}>
+          <button type="button" className="link-button" onClick={() => navigate(volverDestino)}>
             Cancelar
           </button>
           <button
@@ -333,8 +400,8 @@ export function RegistroLoteAdminPage() {
       <div className="page">
         <h1>Registro por lote</h1>
         <p className="success-text">{modo.insertados} jugador(es) registrado(s).</p>
-        <button type="button" onClick={() => navigate("/torneo-admin/plantillas")}>
-          Volver a Plantillas
+        <button type="button" onClick={() => navigate(volverDestino)}>
+          {volverLabel}
         </button>
       </div>
     );
@@ -367,8 +434,8 @@ export function RegistroLoteAdminPage() {
         </div>
       </section>
       <div className="resource-form__actions">
-        <button type="button" onClick={() => navigate("/torneo-admin/plantillas")}>
-          Volver a Plantillas
+        <button type="button" onClick={() => navigate(volverDestino)}>
+          {volverLabel}
         </button>
         <button
           type="button"

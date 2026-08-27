@@ -30,3 +30,7 @@ Thumbs.db
 
 # gstack (local security reports, session state — never shared)
 .gstack/
+
+# DB backups taken before running a migration script (database/09_*, etc.)
+# — local safety net, never meant to be committed.
+database/backups/

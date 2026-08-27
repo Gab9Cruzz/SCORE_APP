@@ -34,6 +34,25 @@ asignación árbitro↔partido) cuando se retome — bloquea a las fases 2-4.
   asume formulario multi-fila en la UI; si se necesita carga de archivo, es
   una extensión sobre el mismo endpoint de validación.
 
+## Deferido desde el plan de Administración de Torneos (`docs/plans/torneos-admin-plan.md`)
+
+- Vista consolidada de estadísticas cruzando **todas las ediciones** de un
+  mismo `TORNEO_GRUPO` (ej. goleador histórico de "Liga Relámpago" sumando
+  Edición 1 + 2). El selector de edición de ese plan solo cambia de
+  contexto, no fusiona números — mezclar jugadores que cambiaron de equipo
+  entre ediciones es una decisión de producto propia.
+- Clonar la plantilla de una edición a la siguiente al crear una edición
+  nueva (fichajes que se repiten de temporada a temporada). No pedido;
+  cada edición nace con roster vacío.
+- Archivar/eliminar un `TORNEO_GRUPO` completo con todas sus ediciones.
+- Traspasos entre ediciones distintas del mismo grupo (`TRASPASOS` asume
+  origen/destino dentro del mismo torneo; mover a un jugador a otra
+  edición sería un alta nueva, no un traspaso).
+- Filtro `?torneo_id=` real en `/plantillas`, `/traspasos`, `/partidos`
+  (hoy devuelven el sistema completo sin filtrar) — es trabajo de
+  implementación necesario para que el dashboard scoped por torneo
+  muestre solo lo de ese torneo, no un nice-to-have.
+
 ## Deferido desde el `/review` de equipos-jugadores-plan.md (Fase 3)
 
 - **Cupo de modalidad (EC-6) sin lock.** `RegistroLoteService._validar_lote`

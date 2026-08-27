@@ -30,8 +30,9 @@ interface SimpleResourceAdminPageProps<TOut extends RowBase> {
  * Jugador — roles-3-modulos-plan.md, Fase 2, D1): comparten la misma
  * forma de página (lista ↔ crear ↔ editar), solo cambia la config de
  * campos/columnas. Partido, InscripcionTorneo y JugadorEquipo NO usan
- * esto — se desvían demasiado del patrón (ver PartidosAdmin.tsx,
- * InscripcionesAdmin.tsx, PlantillasAdmin.tsx). */
+ * esto — se desvían demasiado del patrón (ver
+ * torneo-dashboard/PartidosDelTorneo.tsx, torneo-dashboard/EquiposDelTorneo.tsx,
+ * torneo-dashboard/PlantillasDelTorneo.tsx). */
 export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResourceAdminPageProps<TOut>) {
   const { resourceKey, basePath, title, createFields, editFields, columns, emptyMessage, isSelf, renderRowExtra } =
     props;

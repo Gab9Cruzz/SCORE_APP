@@ -10,6 +10,10 @@ CREATE INDEX idx_modalidad_disciplina ON MODALIDAD(Disciplina_ID);
 -- TORNEO
 CREATE INDEX idx_torneo_disciplina ON TORNEO(Disciplina_ID);
 CREATE INDEX idx_torneo_modalidad ON TORNEO(Modalidad_ID);
+-- Usado por el selector de ediciones (torneos-admin-plan.md, Fase 2/3):
+-- "traer todas las ediciones de este grupo" filtra por esta columna en
+-- cada carga del dashboard de un torneo.
+CREATE INDEX idx_torneo_grupo ON TORNEO(Torneo_Grupo_ID);
 
 -- JUGADOR_PERFIL_DISCIPLINA
 CREATE INDEX idx_perfil_disciplina_jugador ON JUGADOR_PERFIL_DISCIPLINA(Jugador_ID);
