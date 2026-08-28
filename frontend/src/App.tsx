@@ -6,6 +6,7 @@ import { DashboardPage } from "./pages/Dashboard";
 import { LoginPage } from "./pages/Login";
 import { PartidoEnVivoPage } from "./pages/PartidoEnVivo";
 import { MisPartidosPage } from "./pages/arbitro/MisPartidos";
+import { AccesosAdminPage } from "./pages/admin/AccesosAdmin";
 import { UsuariosAdminPage } from "./pages/admin/UsuariosAdmin";
 import { CatalogoDisciplinasPage } from "./pages/torneo-admin/CatalogoDisciplinas";
 import { EquiposAdminPage } from "./pages/torneo-admin/EquiposAdmin";
@@ -68,6 +69,20 @@ export function App() {
             element={
               <RequireRole roles={["AdminGeneral"]}>
                 <UsuariosAdminPage />
+              </RequireRole>
+            }
+          />
+
+          {/* Bitácora de inicios de sesión — mismo gate que Usuarios y por
+              la misma razón: es información de todas las cuentas del
+              sistema. El backend lo exige igual (routes/accesos.py); esto
+              evita que un TorneoAdmin llegue a una pantalla que solo le
+              devolvería 403. */}
+          <Route
+            path="/admin/accesos"
+            element={
+              <RequireRole roles={["AdminGeneral"]}>
+                <AccesosAdminPage />
               </RequireRole>
             }
           />

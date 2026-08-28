@@ -115,6 +115,12 @@ describe("EquiposDelTorneoPage — Individual (tamano_equipo == 1)", () => {
   const PERFILES = "http://127.0.0.1:8000/api/v1/perfiles";
   const JUGADORES = "http://127.0.0.1:8000/api/v1/jugadores";
 
+  // EC-41 de equipos-disciplina-navegacion-plan.md: el redirect de "Nueva
+  // edición" apunta a /equipos también en una disciplina Individual, y esa
+  // pestaña ya se ramifica sola — muestra "Jugadores inscritos" y
+  // "+ Agregar Jugador", sin ningún concepto de Equipo en pantalla. El
+  // redirect no necesitó ningún caso especial; esto es lo que prueba que
+  // aterriza bien.
   it("lista jugadores inscritos por nombre, sin ningún Equipo de por medio", async () => {
     server.use(
       http.get(INSCRIPCIONES, () =>

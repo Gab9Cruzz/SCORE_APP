@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from "../auth/useAuth";
 
 export function NavBar() {
   const { session, logout } = useAuth();
@@ -27,6 +27,11 @@ export function NavBar() {
         {session?.rol === "AdminGeneral" && (
           <NavLink to="/admin/usuarios" className={({ isActive }) => (isActive ? "active" : undefined)}>
             Usuarios
+          </NavLink>
+        )}
+        {session?.rol === "AdminGeneral" && (
+          <NavLink to="/admin/accesos" className={({ isActive }) => (isActive ? "active" : undefined)}>
+            Accesos
           </NavLink>
         )}
       </nav>

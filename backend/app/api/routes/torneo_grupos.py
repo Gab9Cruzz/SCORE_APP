@@ -21,11 +21,17 @@ async def listar_torneo_grupos(session: AsyncSession = Depends(get_db)) -> list[
     return await TorneoGrupoService(session).listar_con_ediciones()
 
 
-@router.get("/{torneo_grupo_id}", response_model=TorneoGrupoOut)
+@router.get("/{torneo_grupo_id}", response_model=TorneoGrupoConEdiciones)
 async def obtener_torneo_grupo(
     torneo_grupo_id: int, session: AsyncSession = Depends(get_db)
-) -> TorneoGrupoOut:
-    return await TorneoGrupoService(session).get(torneo_grupo_id)
+) -> TorneoGrupoConEdiciones:
+    """Incluye `ediciones` (mismo shape que el listado) para que "Ver
+    Torneo" (TorneoDashboardPage) pueda ofrecer el selector de ediciones
+    del grupo y un atajo a "+ Nueva edición" sin tener que ir y volver a
+    la Pestaña Torneos (ediciones-catalogo-disciplinas-plan.md, pedido de
+    seguimiento: administrar ediciones desde adentro del panel del
+    torneo)."""
+    return await TorneoGrupoService(session).get_con_ediciones(torneo_grupo_id)
 
 
 @router.patch(

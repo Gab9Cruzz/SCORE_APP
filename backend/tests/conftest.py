@@ -116,7 +116,17 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
 @pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     async def _override_get_db():
-        yield db_session
+        # Espeja el try/except de app/db/session.py, no solo el `yield`.
+        # Sin esto, el harness de tests es MÁS indulgente que producción:
+        # una excepción de dominio no revierte nada, y cualquier test que
+        # verifique "qué queda escrito cuando el request falla" pasa aunque
+        # el código no commitee. Se descubrió con la bitácora de accesos —
+        # el test del intento fallido pasaba con y sin el commit.
+        try:
+            yield db_session
+        except Exception:
+            await db_session.rollback()
+            raise
 
     app.dependency_overrides[get_db] = _override_get_db
     transport = ASGITransport(app=app)

@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     admin_password: str = "admin1234"
     admin_nombre: str = "Administrador"
 
+    # Retención de la bitácora de accesos (tabla ACCESOS). Un mes por
+    # defecto: es una bitácora operativa para detectar intentos raros, no un
+    # archivo histórico, y sin purga crece sin techo. La purga corre al
+    # arrancar la API (ver app/main.py). 0 = no purgar nunca.
+    accesos_retencion_dias: int = 30
+
     cors_origins: str = "*"
     api_v1_prefix: str = "/api/v1"
 

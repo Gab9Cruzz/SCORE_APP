@@ -14,9 +14,22 @@ async def listar_equipos(
     skip: int = 0,
     limit: int = Query(default=100, le=200),
     estado: EstadoEquipo | None = None,
+    # Filtros server-side (equipos-disciplina-navegacion-plan.md, Mejora
+    # #1): son lo que permite que la grilla de Equipos no tope contra el
+    # techo de 200 filas cuando el catálogo crece — filtrar en memoria
+    # sobre las primeras 200 devolvía "no hay resultados" para un equipo
+    # que sí existe.
+    disciplina_id: int | None = None,
+    modalidad_id: int | None = None,
     session: AsyncSession = Depends(get_db),
 ) -> list[EquipoOut]:
-    return await EquipoService(session).list(skip=skip, limit=limit, estado=estado)
+    return await EquipoService(session).list(
+        skip=skip,
+        limit=limit,
+        estado=estado,
+        disciplina_id=disciplina_id,
+        modalidad_id=modalidad_id,
+    )
 
 
 @router.get("/{equipo_id}", response_model=EquipoOut)

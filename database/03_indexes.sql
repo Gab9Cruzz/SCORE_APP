@@ -15,6 +15,23 @@ CREATE INDEX idx_torneo_modalidad ON TORNEO(Modalidad_ID);
 -- cada carga del dashboard de un torneo.
 CREATE INDEX idx_torneo_grupo ON TORNEO(Torneo_Grupo_ID);
 
+-- ACCESOS (bitacora de login)
+-- La pantalla de auditoria lista SIEMPRE por fecha descendente (lo ultimo
+-- primero), de ahi el DESC en el indice. Los otros dos son los filtros que
+-- ofrece: por cuenta y por el texto tipeado (que es lo que hay cuando el
+-- usuario ni siquiera existe).
+CREATE INDEX idx_accesos_fecha ON ACCESOS(Fecha DESC);
+CREATE INDEX idx_accesos_usuario ON ACCESOS(Usuario_ID);
+CREATE INDEX idx_accesos_username ON ACCESOS(Username);
+
+-- EQUIPOS
+-- Los dos filtros nuevos de GET /equipos?disciplina_id=&modalidad_id=
+-- (equipos-disciplina-navegacion-plan.md, Mejora #1: los filtros
+-- server-side son lo que evita que la grilla tope contra el limite de 200
+-- filas sin que el admin se entere).
+CREATE INDEX idx_equipos_disciplina ON EQUIPOS(Disciplina_ID);
+CREATE INDEX idx_equipos_modalidad ON EQUIPOS(Modalidad_ID);
+
 -- JUGADOR_PERFIL_DISCIPLINA
 CREATE INDEX idx_perfil_disciplina_jugador ON JUGADOR_PERFIL_DISCIPLINA(Jugador_ID);
 CREATE INDEX idx_perfil_disciplina_disciplina ON JUGADOR_PERFIL_DISCIPLINA(Disciplina_ID);

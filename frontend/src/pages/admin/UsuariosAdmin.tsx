@@ -1,4 +1,4 @@
-import { useAuth } from "../../auth/AuthContext";
+import { useAuth } from "../../auth/useAuth";
 import { SimpleResourceAdminPage } from "../torneo-admin/SimpleResourceAdminPage";
 
 interface UsuarioRow {

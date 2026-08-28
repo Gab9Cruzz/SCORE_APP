@@ -13,7 +13,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Login */
+        /**
+         * Login
+         * @description Todo intento —exitoso o no— queda registrado en ACCESOS
+         *     (UsuarioService.login). El Request se pide solo para eso: es acá donde
+         *     vive el dato de red, y el service no debería depender de FastAPI para
+         *     conocerlo.
+         */
         post: operations["login_api_v1_auth_login_post"];
         delete?: never;
         options?: never;
@@ -217,7 +223,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Obtener Torneo Grupo */
+        /**
+         * Obtener Torneo Grupo
+         * @description Incluye `ediciones` (mismo shape que el listado) para que "Ver
+         *     Torneo" (TorneoDashboardPage) pueda ofrecer el selector de ediciones
+         *     del grupo y un atajo a "+ Nueva edición" sin tener que ir y volver a
+         *     la Pestaña Torneos (ediciones-catalogo-disciplinas-plan.md, pedido de
+         *     seguimiento: administrar ediciones desde adentro del panel del
+         *     torneo).
+         */
         get: operations["obtener_torneo_grupo_api_v1_torneo_grupos__torneo_grupo_id__get"];
         put?: never;
         post?: never;
@@ -802,6 +816,29 @@ export interface paths {
         patch: operations["actualizar_usuario_api_v1_usuarios__usuario_id__patch"];
         trace?: never;
     };
+    "/api/v1/accesos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Accesos
+         * @description Bitácora de inicios de sesión, del más reciente al más antiguo.
+         *
+         *     `username` es coincidencia parcial e insensible a mayúsculas; `desde`
+         *     y `hasta` son días completos (incluyen el día indicado entero).
+         */
+        get: operations["listar_accesos_api_v1_accesos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/estadisticas/torneos/{torneo_id}/posiciones": {
         parameters: {
             query?: never;
@@ -908,6 +945,34 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AccesoOut
+         * @description Solo lectura: ACCESOS no tiene Create/Update expuestos a propósito.
+         *     Las filas las escribe UsuarioService.login() y nadie más — una
+         *     bitácora con endpoint de escritura es una bitácora que se puede
+         *     falsificar desde afuera.
+         */
+        AccesoOut: {
+            /** Id */
+            id: number;
+            /** Usuario Id */
+            usuario_id: number | null;
+            /** Username */
+            username: string;
+            /** Exitoso */
+            exitoso: boolean;
+            /** Motivo */
+            motivo: ("credenciales" | "inactivo") | null;
+            /** Ip */
+            ip: string | null;
+            /** User Agent */
+            user_agent: string | null;
+            /**
+             * Fecha
+             * Format: date-time
+             */
+            fecha: string;
+        };
         /** Body_login_api_v1_auth_login_post */
         Body_login_api_v1_auth_login_post: {
             /** Grant Type */
@@ -1003,7 +1068,7 @@ export interface components {
             /** Disciplina Id */
             disciplina_id: number;
             /** Modalidad Id */
-            modalidad_id: number | null;
+            modalidad_id: number;
             /** Estado */
             estado: string;
             /**
@@ -1017,10 +1082,41 @@ export interface components {
              */
             fecha_fin: string;
         };
-        /** EquipoCreate */
+        /** EquipoActivoOut */
+        EquipoActivoOut: {
+            /** Inscripcion Torneo Id */
+            inscripcion_torneo_id: number;
+            /** Torneo Id */
+            torneo_id: number;
+            /** Torneo */
+            torneo: string;
+            /** Equipo Id */
+            equipo_id: number;
+            /** Equipo */
+            equipo: string;
+            /** Dorsal */
+            dorsal: number | null;
+            /**
+             * Fecha Inicio
+             * Format: date
+             */
+            fecha_inicio: string;
+        };
+        /**
+         * EquipoCreate
+         * @description disciplina_id/modalidad_id son obligatorios
+         *     (equipos-disciplina-navegacion-plan.md, pedido A: "el formulario debe
+         *     exigir la Disciplina"). Que la modalidad pertenezca a la disciplina lo
+         *     valida EquipoService.create con un mensaje legible (D-Eng-15); el
+         *     trigger de la base es la red de seguridad para un curl directo.
+         */
         EquipoCreate: {
             /** Nombre */
             nombre: string;
+            /** Disciplina Id */
+            disciplina_id: number;
+            /** Modalidad Id */
+            modalidad_id: number;
         };
         /** EquipoOut */
         EquipoOut: {
@@ -1028,6 +1124,15 @@ export interface components {
             nombre: string;
             /** Id */
             id: number;
+            /** Disciplina Id */
+            disciplina_id: number;
+            /** Modalidad Id */
+            modalidad_id: number;
+            /**
+             * Plantilla Total
+             * @default 0
+             */
+            plantilla_total: number;
             /**
              * Estado
              * @enum {string}
@@ -1044,10 +1149,20 @@ export interface components {
              */
             fecha_modificacion: string;
         };
-        /** EquipoUpdate */
+        /**
+         * EquipoUpdate
+         * @description disciplina_id/modalidad_id se pueden corregir mientras el equipo NO
+         *     esté inscrito en ningún torneo — EquipoService.update rechaza el
+         *     cambio de disciplina si ya tiene inscripciones (EC-38): permitirlo
+         *     dejaría inscripciones que violan la regla que este plan introduce.
+         */
         EquipoUpdate: {
             /** Nombre */
             nombre?: string | null;
+            /** Disciplina Id */
+            disciplina_id?: number | null;
+            /** Modalidad Id */
+            modalidad_id?: number | null;
             /** Estado */
             estado?: ("Activo" | "Inactivo") | null;
         };
@@ -1370,6 +1485,26 @@ export interface components {
             /** Suspendido */
             suspendido?: boolean | null;
         };
+        /**
+         * JugadorPublicOut
+         * @description Proyección sin PII (sin cédula ni correo) para un caller anónimo —
+         *     los GET de jugadores() siguen siendo públicos (no exigen login), pero
+         *     ya no filtran cédula/correo a cualquiera. Un caller autenticado (el
+         *     admin logueado del frontend, que ya manda el Bearer token en cada
+         *     request) sigue recibiendo JugadorOut completo en la misma ruta — ver
+         *     get_current_user_optional en app/api/deps.py.
+         */
+        JugadorPublicOut: {
+            /** Id */
+            id: number;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Activo" | "Inactivo";
+        };
         /** JugadorUpdate */
         JugadorUpdate: {
             /** Nombre */
@@ -1492,6 +1627,54 @@ export interface components {
             estado?: ("Programado" | "En curso" | "Finalizado" | "Cancelado") | null;
             /** Arbitro Id */
             arbitro_id?: number | null;
+        };
+        /** PerfilDisciplinaOut */
+        PerfilDisciplinaOut: {
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number;
+            /** Disciplina Id */
+            disciplina_id: number;
+            /** Disciplina */
+            disciplina: string;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Libre" | "Activo" | "Suspendido";
+            /** Goles Totales */
+            goles_totales: number;
+            /** Equipos Activos */
+            equipos_activos: components["schemas"]["EquipoActivoOut"][];
+            /** Trayectoria */
+            trayectoria: components["schemas"]["TraspasoTrayectoriaOut"][];
+        };
+        /** PerfilJugadorOut */
+        PerfilJugadorOut: {
+            /** Jugador Id */
+            jugador_id: number;
+            /** Nombre */
+            nombre: string;
+            /** Disciplinas */
+            disciplinas: components["schemas"]["PerfilDisciplinaOut"][];
+            /** Cedula */
+            cedula: string;
+            /** Correo Electronico */
+            correo_electronico: string;
+        };
+        /**
+         * PerfilJugadorPublicOut
+         * @description Proyección sin PII para un caller anónimo — GET /jugadores/{id}/perfil
+         *     sigue siendo público, pero ya no expone cédula/correo a cualquiera
+         *     (ver JugadorPublicOut en app/schemas/jugador.py y
+         *     get_current_user_optional en app/api/deps.py).
+         */
+        PerfilJugadorPublicOut: {
+            /** Jugador Id */
+            jugador_id: number;
+            /** Nombre */
+            nombre: string;
+            /** Disciplinas */
+            disciplinas: components["schemas"]["PerfilDisciplinaOut"][];
         };
         /** PlantillaJugadorOut */
         PlantillaJugadorOut: {
@@ -1813,6 +1996,27 @@ export interface components {
              * Format: date-time
              */
             fecha_traspaso: string;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Completado" | "Anulado";
+        };
+        /** TraspasoTrayectoriaOut */
+        TraspasoTrayectoriaOut: {
+            /** Id */
+            id: number;
+            /**
+             * Fecha Traspaso
+             * Format: date-time
+             */
+            fecha_traspaso: string;
+            /** Origen */
+            origen: string | null;
+            /** Destino */
+            destino: string;
+            /** Motivo */
+            motivo: string | null;
             /**
              * Estado
              * @enum {string}
@@ -2387,7 +2591,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TorneoGrupoOut"];
+                    "application/json": components["schemas"]["TorneoGrupoConEdiciones"];
                 };
             };
             /** @description Validation Error */
@@ -2442,6 +2646,8 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 estado?: ("Activo" | "Inactivo") | null;
+                disciplina_id?: number | null;
+                modalidad_id?: number | null;
             };
             header?: never;
             path?: never;
@@ -2618,7 +2824,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["JugadorOut"][] | components["schemas"]["JugadorPublicOut"][];
                 };
             };
             /** @description Validation Error */
@@ -2682,7 +2888,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["JugadorOut"] | components["schemas"]["JugadorPublicOut"];
                 };
             };
             /** @description Validation Error */
@@ -2779,7 +2985,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PerfilJugadorOut"] | components["schemas"]["PerfilJugadorPublicOut"];
                 };
             };
             /** @description Validation Error */
@@ -4019,6 +4225,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsuarioOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_accesos_api_v1_accesos_get: {
+        parameters: {
+            query?: {
+                skip?: number;
+                limit?: number;
+                usuario_id?: number | null;
+                username?: string | null;
+                exitoso?: boolean | null;
+                desde?: string | null;
+                hasta?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccesoOut"][];
                 };
             };
             /** @description Validation Error */

@@ -83,10 +83,21 @@ SELECT
 -- — se reusa tal cual, es exactamente el punto del catálogo global de
 -- EQUIPOS (equipos-jugadores-plan.md, P5): un equipo puede jugar varios
 -- torneos distintos a través del tiempo.
-INSERT INTO EQUIPOS (Nombre)
-SELECT 'Halcones FC' WHERE NOT EXISTS (SELECT 1 FROM EQUIPOS WHERE Nombre = 'Halcones FC');
-INSERT INTO EQUIPOS (Nombre)
-SELECT 'Tiburones FC' WHERE NOT EXISTS (SELECT 1 FROM EQUIPOS WHERE Nombre = 'Tiburones FC');
+--
+-- Disciplina_ID/Modalidad_ID son NOT NULL desde
+-- equipos-disciplina-navegacion-plan.md, y el equipo tiene que ser de la
+-- MISMA disciplina que el torneo al que se lo inscribe más abajo
+-- (InscripcionTorneoService lo valida en la API; acá se inserta directo,
+-- así que el dato tiene que nacer coherente o el trigger
+-- trg_equipos_validar_modalidad lo rechaza).
+INSERT INTO EQUIPOS (Nombre, Disciplina_ID, Modalidad_ID)
+SELECT 'Halcones FC', (SELECT ID FROM DISCIPLINA WHERE Nombre ILIKE 'f_tbol' LIMIT 1), (SELECT m.ID FROM MODALIDAD m WHERE m.Nombre = 'Fútbol 11'
+        AND m.Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre ILIKE 'f_tbol' LIMIT 1))
+ WHERE NOT EXISTS (SELECT 1 FROM EQUIPOS WHERE Nombre = 'Halcones FC');
+INSERT INTO EQUIPOS (Nombre, Disciplina_ID, Modalidad_ID)
+SELECT 'Tiburones FC', (SELECT ID FROM DISCIPLINA WHERE Nombre ILIKE 'f_tbol' LIMIT 1), (SELECT m.ID FROM MODALIDAD m WHERE m.Nombre = 'Fútbol 11'
+        AND m.Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre ILIKE 'f_tbol' LIMIT 1))
+ WHERE NOT EXISTS (SELECT 1 FROM EQUIPOS WHERE Nombre = 'Tiburones FC');
 
 INSERT INTO INSCRIPCIONES_TORNEO (Torneo_ID, Equipo_ID)
 SELECT
@@ -129,8 +140,10 @@ SELECT
 -- D-Eng-4 del plan: en una disciplina de Tamano_Equipo=1, el "equipo" es
 -- el jugador mismo — se nombra igual que él, no se le inventa un nombre
 -- de equipo aparte.
-INSERT INTO EQUIPOS (Nombre)
-SELECT 'Micky Fernández' WHERE NOT EXISTS (SELECT 1 FROM EQUIPOS WHERE Nombre = 'Micky Fernández');
+INSERT INTO EQUIPOS (Nombre, Disciplina_ID, Modalidad_ID)
+SELECT 'Micky Fernández', (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Tenis'), (SELECT ID FROM MODALIDAD WHERE Nombre = 'Individual'
+        AND Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Tenis'))
+ WHERE NOT EXISTS (SELECT 1 FROM EQUIPOS WHERE Nombre = 'Micky Fernández');
 
 INSERT INTO INSCRIPCIONES_TORNEO (Torneo_ID, Equipo_ID)
 SELECT

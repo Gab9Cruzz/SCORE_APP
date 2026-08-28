@@ -41,7 +41,15 @@ ALTER TABLE TORNEO
     ADD CONSTRAINT chk_torneo_estado CHECK (Estado IN ('Activo', 'Inactivo', 'Finalizado'));
 
 -- EQUIPOS
+-- Disciplina_ID/Modalidad_ID: sin ON DELETE CASCADE a proposito — el
+-- catalogo de disciplinas es solo-lectura desde la API y un equipo no
+-- debe desaparecer porque alguien borro una disciplina a mano (mismo
+-- criterio que fk_torneo_disciplina). No se agrega
+-- UNIQUE (Nombre, Disciplina_ID): hoy tampoco hay UNIQUE sobre Nombre y
+-- agregarlo romperia datos existentes (EC-43, anotado en TODOS.md).
 ALTER TABLE EQUIPOS
+    ADD CONSTRAINT fk_equipos_disciplina FOREIGN KEY (Disciplina_ID) REFERENCES DISCIPLINA(ID),
+    ADD CONSTRAINT fk_equipos_modalidad FOREIGN KEY (Modalidad_ID) REFERENCES MODALIDAD(ID),
     ADD CONSTRAINT chk_equipos_estado CHECK (Estado IN ('Activo', 'Inactivo'));
 
 -- JUGADORES
@@ -127,6 +135,21 @@ ALTER TABLE EVENTOS
     ADD CONSTRAINT chk_eventos_estado CHECK (Estado IN ('Activo', 'Inactivo'));
 
 -- USUARIOS
+
+-- ACCESOS (bitacora de login)
+-- Sin ON DELETE: rastro de auditoria, mismo criterio que
+-- TRASPASOS.Realizado_Por. chk_accesos_motivo mantiene coherente el par
+-- (Exitoso, Motivo): un acceso exitoso no tiene motivo de fallo, y uno
+-- fallido siempre dice por que — sin eso, "Motivo NULL" seria ambiguo
+-- entre "entro bien" y "fallo y no anotamos por que".
+ALTER TABLE ACCESOS
+    ADD CONSTRAINT fk_accesos_usuario FOREIGN KEY (Usuario_ID) REFERENCES USUARIOS(ID),
+    ADD CONSTRAINT chk_accesos_motivo CHECK (
+        (Exitoso = TRUE AND Motivo IS NULL)
+     OR (Exitoso = FALSE AND Motivo IN ('credenciales', 'inactivo'))
+    );
+
+
 -- Los roles siguen la separación de roles-3-modulos-plan.md (Fase 1):
 --   AdminGeneral -- todo lo de TorneoAdmin, más crear/eliminar usuarios y
 --                    cambiar roles (backend/app/api/routes/usuarios.py,

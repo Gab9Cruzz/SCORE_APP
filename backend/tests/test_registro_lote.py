@@ -122,7 +122,7 @@ async def test_ec4_jugador_existente_nueva_disciplina(
         headers=admin_general_headers,
     )
     torneo_id = resp.json()["id"]
-    resp = await client.post("/api/v1/equipos", json={"nombre": "Equipo Tenis EC4"}, headers=admin_general_headers)
+    resp = await client.post("/api/v1/equipos", json={"nombre": "Equipo Tenis EC4", "disciplina_id": disciplina_id, "modalidad_id": modalidad_id}, headers=admin_general_headers)
     equipo_id = resp.json()["id"]
     resp = await client.post(
         "/api/v1/inscripciones",
@@ -168,7 +168,7 @@ async def test_ec6_capacidad_de_la_modalidad(
         headers=admin_general_headers,
     )
     torneo_id = resp.json()["id"]
-    resp = await client.post("/api/v1/equipos", json={"nombre": "Equipo Padel EC6"}, headers=admin_general_headers)
+    resp = await client.post("/api/v1/equipos", json={"nombre": "Equipo Padel EC6", "disciplina_id": disciplina_id, "modalidad_id": modalidad_id}, headers=admin_general_headers)
     equipo_id = resp.json()["id"]
     resp = await client.post(
         "/api/v1/inscripciones",

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    accesos,
     auth,
     disciplinas,
     equipos,
@@ -37,4 +38,5 @@ api_router.include_router(registro_lote.router)
 api_router.include_router(traspasos.router)
 api_router.include_router(eventos_partido.router)
 api_router.include_router(usuarios.router)
+api_router.include_router(accesos.router)
 api_router.include_router(estadisticas.router)

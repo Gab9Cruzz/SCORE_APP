@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { useAuth, type Rol } from "../auth/AuthContext";
+import { type Rol } from "../auth/authContextValue";
+import { useAuth } from "../auth/useAuth";
 import { LoginPrompt } from "../pages/Login";
 
 /** Bloquea acceso si no hay sesión o el rol no está en `roles`.

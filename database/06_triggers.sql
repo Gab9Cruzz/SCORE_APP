@@ -240,6 +240,39 @@ BEFORE INSERT OR UPDATE OF Disciplina_ID, Modalidad_ID ON TORNEO
 FOR EACH ROW EXECUTE FUNCTION fn_validar_torneo_modalidad();
 
 -- ------------------------------------------------------------
+-- Funcion y trigger: la Modalidad de un EQUIPO pertenece a su Disciplina.
+-- Espejo exacto de fn_validar_torneo_modalidad (arriba) — misma regla,
+-- otra tabla (equipos-disciplina-navegacion-plan.md, D-Eng-15). Se duplica
+-- la funcion en vez de generalizarla a una sola con parametros porque un
+-- trigger BEFORE INSERT/UPDATE solo puede leer NEW de SU tabla; el costo
+-- de la duplicacion son 10 lineas, el de la abstraccion seria dynamic SQL.
+--
+-- Es la red de seguridad para un INSERT crudo (psql, script, seed): el
+-- mensaje legible para el admin lo da EquipoService.create antes de
+-- llegar acá — mismo doble-cinturon que ya tenia TORNEO.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_validar_equipo_modalidad()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_modalidad_disciplina INT;
+BEGIN
+    SELECT Disciplina_ID INTO v_modalidad_disciplina FROM MODALIDAD WHERE ID = NEW.Modalidad_ID;
+    IF v_modalidad_disciplina IS NULL THEN
+        RAISE EXCEPTION 'La modalidad indicada no existe.';
+    END IF;
+    IF v_modalidad_disciplina <> NEW.Disciplina_ID THEN
+        RAISE EXCEPTION 'La modalidad indicada no pertenece a esta disciplina.';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_equipos_validar_modalidad
+BEFORE INSERT OR UPDATE OF Disciplina_ID, Modalidad_ID ON EQUIPOS
+FOR EACH ROW EXECUTE FUNCTION fn_validar_equipo_modalidad();
+
+-- ------------------------------------------------------------
 -- Función y trigger: exclusividad de un jugador por torneo.
 -- Un mismo perfil de disciplina no puede tener dos membresías Activo al
 -- mismo tiempo dentro del mismo TORNEO (aunque sea en dos equipos

@@ -7,6 +7,8 @@ from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.jugador import Jugador
 from app.models.jugador_equipo import JugadorEquipo
 from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
+from app.repositories.disciplina import DisciplinaRepository
+from app.repositories.equipo import EquipoRepository
 from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.repositories.jugador import JugadorRepository
 from app.repositories.jugador_equipo import JugadorEquipoRepository
@@ -23,6 +25,8 @@ class InscripcionTorneoService:
         self.jugador_repo = JugadorRepository(session)
         self.perfil_repo = JugadorPerfilDisciplinaRepository(session)
         self.jugador_equipo_repo = JugadorEquipoRepository(session)
+        self.equipo_repo = EquipoRepository(session)
+        self.disciplina_repo = DisciplinaRepository(session)
 
     async def get(self, id_: int) -> InscripcionTorneo:
         return await self.repo.get_or_404(id_)
@@ -34,11 +38,45 @@ class InscripcionTorneoService:
 
     async def create(self, data: InscripcionTorneoCreate) -> InscripcionTorneo:
         if data.equipo_id is not None:
-            # Pareja/Conjunto — sin cambios: unique_inscripcion
-            # (02_constraints.sql) evita el mismo equipo dos veces en el
-            # mismo torneo, el 409 lo arma exceptions/handlers.py.
-            return await self.repo.create(torneo_id=data.torneo_id, equipo_id=data.equipo_id)
+            return await self._crear_por_equipo(data)
         return await self._crear_individual(data)
+
+    async def _crear_por_equipo(self, data: InscripcionTorneoCreate) -> InscripcionTorneo:
+        """Pareja/Conjunto. unique_inscripcion (02_constraints.sql) sigue
+        evitando el mismo equipo dos veces en el mismo torneo (el 409 lo
+        arma exceptions/handlers.py); lo nuevo acá es el filtro estricto
+        por disciplina de equipos-disciplina-navegacion-plan.md (pedido B,
+        D-Eng-9, EC-33).
+
+        La validación vive en el SERVICE y no en el router ni en un
+        trigger: es el único punto por el que ya pasan los dos caminos de
+        inscripción, ya tiene torneo_repo inyectado, y DomainRuleError ya
+        se traduce a 400 en exceptions/handlers.py. Un trigger daría un
+        mensaje crudo de Postgres; el router dejaría fuera a cualquier
+        llamador interno futuro.
+
+        Solo se compara la DISCIPLINA, no la modalidad (EC-44): un equipo
+        de Fútbol 11 inscribiéndose a un torneo de Fútbol 5 es legítimo, y
+        el pedido dice "exactamente la misma Disciplina".
+        """
+        # D-Eng-17: hasta acá este camino no validaba ni que el torneo
+        # existiera — se creaba la inscripción y reventaba después contra
+        # la FK, con un 409 que no explicaba nada. El get_or_404 hace
+        # falta igual para leer torneo.disciplina_id, así que el gap se
+        # cierra solo.
+        torneo = await self.torneo_repo.get_or_404(data.torneo_id)
+        equipo = await self.equipo_repo.get_or_404(data.equipo_id)
+
+        if equipo.disciplina_id != torneo.disciplina_id:
+            disciplina_equipo = await self.disciplina_repo.get(equipo.disciplina_id)
+            disciplina_torneo = await self.disciplina_repo.get(torneo.disciplina_id)
+            raise DomainRuleError(
+                f"El equipo '{equipo.nombre}' pertenece a "
+                f"{disciplina_equipo.nombre if disciplina_equipo else 'otra disciplina'}; "
+                f"este torneo es de {disciplina_torneo.nombre if disciplina_torneo else 'otra disciplina'}."
+            )
+
+        return await self.repo.create(torneo_id=data.torneo_id, equipo_id=data.equipo_id)
 
     async def _crear_individual(self, data: InscripcionTorneoCreate) -> InscripcionTorneo:
         """Individual (Decisión B1, D-Eng-6): resuelve-o-crea Jugador +

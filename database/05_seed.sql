@@ -50,10 +50,17 @@ INSERT INTO TORNEO (Nombre, Disciplina_ID, Modalidad_ID, Torneo_Grupo_ID, Numero
      (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Copa Ecotec'), 1, '2026-01-10', '2026-03-30');
 
 -- Equipos
-INSERT INTO EQUIPOS (Nombre) VALUES
-    ('Tiburones FC'),
-    ('Águilas del Sur'),
-    ('Halcones United');
+-- Disciplina_ID/Modalidad_ID son NOT NULL desde
+-- equipos-disciplina-navegacion-plan.md: los 3 equipos de prueba juegan la
+-- Copa Ecotec 2026, así que su disciplina/modalidad son las del torneo
+-- ('Fútbol' / 'Fútbol 11'). Sin esto la inscripción de más abajo violaría
+-- la validación de disciplina que este mismo plan introduce.
+INSERT INTO EQUIPOS (Nombre, Disciplina_ID, Modalidad_ID)
+SELECT e.nombre,
+       (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol'),
+       (SELECT ID FROM MODALIDAD WHERE Nombre = 'Fútbol 11'
+          AND Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol'))
+FROM (VALUES ('Tiburones FC'), ('Águilas del Sur'), ('Halcones United')) AS e(nombre);
 
 -- Jugadores.
 -- Cedula/Correo_Electronico son NOT NULL desde este plan (identidad de la

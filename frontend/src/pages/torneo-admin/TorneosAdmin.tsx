@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../api/client";
 import { ResourceForm, type ResourceFieldValue, type ResourceFormField } from "../../components/admin/ResourceForm";
-import { useResourceCrud } from "../../hooks/useResourceCrud";
+import { useCatalogo } from "../../hooks/useCatalogo";
+import { FiltroDisciplinasBar } from "./FiltroDisciplinasBar";
 
 interface EdicionResumen {
   id: number;
@@ -18,15 +19,6 @@ interface TorneoGrupo {
   id: number;
   nombre: string;
   ediciones: EdicionResumen[];
-}
-interface DisciplinaRow {
-  id: number;
-  nombre: string;
-}
-interface ModalidadRow {
-  id: number;
-  nombre: string;
-  disciplina_id: number;
 }
 interface TorneoCreatePayload {
   // Ambos opcionales en el payload (ediciones-catalogo-disciplinas-plan.md,
@@ -59,6 +51,17 @@ export function TorneosAdminPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [modo, setModo] = useState<Modo>({ tipo: "lista" });
+  // Precargado desde la URL cuando se llega desde la grilla de Equipos
+  // ("agregar plantilla" de un equipo sin inscribir manda su disciplina) —
+  // el admin cae en la barra ya filtrada por lo que estaba mirando. El
+  // filtro NO se persiste de vuelta en la URL: eso es alcance nuevo (ver
+  // "NOT en scope" del plan), esto solo lee un parámetro de entrada.
+  const [searchParams] = useSearchParams();
+  const disciplinaInicial = searchParams.get("disciplina_id");
+  const [disciplinaFiltro, setDisciplinaFiltro] = useState<number | null>(
+    disciplinaInicial ? Number(disciplinaInicial) : null,
+  );
+  const [modalidadFiltro, setModalidadFiltro] = useState<number | null>(null);
 
   const gruposQuery = useQuery({
     queryKey: ["torneo-grupos"],
@@ -69,32 +72,69 @@ export function TorneosAdminPage() {
     },
   });
 
-  const disciplinas = useResourceCrud<DisciplinaRow>({ resourceKey: "disciplinas", basePath: "/api/v1/disciplinas" });
-  const modalidades = useResourceCrud<ModalidadRow>({ resourceKey: "modalidades", basePath: "/api/v1/modalidades" });
+  const catalogo = useCatalogo();
 
-  const disciplinaPorId = useMemo(
-    () => new Map((disciplinas.listQuery.data ?? []).map((d) => [d.id, d])),
-    [disciplinas.listQuery.data],
+  const grupos = useMemo(() => gruposQuery.data ?? [], [gruposQuery.data]);
+
+  /** La disciplina/modalidad de un grupo son las de la edición que se
+   * abriría — un grupo no cambia de disciplina entre ediciones (el
+   * backend las hereda, D-Eng-5), así que alcanza con mirar una. */
+  const disciplinaDeGrupo = (g: TorneoGrupo) => edicionParaAbrir(g)?.disciplina_id ?? null;
+  const modalidadDeGrupo = (g: TorneoGrupo) => edicionParaAbrir(g)?.modalidad_id ?? null;
+
+  // D-Eng-16: los chips salen de los torneos YA cargados, sin endpoint ni
+  // llamada extra. Eso garantiza por construcción que ningún chip filtre a
+  // vacío, y evita una barra de 28 disciplinas cuando hay torneos de 4.
+  const { disciplinaPorId, modalidadPorId } = catalogo;
+  const chipsDisciplina = useMemo(() => {
+    const ids = new Set(grupos.map(disciplinaDeGrupo).filter((id): id is number => id != null));
+    return [...ids]
+      .map((id) => ({ id, nombre: disciplinaPorId.get(id)?.nombre ?? "—" }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [grupos, disciplinaPorId]);
+
+  const chipsModalidad = useMemo(() => {
+    if (disciplinaFiltro === null) return [];
+    const ids = new Set(
+      grupos
+        .filter((g) => disciplinaDeGrupo(g) === disciplinaFiltro)
+        .map(modalidadDeGrupo)
+        .filter((id): id is number => id != null),
+    );
+    return [...ids]
+      .map((id) => ({ id, nombre: modalidadPorId.get(id)?.nombre ?? "—" }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [grupos, disciplinaFiltro, modalidadPorId]);
+
+  const gruposVisibles = useMemo(
+    () =>
+      grupos.filter((g) => {
+        if (disciplinaFiltro !== null && disciplinaDeGrupo(g) !== disciplinaFiltro) return false;
+        if (modalidadFiltro !== null && modalidadDeGrupo(g) !== modalidadFiltro) return false;
+        return true;
+      }),
+    [grupos, disciplinaFiltro, modalidadFiltro],
   );
-  const modalidadPorId = useMemo(
-    () => new Map((modalidades.listQuery.data ?? []).map((m) => [m.id, m])),
-    [modalidades.listQuery.data],
-  );
+
+  const hayFiltro = disciplinaFiltro !== null || modalidadFiltro !== null;
 
   const crearTorneo = useMutation({
     mutationFn: async (body: TorneoCreatePayload) => {
       const { data, error } = await api.POST("/api/v1/torneos", { body } as never);
       if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["torneo-grupos"] });
-      setModo({ tipo: "lista" });
+      return data as { id: number; disciplina_id: number };
     },
   });
 
   function volver() {
     setModo({ tipo: "lista" });
+  }
+
+  function seleccionarDisciplina(id: number | null) {
+    setDisciplinaFiltro(id);
+    // La modalidad elegida pertenece a la disciplina anterior: dejarla
+    // puesta filtraría a vacío por construcción.
+    setModalidadFiltro(null);
   }
 
   /** Campos del formulario de "Torneo nuevo" (crea un TORNEO_GRUPO):
@@ -118,18 +158,16 @@ export function TorneosAdminPage() {
         label: "Disciplina",
         type: "reference",
         required: true,
-        optionsLoading: disciplinas.listQuery.isLoading,
-        options: (disciplinas.listQuery.data ?? []).map((d) => ({ value: d.id, label: d.nombre })),
+        optionsLoading: catalogo.cargando,
+        options: catalogo.disciplinas.map((d) => ({ value: d.id, label: d.nombre })),
       },
       {
         name: "modalidad_id",
         label: "Modalidad",
         type: "reference",
         required: true,
-        optionsLoading: modalidades.listQuery.isLoading,
-        options: (modalidades.listQuery.data ?? [])
-          .filter((m) => m.disciplina_id === disciplinaId)
-          .map((m) => ({ value: m.id, label: m.nombre })),
+        optionsLoading: catalogo.cargando,
+        options: catalogo.modalidadesDe(disciplinaId).map((m) => ({ value: m.id, label: m.nombre })),
       },
       { name: "fecha_inicio", label: "Fecha de inicio", type: "date", required: true },
       { name: "fecha_fin", label: "Fecha de fin", type: "date", required: true },
@@ -142,23 +180,54 @@ export function TorneosAdminPage() {
   ];
 
   function submitCrearGrupo(values: Record<string, ResourceFieldValue>) {
-    crearTorneo.mutate({
-      torneo_grupo_nombre: String(values.torneo_grupo_nombre ?? ""),
-      disciplina_id: values.disciplina_id as number,
-      modalidad_id: values.modalidad_id as number,
-      fecha_inicio: String(values.fecha_inicio),
-      fecha_fin: String(values.fecha_fin),
-    });
+    const disciplinaId = values.disciplina_id as number;
+    crearTorneo.mutate(
+      {
+        torneo_grupo_nombre: String(values.torneo_grupo_nombre ?? ""),
+        disciplina_id: disciplinaId,
+        modalidad_id: values.modalidad_id as number,
+        fecha_inicio: String(values.fecha_inicio),
+        fecha_fin: String(values.fecha_fin),
+      },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ["torneo-grupos"] });
+          // EC-42: si la barra estaba filtrada por otra disciplina, el
+          // torneo recién creado no aparecería y el admin creería que
+          // falló. Se resetea el filtro en vez de dejarlo escondido.
+          if (disciplinaFiltro !== null && disciplinaFiltro !== disciplinaId) {
+            seleccionarDisciplina(null);
+          }
+          setModo({ tipo: "lista" });
+        },
+      },
+    );
   }
 
   function submitNuevaEdicion(grupoId: number, values: Record<string, ResourceFieldValue>) {
     // Sin disciplina_id/modalidad_id: se heredan del grupo del lado del
     // backend (D-Eng-5) — este formulario ni siquiera los pide.
-    crearTorneo.mutate({
-      torneo_grupo_id: grupoId,
-      fecha_inicio: String(values.fecha_inicio),
-      fecha_fin: String(values.fecha_fin),
-    });
+    crearTorneo.mutate(
+      {
+        torneo_grupo_id: grupoId,
+        fecha_inicio: String(values.fecha_inicio),
+        fecha_fin: String(values.fecha_fin),
+      },
+      {
+        // Pedido C del plan: caer DIRECTO en "Agregar Equipo" de la
+        // edición recién creada. Antes este onSuccess volvía al listado y
+        // dejaba al admin frente a una tarjeta más, sin nada que hacer con
+        // ella. (El mismo botón dentro de "Ver Torneo" —
+        // TorneoDashboard.crearEdicion — ya navegaba bien; acá estaba el
+        // camino roto.) La disciplina va heredada, así que la validación
+        // del picker de equipos ya llega puesta.
+        onSuccess: (nuevaEdicion) => {
+          queryClient.invalidateQueries({ queryKey: ["torneo-grupos"] });
+          setModo({ tipo: "lista" });
+          navigate(`/torneo-admin/torneos/${nuevaEdicion.id}/equipos`);
+        },
+      },
+    );
   }
 
   if (modo.tipo === "crear-grupo") {
@@ -185,8 +254,6 @@ export function TorneosAdminPage() {
     // sigue pareciendo un campo de formulario y el admin puede
     // preguntarse por qué no responde (Fase 2 parte A del plan).
     const edicionReferencia = edicionParaAbrir(modo.grupo);
-    const disciplinaHeredada = disciplinaPorId.get(edicionReferencia?.disciplina_id);
-    const modalidadHeredada = modalidadPorId.get(edicionReferencia?.modalidad_id ?? -1);
     return (
       <div className="page">
         <h1>
@@ -195,11 +262,11 @@ export function TorneosAdminPage() {
         <dl className="datos-heredados">
           <div>
             <dt>Disciplina</dt>
-            <dd>{disciplinaHeredada?.nombre ?? "…"}</dd>
+            <dd>{catalogo.nombreDisciplina(edicionReferencia?.disciplina_id)}</dd>
           </div>
           <div>
             <dt>Modalidad</dt>
-            <dd>{modalidadHeredada?.nombre ?? "…"}</dd>
+            <dd>{catalogo.nombreModalidad(edicionReferencia?.modalidad_id)}</dd>
           </div>
         </dl>
         <ResourceForm
@@ -217,23 +284,57 @@ export function TorneosAdminPage() {
   return (
     <div className="page">
       <div className="page__header">
-        <h1>Torneos</h1>
+        <h1>
+          Torneos{" "}
+          {hayFiltro && (
+            <span className="muted contador-filtrado">
+              ({gruposVisibles.length} de {grupos.length})
+            </span>
+          )}
+        </h1>
         <button type="button" onClick={() => setModo({ tipo: "crear-grupo" })}>
           + Torneo nuevo
         </button>
       </div>
+
+      {/* Sin torneos la barra no se renderiza: una barra de filtros sobre
+          cero resultados es ruido, no navegación. */}
+      {grupos.length > 0 && (
+        <FiltroDisciplinasBar
+          disciplinas={chipsDisciplina}
+          modalidades={chipsModalidad}
+          disciplinaSeleccionada={disciplinaFiltro}
+          modalidadSeleccionada={modalidadFiltro}
+          onSeleccionarDisciplina={seleccionarDisciplina}
+          onSeleccionarModalidad={setModalidadFiltro}
+        />
+      )}
+
       {gruposQuery.isLoading && <p>Cargando...</p>}
       {gruposQuery.isError && <p className="error-text">{apiErrorMessage(gruposQuery.error)}</p>}
-      {gruposQuery.data?.length === 0 && <p className="muted">No hay torneos creados todavía.</p>}
+      {grupos.length === 0 && !gruposQuery.isLoading && (
+        <p className="muted">No hay torneos creados todavía.</p>
+      )}
+      {/* Vacío FILTRADO — distinto del vacío real. Imposible por
+          construcción (los chips salen de estos mismos torneos), pero el
+          estado puede desincronizarse tras crear o dar de baja uno. */}
+      {grupos.length > 0 && gruposVisibles.length === 0 && (
+        <p className="muted">
+          Ningún torneo de {catalogo.nombreDisciplina(disciplinaFiltro)}.{" "}
+          <button type="button" className="link-button" onClick={() => seleccionarDisciplina(null)}>
+            Ver todos
+          </button>
+        </p>
+      )}
+
       <div className="tarjetas-torneos">
-        {gruposQuery.data?.map((grupo) => {
+        {gruposVisibles.map((grupo) => {
           const edicion = edicionParaAbrir(grupo);
-          const disciplina = disciplinaPorId.get(edicion?.disciplina_id);
           return (
             <div key={grupo.id} className="tarjeta-torneo">
               <h2>{grupo.nombre}</h2>
               <p className="muted">
-                {disciplina?.nombre ?? "…"}
+                {catalogo.nombreDisciplina(edicion?.disciplina_id)}
                 {grupo.ediciones.length > 1 && ` · ${grupo.ediciones.length} ediciones`}
               </p>
               {edicion && (

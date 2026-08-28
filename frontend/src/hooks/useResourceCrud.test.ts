@@ -3,7 +3,7 @@ import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it } from "vitest";
 import { server } from "../test/msw-server";
 import { createWrapper } from "../test/test-utils";
-import { useResourceCrud } from "./useResourceCrud";
+import { LIMITE_LISTA, useResourceCrud } from "./useResourceCrud";
 
 const BASE = "http://127.0.0.1:8000/api/v1/test-resource";
 
@@ -52,6 +52,56 @@ describe("useResourceCrud", () => {
 
     await waitFor(() => expect(result.current.listQuery.isSuccess).toBe(true));
     expect(result.current.listQuery.data).toEqual([]);
+  });
+
+  // El techo de filas dejó de ser un fallo silencioso
+  // (equipos-disciplina-navegacion-plan.md, Mejora #1): hasta que exista
+  // paginación con cursor, lo mínimo es que la página PUEDA avisar que
+  // está mostrando un recorte.
+  it("list: marca truncado cuando la respuesta llega justo llena", async () => {
+    const llena = Array.from({ length: LIMITE_LISTA }, (_, i) => ({
+      id: i + 1,
+      nombre: `Fila ${i + 1}`,
+      estado: "Activo",
+    }));
+    server.use(http.get(BASE, () => HttpResponse.json(llena)));
+    const { result } = renderHook(
+      () => useResourceCrud<TestOut>({ resourceKey: "test-resource", basePath: "/api/v1/test-resource" }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.listQuery.data).toHaveLength(LIMITE_LISTA));
+    expect(result.current.truncado).toBe(true);
+  });
+
+  it("list: no marca truncado si entran todas las filas", async () => {
+    server.use(http.get(BASE, () => HttpResponse.json([{ id: 1, nombre: "Uno", estado: "Activo" }])));
+    const { result } = renderHook(
+      () => useResourceCrud<TestOut>({ resourceKey: "test-resource", basePath: "/api/v1/test-resource" }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.listQuery.data).toHaveLength(1));
+    expect(result.current.truncado).toBe(false);
+  });
+
+  it("list: pide exactamente LIMITE_LISTA filas", async () => {
+    let limitPedido: string | null = null;
+    server.use(
+      http.get(BASE, ({ request }) => {
+        limitPedido = new URL(request.url).searchParams.get("limit");
+        return HttpResponse.json([]);
+      }),
+    );
+    const { result } = renderHook(
+      () => useResourceCrud<TestOut>({ resourceKey: "test-resource", basePath: "/api/v1/test-resource" }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.listQuery.isSuccess).toBe(true));
+    // Si el `le=` del backend y esta constante se desincronizan, el
+    // servidor devuelve 422 y este test es el que lo cuenta.
+    expect(limitPedido).toBe(String(LIMITE_LISTA));
   });
 
   it("list: expone isError si el servidor falla", async () => {

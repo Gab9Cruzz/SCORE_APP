@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { useAuth, type Rol } from "../auth/AuthContext";
+import { type Rol } from "../auth/authContextValue";
+import { useAuth } from "../auth/useAuth";
 
 // roles-3-modulos-plan.md, Fase 2, D2: landing por default después de
 // loguearse. `from` (si existe) siempre gana — si alguien fue redirigido

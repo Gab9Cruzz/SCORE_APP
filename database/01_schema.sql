@@ -75,9 +75,20 @@ CREATE TABLE TORNEO (
     Estado VARCHAR(20) DEFAULT 'Activo'
 );
 
+-- Disciplina_ID/Modalidad_ID son NOT NULL desde
+-- equipos-disciplina-navegacion-plan.md (Decisiones #1/#2/#3): un equipo
+-- pertenece a UNA disciplina, y esa es la que se compara contra la del
+-- torneo al inscribirlo (InscripcionTorneoService.create). Modalidad_ID es
+-- lo que la UI muestra como "Categoria" (Decision #2 = B1) — no hay
+-- catalogo de categorias etarias, se reusa el eje que el sistema ya
+-- modela y ya valida. Que la modalidad pertenezca a la disciplina lo
+-- exige fn_validar_equipo_modalidad (06_triggers.sql), espejo exacto de
+-- fn_validar_torneo_modalidad.
 CREATE TABLE EQUIPOS (
     ID SERIAL PRIMARY KEY,
     Nombre VARCHAR(100) NOT NULL,
+    Disciplina_ID INT NOT NULL,
+    Modalidad_ID INT NOT NULL,
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Estado VARCHAR(20) DEFAULT 'Activo'
@@ -230,6 +241,34 @@ CREATE TABLE USUARIOS (
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Estado VARCHAR(20) DEFAULT 'Activo'
+);
+
+-- Bitacora de INTENTOS de inicio de sesion (exitosos y fallidos).
+--
+-- Append-only: una fila se escribe una vez y no se toca nunca mas. Por eso
+-- es la unica tabla sin Fecha_Modificacion — una fecha de modificacion en
+-- un registro de auditoria no seria un dato util, seria una senal de que
+-- alguien lo edito.
+--
+-- Username se guarda TAL COMO SE TIPEO y es NOT NULL, mientras que
+-- Usuario_ID es nullable: el caso mas interesante de auditar es justamente
+-- el intento contra un usuario que no existe, donde no hay ID que
+-- referenciar. Nunca se guarda la contrasena probada, ni siquiera hasheada.
+--
+-- La FK a USUARIOS va sin ON DELETE (NO ACTION), igual que
+-- TRASPASOS.Realizado_Por: es un rastro de auditoria, no debe poder
+-- desaparecer porque alguien borro la cuenta.
+CREATE TABLE ACCESOS (
+    ID SERIAL PRIMARY KEY,
+    Usuario_ID INT,
+    Username VARCHAR(50) NOT NULL,
+    Exitoso BOOLEAN NOT NULL,
+    -- NULL si Exitoso. Si no: 'credenciales' o 'inactivo' (chk_accesos_motivo)
+    Motivo VARCHAR(30),
+    -- 45 = largo maximo de una IPv6 en texto
+    IP VARCHAR(45),
+    User_Agent VARCHAR(255),
+    Fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE EVENTOS_PARTIDO (

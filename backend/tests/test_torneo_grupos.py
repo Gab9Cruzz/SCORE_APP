@@ -51,6 +51,19 @@ async def test_torneo_grupo_inexistente_da_404(client: AsyncClient):
     assert resp.status_code == 404
 
 
+async def test_obtener_torneo_grupo_por_id_incluye_ediciones(client: AsyncClient):
+    # Seguimiento a ediciones-catalogo-disciplinas-plan.md: "Ver Torneo"
+    # necesita las ediciones del grupo para el selector, no solo el
+    # nombre — GET /torneo-grupos/{id} pasó a devolver el mismo shape que
+    # el listado (TorneoGrupoConEdiciones).
+    resp = await client.get("/api/v1/torneo-grupos/1")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["nombre"] == "Copa Ecotec"
+    assert len(body["ediciones"]) == 1
+    assert body["ediciones"][0]["numero_edicion"] == 1
+
+
 async def test_ec23_jugador_activo_en_dos_ediciones_del_mismo_grupo_simultaneamente(
     client: AsyncClient, admin_general_headers: dict[str, str]
 ):
@@ -88,10 +101,10 @@ async def test_ec23_jugador_activo_en_dos_ediciones_del_mismo_grupo_simultaneame
     assert edicion1.json()["id"] != edicion2.json()["id"]  # Torneo_ID distinto, mismo grupo
 
     equipo_halcones = await client.post(
-        "/api/v1/equipos", json={"nombre": "Halcones FC EC23"}, headers=admin_general_headers
+        "/api/v1/equipos", json={"nombre": "Halcones FC EC23", "disciplina_id": 1, "modalidad_id": 1}, headers=admin_general_headers
     )
     equipo_tiburones = await client.post(
-        "/api/v1/equipos", json={"nombre": "Tiburones FC EC23"}, headers=admin_general_headers
+        "/api/v1/equipos", json={"nombre": "Tiburones FC EC23", "disciplina_id": 1, "modalidad_id": 1}, headers=admin_general_headers
     )
 
     inscripcion1 = await client.post(
@@ -151,7 +164,7 @@ async def test_ec23_jugador_activo_en_dos_ediciones_del_mismo_grupo_simultaneame
     # acá para dejar el contraste explícito en el mismo test): un TERCER
     # equipo dentro de la MISMA edición (Edición 2) sí debe rechazarse.
     equipo_aguilas = await client.post(
-        "/api/v1/equipos", json={"nombre": "Águilas EC23"}, headers=admin_general_headers
+        "/api/v1/equipos", json={"nombre": "Águilas EC23", "disciplina_id": 1, "modalidad_id": 1}, headers=admin_general_headers
     )
     inscripcion3 = await client.post(
         "/api/v1/inscripciones",

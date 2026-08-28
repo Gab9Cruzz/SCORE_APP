@@ -51,7 +51,7 @@ async def test_partido_con_equipo_no_inscrito_es_rechazado(
     # trg_partidos_validar_inscripcion (06_triggers.sql): un equipo recién
     # creado no está inscrito en el torneo 1, así que el partido debe fallar.
     resp = await client.post(
-        "/api/v1/equipos", json={"nombre": "Equipo Sin Inscribir"}, headers=torneo_admin_headers
+        "/api/v1/equipos", json={"nombre": "Equipo Sin Inscribir", "disciplina_id": 1, "modalidad_id": 1}, headers=torneo_admin_headers
     )
     equipo_id = resp.json()["id"]
 

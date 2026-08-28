@@ -1,3 +1,6 @@
+(Estos pasos ahora estan tambien en README.md, seccion "Levantar todo",
+junto con el resto de la puesta en marcha.)
+
 Para levantar todo (después de prender la PC)
 Terminal 1 — backend:
 

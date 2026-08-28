@@ -11,6 +11,22 @@ from app.services.perfil_jugador import PerfilJugadorService
 
 router = APIRouter(prefix="/jugadores", tags=["Jugadores"])
 
+# `response_model=None` es deliberado en los 3 GET de abajo: la proyección
+# se elige EN RUNTIME según haya o no usuario autenticado, y dejar que
+# FastAPI valide contra un único modelo rompería uno de los dos caminos.
+# Pero `response_model=None` también borra el schema de la respuesta del
+# OpenAPI —quedaba como `unknown`, y de ahí el `{}` que veía el frontend
+# generado— así que la forma se declara acá aparte, solo para documentar.
+# Es la unión real de lo que devuelve cada camino, no una simplificación:
+# un caller anónimo recibe la variante sin PII y el schema lo dice.
+RESPUESTA_LISTA_JUGADORES = {
+    200: {"model": list[JugadorOut] | list[JugadorPublicOut], "description": "Successful Response"}
+}
+RESPUESTA_JUGADOR = {200: {"model": JugadorOut | JugadorPublicOut, "description": "Successful Response"}}
+RESPUESTA_PERFIL = {
+    200: {"model": PerfilJugadorOut | PerfilJugadorPublicOut, "description": "Successful Response"}
+}
+
 # Los 3 GET de acá abajo siguen siendo públicos (no exigen login) pero ya no
 # filtran PII (cédula, correo) a un caller anónimo — security review de
 # equipos-jugadores-plan.md, Fase 3. get_current_user_optional nunca levanta
@@ -20,7 +36,7 @@ router = APIRouter(prefix="/jugadores", tags=["Jugadores"])
 # completo en la misma ruta — no hizo falta tocar el frontend.
 
 
-@router.get("", response_model=None)
+@router.get("", response_model=None, responses=RESPUESTA_LISTA_JUGADORES)
 async def listar_jugadores(
     skip: int = 0,
     limit: int = Query(default=100, le=200),
@@ -34,7 +50,7 @@ async def listar_jugadores(
     return [JugadorOut.model_validate(j) for j in jugadores]
 
 
-@router.get("/{jugador_id}", response_model=None)
+@router.get("/{jugador_id}", response_model=None, responses=RESPUESTA_JUGADOR)
 async def obtener_jugador(
     jugador_id: int,
     session: AsyncSession = Depends(get_db),
@@ -46,7 +62,7 @@ async def obtener_jugador(
     return JugadorOut.model_validate(jugador)
 
 
-@router.get("/{jugador_id}/perfil", response_model=None)
+@router.get("/{jugador_id}/perfil", response_model=None, responses=RESPUESTA_PERFIL)
 async def obtener_perfil_de_jugador(
     jugador_id: int,
     session: AsyncSession = Depends(get_db),

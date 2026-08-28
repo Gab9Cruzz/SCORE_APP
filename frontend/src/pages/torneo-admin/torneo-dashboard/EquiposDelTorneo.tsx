@@ -75,6 +75,7 @@ export function EquiposDelTorneoPage() {
   return (
     <VistaEquipo
       torneoId={torneoId}
+      disciplinaId={disciplinaId}
       torneoContexto={torneoContexto}
       inscripciones={inscripciones}
       esPareja={tamanoEquipo === 2}
@@ -144,6 +145,7 @@ function VistaIndividual(props: {
           torneoId={torneoId}
           torneoContexto={torneoContexto}
           torneoModalidadId={modalidadId}
+          torneoDisciplinaId={disciplinaId}
           equiposYaInscritosIds={new Set()}
           onClose={() => setModalAbierto(false)}
         />
@@ -157,6 +159,7 @@ function VistaIndividual(props: {
  * cambian según sea Pareja o Conjunto. */
 function VistaEquipo(props: {
   torneoId: number;
+  disciplinaId: number;
   torneoContexto: string;
   inscripciones: ReturnType<typeof useResourceCrud<InscripcionRow>>;
   esPareja: boolean;
@@ -165,9 +168,18 @@ function VistaEquipo(props: {
   modalidadId: number;
   navigate: ReturnType<typeof useNavigate>;
 }) {
-  const { torneoId, torneoContexto, inscripciones, esPareja, modalAbierto, setModalAbierto, modalidadId, navigate } = props;
+  const { torneoId, disciplinaId, torneoContexto, inscripciones, esPareja, modalAbierto, setModalAbierto, modalidadId, navigate } =
+    props;
 
-  const equipos = useResourceCrud<EquipoRow>({ resourceKey: "equipos", basePath: "/api/v1/equipos" });
+  // Solo los de esta disciplina: alcanza para resolver el nombre de cada
+  // inscripción de este torneo (todas son de su disciplina por la
+  // validación de InscripcionTorneoService) y no gasta el techo de 200
+  // filas en equipos de otras disciplinas.
+  const equipos = useResourceCrud<EquipoRow>({
+    resourceKey: "equipos",
+    basePath: "/api/v1/equipos",
+    listParams: { disciplina_id: disciplinaId },
+  });
   const plantillas = useResourceCrud<PlantillaRow>({
     resourceKey: "plantillas",
     basePath: "/api/v1/plantillas",
@@ -240,6 +252,7 @@ function VistaEquipo(props: {
           torneoId={torneoId}
           torneoContexto={torneoContexto}
           torneoModalidadId={modalidadId}
+          torneoDisciplinaId={disciplinaId}
           equiposYaInscritosIds={inscritosIds}
           onClose={() => setModalAbierto(false)}
         />

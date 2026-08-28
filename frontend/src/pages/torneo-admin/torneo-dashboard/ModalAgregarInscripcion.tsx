@@ -2,12 +2,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, apiErrorMessage } from "../../../api/client";
+import { useCatalogo } from "../../../hooks/useCatalogo";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
 import type { RegistroLotePreResuelto } from "../RegistroLoteAdmin";
 
 interface EquipoRow {
   id: number;
   nombre: string;
+  disciplina_id: number;
   estado: string;
 }
 interface ModalidadRow {
@@ -44,6 +46,12 @@ interface ModalAgregarInscripcionProps {
    * Equipo); == 2 → Pareja (Equipo autonombrado, exactamente 2 filas); > 2
    * → Conjunto (Equipo, nombre libre, sin cambios). */
   torneoModalidadId: number;
+  /** disciplina_id del TORNEO. Es el filtro estricto del pedido B
+   * (equipos-disciplina-navegacion-plan.md): solo se OFRECEN equipos de
+   * esta disciplina, y el equipo que se cree acá nace con ella. La API
+   * rechaza igual cualquier otra cosa (EC-33) — esto evita el viaje
+   * redondo y, sobre todo, evita ofrecer una opción que no es opción. */
+  torneoDisciplinaId: number;
   equiposYaInscritosIds: Set<number>;
   onClose: () => void;
 }
@@ -59,7 +67,8 @@ type Modo = { tipo: "buscar" } | { tipo: "crear" };
  * a la pantalla dividida de Registro por Lote — P4 DRY, no se reconstruye
  * ese flujo acá). */
 export function ModalAgregarInscripcion(props: ModalAgregarInscripcionProps) {
-  const { torneoId, torneoContexto, torneoModalidadId, equiposYaInscritosIds, onClose } = props;
+  const { torneoId, torneoContexto, torneoModalidadId, torneoDisciplinaId, equiposYaInscritosIds, onClose } =
+    props;
 
   const modalidades = useResourceCrud<ModalidadRow>({ resourceKey: "modalidades", basePath: "/api/v1/modalidades" });
   const modalidadDelTorneo = useMemo(
@@ -91,6 +100,8 @@ export function ModalAgregarInscripcion(props: ModalAgregarInscripcionProps) {
       torneoId={torneoId}
       torneoContexto={torneoContexto}
       esPareja={tamanoEquipo === 2}
+      torneoDisciplinaId={torneoDisciplinaId}
+      torneoModalidadId={torneoModalidadId}
       equiposYaInscritosIds={equiposYaInscritosIds}
       onClose={onClose}
     />
@@ -239,10 +250,13 @@ function ModalEquipo(props: {
   torneoId: number;
   torneoContexto: string;
   esPareja: boolean;
+  torneoDisciplinaId: number;
+  torneoModalidadId: number;
   equiposYaInscritosIds: Set<number>;
   onClose: () => void;
 }) {
-  const { torneoId, torneoContexto, esPareja, equiposYaInscritosIds, onClose } = props;
+  const { torneoId, torneoContexto, esPareja, torneoDisciplinaId, torneoModalidadId, equiposYaInscritosIds, onClose } =
+    props;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -253,7 +267,25 @@ function ModalEquipo(props: {
   const [filas, setFilas] = useState<FilaPlantilla[]>(esPareja ? [{ ...FILA_VACIA }, { ...FILA_VACIA }] : [{ ...FILA_VACIA }]);
   const [inscribiendoId, setInscribiendoId] = useState<number | null>(null);
 
-  const equipos = useResourceCrud<EquipoRow>({ resourceKey: "equipos", basePath: "/api/v1/equipos" });
+  const catalogo = useCatalogo();
+  const nombreDisciplina = catalogo.nombreDisciplina(torneoDisciplinaId);
+
+  // Filtro estricto, del lado del SERVIDOR (pedido B + Mejora #1): solo
+  // equipos de la disciplina del torneo y solo Activos.
+  //
+  // `estado: "Activo"` cierra un bug preexistente (D-Eng-13 / Mejora #3):
+  // hasta acá un equipo dado de baja desde /torneo-admin/equipos seguía
+  // apareciendo en este picker y se inscribía sin error, porque este
+  // filtro solo miraba `equiposYaInscritosIds` y el texto.
+  //
+  // Que los dos filtros vayan como query params y no en memoria importa
+  // por el techo de 200 filas: filtrar después de traer las primeras 200
+  // devolvía "no hay resultados" para un equipo que sí existe.
+  const equipos = useResourceCrud<EquipoRow>({
+    resourceKey: "equipos",
+    basePath: "/api/v1/equipos",
+    listParams: { disciplina_id: torneoDisciplinaId, estado: "Activo" },
+  });
 
   const equiposDisponibles = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
@@ -261,6 +293,33 @@ function ModalEquipo(props: {
       (e) => !equiposYaInscritosIds.has(e.id) && (texto === "" || e.nombre.toLowerCase().includes(texto)),
     );
   }, [equipos.listQuery.data, equiposYaInscritosIds, busqueda]);
+
+  // Decisión #9: los equipos de otra disciplina NO se muestran —ni
+  // deshabilitados, ni tachados: no son opciones—, pero el silencio total
+  // deja al admin sin saber si escribió mal, si el equipo no existe o si
+  // es de otra disciplina. Se le da el NÚMERO, nunca los nombres.
+  //
+  // Esta segunda consulta solo se dispara cuando la búsqueda no encontró
+  // nada — que es el único momento en que el número significa algo. D-Eng-14
+  // pedía calcularlo sin fetch extra sobre la lista ya cargada; con el
+  // filtro por disciplina movido al servidor (que es lo que hace que la
+  // búsqueda funcione más allá de 200 filas) esa lista ya no contiene las
+  // otras disciplinas, así que el dato hay que pedirlo. Es una llamada
+  // rara, en el momento exacto en que el admin necesita la explicación.
+  const buscoSinResultados = busqueda.trim() !== "" && equiposDisponibles.length === 0;
+  const otrasDisciplinas = useResourceCrud<EquipoRow>({
+    resourceKey: "equipos",
+    basePath: "/api/v1/equipos",
+    listParams: { estado: "Activo" },
+    enabled: buscoSinResultados,
+  });
+  const coincidenEnOtrasDisciplinas = useMemo(() => {
+    if (!buscoSinResultados) return 0;
+    const texto = busqueda.trim().toLowerCase();
+    return (otrasDisciplinas.listQuery.data ?? []).filter(
+      (e) => e.disciplina_id !== torneoDisciplinaId && e.nombre.toLowerCase().includes(texto),
+    ).length;
+  }, [buscoSinResultados, otrasDisciplinas.listQuery.data, busqueda, torneoDisciplinaId]);
 
   const inscribirExistente = useMutation({
     mutationFn: async (equipoId: number) => {
@@ -280,8 +339,15 @@ function ModalEquipo(props: {
 
   const crearYRegistrar = useMutation({
     mutationFn: async () => {
+      // Disciplina y modalidad HEREDADAS del torneo, no elegidas: crear
+      // acá un equipo de otra disciplina sería crear uno que este mismo
+      // modal no puede inscribir.
       const { data: equipo, error: errEquipo } = await api.POST("/api/v1/equipos", {
-        body: { nombre: nombreNuevoEquipo.trim() },
+        body: {
+          nombre: nombreNuevoEquipo.trim(),
+          disciplina_id: torneoDisciplinaId,
+          modalidad_id: torneoModalidadId,
+        },
       } as never);
       if (errEquipo) throw errEquipo;
       const equipoId = (equipo as { id: number }).id;
@@ -343,7 +409,11 @@ function ModalEquipo(props: {
             />
             {equipos.listQuery.isLoading && <p>Cargando...</p>}
             {!equipos.listQuery.isLoading && equiposDisponibles.length === 0 && (
-              <p className="muted">No hay resultados con ese nombre. ¿Es nueva?</p>
+              <p className="muted">
+                No hay {esPareja ? "parejas" : "equipos"} de {nombreDisciplina} con ese nombre.
+                {coincidenEnOtrasDisciplinas > 0 &&
+                  ` ${coincidenEnOtrasDisciplinas} de otras disciplinas coinciden y no se pueden inscribir acá.`}
+              </p>
             )}
             {equiposDisponibles.map((e) => (
               <div key={e.id} className="modal-panel__equipo-fila">
@@ -377,6 +447,15 @@ function ModalEquipo(props: {
             <h2>
               {tituloCrear} — {torneoContexto}
             </h2>
+            {/* Heredada del torneo: texto plano, no un <select disabled>
+                — un select deshabilitado sigue pareciendo un campo de
+                formulario roto (mismo criterio que "Nueva edición"). */}
+            <dl className="datos-heredados">
+              <div>
+                <dt>Disciplina</dt>
+                <dd>{nombreDisciplina}</dd>
+              </div>
+            </dl>
             <div className="resource-form">
               <label>
                 Nombre {esPareja ? "de la pareja" : "del equipo"}

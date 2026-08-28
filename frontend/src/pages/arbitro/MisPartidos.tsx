@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../../api/client";
-import { useAuth } from "../../auth/AuthContext";
+import { useAuth } from "../../auth/useAuth";
 import { MesaPanel } from "../ControlDeMesa";
 
 /** Landing del módulo Árbitro (roles-3-modulos-plan.md, Fase 3).

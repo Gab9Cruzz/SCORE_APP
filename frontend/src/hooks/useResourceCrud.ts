@@ -24,6 +24,21 @@ import { api } from "../api/client";
  * tipo equivocado), no la URL en sí.
  */
 
+/** Techo de filas que pide TODO listado de este hook.
+ *
+ * Es el mismo valor que el `le=200` de los endpoints (`Query(default=100,
+ * le=200)`), y está exportado a propósito: antes vivía hardcodeado acá
+ * adentro y una página que quisiera avisar "hay más de los que ves" tenía
+ * que repetir el número, con el riesgo obvio de que los dos se
+ * desincronicen. Ahora el hook devuelve `truncado` ya calculado y nadie
+ * necesita saber el número — se exporta solo para quien quiera mostrarlo
+ * en el mensaje.
+ *
+ * No es paginación: es un tope. La paginación con cursor sigue pendiente
+ * (ver TODOS.md); mientras tanto lo importante es que el corte sea
+ * VISIBLE y no silencioso. */
+export const LIMITE_LISTA = 200;
+
 interface UseResourceCrudOptions {
   /** Cache key de TanStack Query para este recurso (ej: "torneos"). */
   resourceKey: string;
@@ -49,7 +64,7 @@ export function useResourceCrud<
     enabled,
     queryFn: async () => {
       const { data, error } = await api.GET(basePath as never, {
-        params: { query: { limit: 200, ...listParams } },
+        params: { query: { limit: LIMITE_LISTA, ...listParams } },
       } as never);
       if (error) throw error;
       return data as TOut[];
@@ -108,5 +123,12 @@ export function useResourceCrud<
     onSuccess: invalidate,
   });
 
-  return { listQuery, create, update, softDelete, customAction };
+  /** La lista volvió justo llena, así que es muy probable que el servidor
+   * haya cortado y existan filas que el usuario no está viendo. Un falso
+   * positivo (exactamente 200 filas en total) es aceptable: el costo es un
+   * aviso de más; el del falso negativo era que la fila 201 no existiera
+   * para nadie, sin ningún indicio en pantalla. */
+  const truncado = (listQuery.data?.length ?? 0) === LIMITE_LISTA;
+
+  return { listQuery, truncado, create, update, softDelete, customAction };
 }

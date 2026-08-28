@@ -18,10 +18,13 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.disciplina import Disciplina
+from app.models.equipo import Equipo
 from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.jugador import Jugador
 from app.models.jugador_equipo import JugadorEquipo
 from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
+from app.models.modalidad import Modalidad
 from app.models.torneo import Torneo
 from app.models.torneo_grupo import TorneoGrupo
 
@@ -160,3 +163,25 @@ async def test_ec10_agencia_libre_deja_libre_si_no_hay_otro_torneo_activo(db_ses
     assert await _estado_perfil(db_session, perfil_id) == "Libre"
 
     await db_session.rollback()
+
+
+async def test_trigger_equipo_modalidad_rechaza_insert_directo(db_session: AsyncSession):
+    """fn_validar_equipo_modalidad (T8 de
+    equipos-disciplina-navegacion-plan.md): un INSERT directo a EQUIPOS con
+    una Modalidad que no pertenece a su Disciplina debe fallar en la BASE,
+    sin que EquipoService medie. El service ya lo rechaza con un mensaje
+    legible (D-Eng-15) — esto confirma la red de seguridad de abajo, la
+    que un script de seed o un psql no se puede saltar."""
+    ajedrez = Disciplina(nombre="Ajedrez T8")
+    db_session.add(ajedrez)
+    await db_session.flush()
+    blitz = Modalidad(disciplina_id=ajedrez.id, nombre="Blitz T8", tamano_equipo=1)
+    db_session.add(blitz)
+    await db_session.flush()
+
+    # Disciplina 1 = Fútbol (05_seed.sql), modalidad de Ajedrez: incoherente.
+    db_session.add(Equipo(nombre="Equipo Incoherente T8", disciplina_id=1, modalidad_id=blitz.id))
+
+    with pytest.raises(DBAPIError) as exc:
+        await db_session.flush()
+    assert "no pertenece" in str(exc.value).lower()

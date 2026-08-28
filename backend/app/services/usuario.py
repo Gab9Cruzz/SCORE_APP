@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import create_access_token, hash_password, verify_password
 from app.exceptions.errors import AuthError, ForbiddenError, NotFoundError
 from app.models.usuario import Usuario
+from app.repositories.acceso import AccesoRepository
 from app.repositories.usuario import UsuarioRepository
 from app.schemas.auth import Token
 from app.schemas.usuario import UsuarioCreate, UsuarioUpdate
@@ -11,6 +12,7 @@ from app.schemas.usuario import UsuarioCreate, UsuarioUpdate
 class UsuarioService:
     def __init__(self, session: AsyncSession):
         self.repo = UsuarioRepository(session)
+        self.acceso_repo = AccesoRepository(session)
 
     async def get(self, id_: int, usuario_actual: Usuario) -> Usuario:
         usuario = await self.repo.get_or_404(id_)
@@ -74,11 +76,95 @@ class UsuarioService:
             rol="AdminGeneral",
         )
 
-    async def login(self, username: str, password: str) -> Token:
+    async def login(
+        self,
+        username: str,
+        password: str,
+        ip: str | None = None,
+        user_agent: str | None = None,
+    ) -> Token:
+        """Autentica y deja constancia del intento en ACCESOS, salga bien o mal.
+
+        El orden de las operaciones importa y no es negociable: el registro
+        se COMMITEA antes de lanzar AuthError. `get_db()` (db/session.py)
+        hace `rollback()` cuando una excepción sube por el request, así que
+        anotar el fallo y lanzar sin commitear de por medio borraría
+        exactamente la fila que más interesa auditar. Un commit ya hecho no
+        lo revierte ese rollback posterior.
+
+        Si el INSERT de auditoría falla, el login falla con él (no se
+        atrapa la excepción). Es deliberado: un fallo escribiendo acá
+        significa que la base no está respondiendo, y en ese estado el
+        login tampoco podría verificar credenciales — tragarse el error
+        solo cambiaría un 500 honesto por un agujero silencioso en la
+        bitácora.
+
+        `ip` y `user_agent` los pasa el router desde el Request; son
+        opcionales para que un llamador interno (o un test que no le
+        importa) no tenga que fabricarlos.
+        """
         usuario = await self.repo.get_by_username(username)
+
         if usuario is None or not verify_password(password, usuario.password_hash):
+            # usuario_id queda en None cuando el username no existe; cuando
+            # existe pero la contraseña no coincide, SÍ se anota el id — es
+            # lo que permite ver "3 fallos seguidos contra la cuenta X".
+            # Hacia afuera el mensaje es el mismo en los dos casos, para no
+            # revelar qué usernames existen.
+            await self._registrar_acceso(
+                usuario_id=usuario.id if usuario else None,
+                username=username,
+                exitoso=False,
+                motivo="credenciales",
+                ip=ip,
+                user_agent=user_agent,
+            )
             raise AuthError("Usuario o contraseña incorrectos.")
+
         if usuario.estado != "Activo":
+            await self._registrar_acceso(
+                usuario_id=usuario.id,
+                username=username,
+                exitoso=False,
+                motivo="inactivo",
+                ip=ip,
+                user_agent=user_agent,
+            )
             raise AuthError("El usuario está inactivo.")
+
+        await self._registrar_acceso(
+            usuario_id=usuario.id,
+            username=usuario.username,
+            exitoso=True,
+            motivo=None,
+            ip=ip,
+            user_agent=user_agent,
+        )
         token = create_access_token(subject=usuario.username, rol=usuario.rol)
         return Token(access_token=token, rol=usuario.rol)
+
+    async def _registrar_acceso(
+        self,
+        usuario_id: int | None,
+        username: str,
+        exitoso: bool,
+        motivo: str | None,
+        ip: str | None,
+        user_agent: str | None,
+    ) -> None:
+        """Nunca recibe la contraseña — ver el docstring de models/acceso.py.
+
+        Los recortes son a lo que aguantan las columnas: `username` es el
+        texto que mandó el cliente (puede venir de cualquier largo, incluso
+        de alguien probando un buffer largo a propósito) y el `User-Agent`
+        de un navegador real ya roza los 200 caracteres. Truncar es
+        preferible a perder la fila entera por un error de largo, que es lo
+        que pasaría justo en el intento que valía la pena registrar."""
+        await self.acceso_repo.create(
+            usuario_id=usuario_id,
+            username=username[:50],
+            exitoso=exitoso,
+            motivo=motivo,
+            ip=ip[:45] if ip else None,
+            user_agent=user_agent[:255] if user_agent else None,
+        )
