@@ -8,7 +8,7 @@ interface TorneoRow {
   torneo_grupo_id: number;
   numero_edicion: number;
   disciplina_id: number;
-  modalidad_id: number | null;
+  modalidad_id: number;
   estado: string;
   fecha_inicio: string;
   fecha_fin: string;
@@ -25,7 +25,7 @@ export interface TorneoDashboardContext {
   torneoId: number;
   torneoGrupoId: number;
   disciplinaId: number;
-  modalidadId: number | null;
+  modalidadId: number;
   /** "{grupo.nombre} — Edición {n}" ya compuesto — lo reusan el modal
    * Agregar Equipo y RegistroLoteAdminPage para el texto de contexto
    * (torneos-admin-plan.md, Decision Audit Trail #3: nunca se persiste

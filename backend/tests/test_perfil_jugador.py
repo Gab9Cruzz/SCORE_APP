@@ -1,4 +1,7 @@
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.disciplina import Disciplina
 
 # 05_seed.sql: Carlos Pérez (jugador 1) está Activo en Tiburones FC
 # (inscripcion 1, torneo 1, Fútbol), dorsal 10, y anotó 1 gol (evento del
@@ -104,11 +107,18 @@ async def test_perfil_con_trayectoria_de_traspaso(client: AsyncClient, admin_gen
     assert futbol["equipos_activos"][0]["equipo"] == "Águilas del Sur"
 
 
-async def test_perfiles_de_dos_disciplinas_no_se_mezclan(client: AsyncClient, admin_general_headers: dict[str, str]):
-    resp = await client.post(
-        "/api/v1/disciplinas", json={"nombre": "Tenis Perfil", "tipo": "Individual"}, headers=admin_general_headers
-    )
-    disciplina_id = resp.json()["id"]
+async def test_perfiles_de_dos_disciplinas_no_se_mezclan(
+    client: AsyncClient, db_session: AsyncSession, admin_general_headers: dict[str, str]
+):
+    # El catálogo es de solo lectura (Decisión C1,
+    # ediciones-catalogo-disciplinas-plan.md) — ya no hay POST /disciplinas
+    # para armar una segunda disciplina de prueba, se inserta directo vía
+    # ORM (11_catalogo_disciplinas.sql no corre en la base de test).
+    disciplina = Disciplina(nombre="Tenis Perfil")
+    db_session.add(disciplina)
+    await db_session.commit()
+    await db_session.refresh(disciplina)
+    disciplina_id = disciplina.id
 
     resp = await client.post(
         "/api/v1/perfiles", json={"jugador_id": 1, "disciplina_id": disciplina_id}, headers=admin_general_headers

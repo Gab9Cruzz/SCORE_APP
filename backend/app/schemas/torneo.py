@@ -16,12 +16,13 @@ class TorneoBase(BaseModel):
     duplicar una fuente de verdad distinta. Sigue siendo un campo real
     (no se puede omitir en TorneoOut): un admin puede pisarlo a mano si
     quiere un nombre propio distinto al compuesto."""
-    disciplina_id: int
-    # NULL si Disciplina.Tipo='Equipo', obligatorio si es 'Individual' — lo
-    # exige fn_validar_torneo_modalidad (06_triggers.sql), no acá: cruza
-    # tablas, un validator de Pydantic no ve el Tipo de la disciplina sin
-    # una consulta a la base, y esta capa se queda deliberadamente sin
-    # acceso a la sesión (ver docstring de EventoPartidoService).
+    # Ambos opcionales acá — ver TorneoCreate.disciplina_modalidad_requeridas_si_grupo_nuevo:
+    # obligatorios solo al crear un TORNEO_GRUPO nuevo (torneo_grupo_nombre).
+    # En una edición nueva de un grupo existente (torneo_grupo_id) el
+    # service los IGNORA y toma los del grupo sin importar lo que mande el
+    # cliente acá (D-Eng-5/EC-26, ediciones-catalogo-disciplinas-plan.md) —
+    # la herencia real vive en TorneoService.create, no en este schema.
+    disciplina_id: int | None = None
     modalidad_id: int | None = None
     fecha_inicio: date
     fecha_fin: date
@@ -60,6 +61,19 @@ class TorneoCreate(TorneoBase):
             )
         return self
 
+    @model_validator(mode="after")
+    def disciplina_modalidad_requeridas_si_grupo_nuevo(self):
+        """Un TORNEO_GRUPO nuevo no tiene ninguna edición previa de la que
+        heredar Disciplina/Modalidad — acá sí son obligatorias (a
+        diferencia de una edición nueva vía torneo_grupo_id, donde el
+        service las ignora y las toma del grupo)."""
+        if self.torneo_grupo_nombre and (self.disciplina_id is None or self.modalidad_id is None):
+            raise ValueError(
+                "disciplina_id y modalidad_id son obligatorios al crear un torneo_grupo nuevo "
+                "(torneo_grupo_nombre) — una edición nueva de un grupo existente los hereda solo."
+            )
+        return self
+
 
 class TorneoUpdate(BaseModel):
     nombre: str | None = None
@@ -74,10 +88,14 @@ class TorneoOut(TorneoBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    # Override: TorneoBase lo declara opcional solo para la creación
-    # (ver su docstring) — una vez creado, TorneoService.create() siempre
-    # lo deja con un valor real (propio o compuesto), nunca None.
+    # Override: TorneoBase declara estos tres como opcionales solo para la
+    # creación (nombre se compone si falta; disciplina_id/modalidad_id se
+    # heredan del grupo en una edición nueva — ver sus docstrings). Una vez
+    # creado, Torneo siempre tiene un valor real en los tres, nunca None
+    # (disciplina_id/modalidad_id son NOT NULL a nivel de columna).
     nombre: str
+    disciplina_id: int
+    modalidad_id: int
     torneo_grupo_id: int
     numero_edicion: int
     estado: EstadoTorneo

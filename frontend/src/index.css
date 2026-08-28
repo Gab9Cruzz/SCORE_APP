@@ -109,6 +109,20 @@ main {
   margin-bottom: 1rem;
 }
 
+/* CatalogoDisciplinasPage (ediciones-catalogo-disciplinas-plan.md,
+ * Decisión C1) — una sección .card por disciplina, con su tabla de
+ * modalidades adentro. */
+.catalogo-disciplinas__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.catalogo-disciplinas__header h2 {
+  margin: 0;
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -500,6 +514,27 @@ td:first-child {
   border-radius: var(--radius);
   font-size: 0.8rem;
   cursor: pointer;
+}
+
+/* Disciplina/Modalidad heredadas del grupo en "Nueva edición"
+ * (ediciones-catalogo-disciplinas-plan.md, Fase 2 parte A) — texto plano
+ * a propósito, no un <select disabled>: ver el comentario en
+ * TorneosAdmin.tsx. */
+.datos-heredados {
+  display: flex;
+  gap: 1.5rem;
+  margin: 0.75rem 0 1.25rem;
+  max-width: 420px;
+}
+
+.datos-heredados dt {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.datos-heredados dd {
+  margin: 0;
+  font-weight: 600;
 }
 
 .resource-form {

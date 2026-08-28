@@ -1,4 +1,8 @@
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.disciplina import Disciplina
+from app.models.modalidad import Modalidad
 
 # 05_seed.sql: torneo 1 = Copa Ecotec 2026 (Fútbol, disciplina_id=1).
 # inscripcion 1 = Tiburones FC (Carlos Pérez dorsal10, Luis Andrade dorsal7,
@@ -16,6 +20,26 @@ def _fila(cedula: str, nombre: str, dorsal: int | None = None, correo: str | Non
         "correo_electronico": correo or f"{cedula}@example.com",
         "dorsal": dorsal,
     }
+
+
+async def _crear_disciplina_y_modalidad(
+    db_session: AsyncSession, nombre_disciplina: str, nombre_modalidad: str, tamano_equipo: int
+) -> tuple[int, int]:
+    # El catálogo es de solo lectura (Decisión C1,
+    # ediciones-catalogo-disciplinas-plan.md) — ya no hay POST
+    # /disciplinas ni /modalidades para armar un escenario de prueba, se
+    # inserta directo vía ORM (11_catalogo_disciplinas.sql no corre en la
+    # base de test).
+    disciplina = Disciplina(nombre=nombre_disciplina)
+    db_session.add(disciplina)
+    await db_session.flush()
+
+    modalidad = Modalidad(disciplina_id=disciplina.id, nombre=nombre_modalidad, tamano_equipo=tamano_equipo)
+    db_session.add(modalidad)
+    await db_session.commit()
+    await db_session.refresh(disciplina)
+    await db_session.refresh(modalidad)
+    return disciplina.id, modalidad.id
 
 
 async def test_ec1_cedula_duplicada_en_el_lote(client: AsyncClient, admin_general_headers: dict[str, str]):
@@ -77,19 +101,14 @@ async def test_ec3_jugador_existente_libre_se_reutiliza(client: AsyncClient, adm
     assert body["validos"][0]["jugador_id"] == jugador_id
 
 
-async def test_ec4_jugador_existente_nueva_disciplina(client: AsyncClient, admin_general_headers: dict[str, str]):
+async def test_ec4_jugador_existente_nueva_disciplina(
+    client: AsyncClient, db_session: AsyncSession, admin_general_headers: dict[str, str]
+):
     # Carlos Pérez (05_seed.sql) ya tiene perfil de Fútbol. Se lo registra
     # en una disciplina nueva (Tenis) — válido, perfil aislado por disciplina.
-    resp = await client.post(
-        "/api/v1/disciplinas", json={"nombre": "Tenis EC4", "tipo": "Individual"}, headers=admin_general_headers
+    disciplina_id, modalidad_id = await _crear_disciplina_y_modalidad(
+        db_session, "Tenis EC4", "Individual", tamano_equipo=1
     )
-    disciplina_id = resp.json()["id"]
-    resp = await client.post(
-        "/api/v1/modalidades",
-        json={"disciplina_id": disciplina_id, "nombre": "Individual", "tamano_equipo": 1},
-        headers=admin_general_headers,
-    )
-    modalidad_id = resp.json()["id"]
     resp = await client.post(
         "/api/v1/torneos",
         json={
@@ -126,17 +145,16 @@ async def test_ec4_jugador_existente_nueva_disciplina(client: AsyncClient, admin
     assert len(body["validos"]) == 1
 
 
-async def test_ec6_capacidad_de_la_modalidad(client: AsyncClient, admin_general_headers: dict[str, str]):
-    resp = await client.post(
-        "/api/v1/disciplinas", json={"nombre": "Padel EC6", "tipo": "Individual"}, headers=admin_general_headers
+async def test_ec6_capacidad_de_la_modalidad(
+    client: AsyncClient, db_session: AsyncSession, admin_general_headers: dict[str, str]
+):
+    # tamano_equipo=1 (no >2): el tope de cupo de RegistroLoteService solo
+    # aplica a Individual/Pareja (ver el comentario grande en
+    # services/registro_lote.py) — de ahí que EC-6 use un tamaño chico, no
+    # uno de disciplina de equipo real.
+    disciplina_id, modalidad_id = await _crear_disciplina_y_modalidad(
+        db_session, "Padel EC6", "Dobles", tamano_equipo=1
     )
-    disciplina_id = resp.json()["id"]
-    resp = await client.post(
-        "/api/v1/modalidades",
-        json={"disciplina_id": disciplina_id, "nombre": "Dobles", "tamano_equipo": 1},
-        headers=admin_general_headers,
-    )
-    modalidad_id = resp.json()["id"]
     resp = await client.post(
         "/api/v1/torneos",
         json={

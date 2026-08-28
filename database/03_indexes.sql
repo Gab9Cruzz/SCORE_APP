@@ -21,6 +21,7 @@ CREATE INDEX idx_perfil_disciplina_disciplina ON JUGADOR_PERFIL_DISCIPLINA(Disci
 
 -- INSCRIPCIONES_TORNEO
 CREATE INDEX idx_inscripciones_equipo ON INSCRIPCIONES_TORNEO(Equipo_ID);
+CREATE INDEX idx_inscripciones_jugador_perfil ON INSCRIPCIONES_TORNEO(Jugador_Perfil_ID);
 
 -- JUGADOR_EQUIPO
 CREATE INDEX idx_jugador_equipo_perfil ON JUGADOR_EQUIPO(Jugador_Perfil_ID);

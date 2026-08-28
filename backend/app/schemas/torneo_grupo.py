@@ -31,7 +31,9 @@ class EdicionResumen(BaseModel):
     id: int
     numero_edicion: int
     disciplina_id: int
-    modalidad_id: int | None
+    # Siempre obligatorio desde el catálogo unificado (Decisión A1,
+    # ediciones-catalogo-disciplinas-plan.md) — ver Torneo.modalidad_id.
+    modalidad_id: int
     estado: str
     fecha_inicio: date
     fecha_fin: date

@@ -5,9 +5,13 @@ from app.db.database import Base
 
 
 class Modalidad(Base):
-    """Modalidad de una disciplina individual (Individual, Dobles, ...).
-    tamano_equipo fija cuántos jugadores admite un "equipo" en esa
-    modalidad (1 = individual, 2 = dobles/pádel) — equipos-jugadores-plan.md.
+    """Modalidad de una disciplina (Fútbol 11, Tenis Singles, Voleibol
+    Playa 2x2, ...). tamano_equipo es la única fuente de verdad de cómo se
+    inscribe (docs/plans/ediciones-catalogo-disciplinas-plan.md, Decisión
+    A1): =1 → Individual (Jugador directo, sin Equipo), =2 → Pareja
+    (Equipo autonombrado), >2 → Conjunto (Equipo, nombre libre). Toda
+    disciplina tiene 1+ modalidades siempre, incluidas las que antes eran
+    Tipo='Equipo' (Fútbol: "Fútbol 11", "Fútbol 5"...).
 
     Sin TimestampMixin, igual que Disciplina — ver ese modelo.
     """

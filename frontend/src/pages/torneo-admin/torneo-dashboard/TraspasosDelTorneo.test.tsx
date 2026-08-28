@@ -11,7 +11,7 @@ const CONTEXTO: TorneoDashboardContext = {
   torneoId: 20,
   torneoGrupoId: 7,
   disciplinaId: 1,
-  modalidadId: null,
+  modalidadId: 1,
   torneoContexto: "Liga Relámpago — Edición 2",
 };
 

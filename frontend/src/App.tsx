@@ -7,10 +7,9 @@ import { LoginPage } from "./pages/Login";
 import { PartidoEnVivoPage } from "./pages/PartidoEnVivo";
 import { MisPartidosPage } from "./pages/arbitro/MisPartidos";
 import { UsuariosAdminPage } from "./pages/admin/UsuariosAdmin";
-import { DisciplinasAdminPage } from "./pages/torneo-admin/DisciplinasAdmin";
+import { CatalogoDisciplinasPage } from "./pages/torneo-admin/CatalogoDisciplinas";
 import { EquiposAdminPage } from "./pages/torneo-admin/EquiposAdmin";
 import { JugadoresAdminPage } from "./pages/torneo-admin/JugadoresAdmin";
-import { ModalidadesAdminPage } from "./pages/torneo-admin/ModalidadesAdmin";
 import { PerfilJugadorAdminPage } from "./pages/torneo-admin/PerfilJugadorAdmin";
 import { RegistroLoteAdminPage } from "./pages/torneo-admin/RegistroLoteAdmin";
 import { TorneoAdminLayout } from "./pages/torneo-admin/TorneoAdminLayout";
@@ -93,8 +92,7 @@ export function App() {
               <Route path="partidos" element={<PartidosDelTorneoPage />} />
               <Route path="estadisticas" element={<EstadisticasDelTorneoPage />} />
             </Route>
-            <Route path="disciplinas" element={<DisciplinasAdminPage />} />
-            <Route path="modalidades" element={<ModalidadesAdminPage />} />
+            <Route path="disciplinas" element={<CatalogoDisciplinasPage />} />
             <Route path="equipos" element={<EquiposAdminPage />} />
             <Route path="jugadores" element={<JugadoresAdminPage />} />
             <Route path="jugadores/:jugadorId/perfil" element={<PerfilJugadorAdminPage />} />

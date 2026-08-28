@@ -11,20 +11,23 @@
 
 -- ------------------------------------------------------------
 -- Catálogo de disciplinas y modalidades (docs/plans/equipos-jugadores-plan.md,
--- Fase 3 — Eng Review).
+-- Fase 3 — Eng Review; catálogo unificado en
+-- docs/plans/ediciones-catalogo-disciplinas-plan.md, Decisión A1).
 --
--- DISCIPLINA reemplaza a TORNEO.Disciplina (antes texto libre). Tipo
--- distingue disciplinas de equipo (Fútbol: sin modalidad) de individuales
--- (Tenis, Pádel: requieren MODALIDAD en el torneo — ver TORNEO abajo y
--- fn_validar_torneo_modalidad en 06_triggers.sql).
--- MODALIDAD.Tamano_Equipo fija cuántos jugadores admite un "equipo" en esa
--- modalidad (1 = individual, 2 = dobles/pádel) — EC-6 del plan bloquea el
--- exceso en el service layer (P2), no acá.
+-- DISCIPLINA reemplaza a TORNEO.Disciplina (antes texto libre). Ya NO
+-- tiene columna Tipo: toda disciplina tiene 1+ filas en MODALIDAD siempre
+-- (incluso Fútbol: "Fútbol 11", "Fútbol 5"...) y MODALIDAD.Tamano_Equipo
+-- es la única fuente de verdad de cómo se inscribe (1 = individual, sin
+-- Equipo; 2 = pareja, Equipo autonombrado; >2 = conjunto, Equipo con
+-- nombre libre) — ver INSCRIPCIONES_TORNEO abajo y
+-- fn_validar_torneo_modalidad en 06_triggers.sql. El Tipo binario
+-- ('Equipo'/'Individual') que existía antes no alcanzaba para modelar una
+-- disciplina con modalidades de tamaños distintos (ej. Voleibol Pista 6x6
+-- vs Playa 2x2) — ver Decision Audit Trail #1 del plan de catálogo.
 -- ------------------------------------------------------------
 CREATE TABLE DISCIPLINA (
     ID SERIAL PRIMARY KEY,
     Nombre VARCHAR(50) NOT NULL,
-    Tipo VARCHAR(20) NOT NULL,
     Estado VARCHAR(20) DEFAULT 'Activo'
 );
 
@@ -53,10 +56,12 @@ CREATE TABLE TORNEO (
     ID SERIAL PRIMARY KEY,
     Nombre VARCHAR(100) NOT NULL,
     Disciplina_ID INT NOT NULL,
-    -- NULL si DISCIPLINA.Tipo='Equipo', obligatorio si Tipo='Individual'.
-    -- No se puede expresar con un CHECK simple (cruza tablas) — lo valida
+    -- Siempre obligatorio (catálogo unificado — Decisión A1): toda
+    -- disciplina tiene 1+ modalidades, así que todo torneo tiene una.
+    -- Que la modalidad indicada pertenezca a la disciplina indicada no se
+    -- puede expresar con un CHECK simple (cruza tablas) — lo valida
     -- fn_validar_torneo_modalidad en 06_triggers.sql.
-    Modalidad_ID INT,
+    Modalidad_ID INT NOT NULL,
     -- Cada TORNEO es UNA edición de su TORNEO_GRUPO. Numero_Edicion es
     -- único por grupo (unique_edicion_por_grupo, 02_constraints.sql) — lo
     -- asigna el service layer como MAX(Numero_Edicion del grupo) + 1 al
@@ -109,23 +114,35 @@ CREATE TABLE JUGADOR_PERFIL_DISCIPLINA (
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Ancla de una inscripción a un torneo — de un Equipo (Tamano_Equipo>=2)
+-- o de un Jugador directo (Tamano_Equipo=1), nunca los dos ni ninguno
+-- (chk_inscripcion_exactamente_uno, 02_constraints.sql). Antes de
+-- docs/plans/ediciones-catalogo-disciplinas-plan.md (Decisión B1) toda
+-- inscripción exigía un Equipo_ID, incluso en disciplinas individuales
+-- (se autocreaba un "equipo" fantasma con el nombre del jugador). Ahora
+-- una disciplina individual referencia Jugador_Perfil_ID y no crea
+-- ninguna fila en EQUIPOS.
 CREATE TABLE INSCRIPCIONES_TORNEO (
     ID SERIAL PRIMARY KEY,
     Torneo_ID INT NOT NULL,
-    Equipo_ID INT NOT NULL,
+    Equipo_ID INT,
+    Jugador_Perfil_ID INT,
     Fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Estado VARCHAR(20) DEFAULT 'Inscrito'
 );
 
--- Membresía de un perfil de disciplina en el roster de un equipo para UN
--- torneo puntual. INSCRIPCIONES_TORNEO ya modela "equipo-en-este-torneo"
--- (Torneo_ID + Equipo_ID, único por par) — es el ancla del roster, por eso
--- JUGADOR_EQUIPO no repite Torneo_ID/Equipo_ID, los hereda de ahí. La
--- exclusividad "un jugador, un equipo, por torneo" la impone el trigger
--- fn_validar_exclusividad_torneo (06_triggers.sql), no un UNIQUE plano,
--- porque Torneo_ID no vive directamente en esta tabla.
+-- Membresía de un perfil de disciplina en el roster de un equipo (o, en
+-- disciplinas individuales, en su propia inscripción-sin-Equipo) para UN
+-- torneo puntual. INSCRIPCIONES_TORNEO ya modela "equipo (o jugador)-en-
+-- este-torneo" — es el ancla del roster, por eso JUGADOR_EQUIPO no repite
+-- Torneo_ID/Equipo_ID, los hereda de ahí. Una inscripción individual
+-- también genera una fila acá (Dorsal=NULL) para que la exclusividad siga
+-- funcionando sin reescribirse — ver Decisión B1 del plan de catálogo. La
+-- exclusividad "un jugador, un equipo/inscripción, por torneo" la impone
+-- el trigger fn_validar_exclusividad_torneo (06_triggers.sql), no un
+-- UNIQUE plano, porque Torneo_ID no vive directamente en esta tabla.
 CREATE TABLE JUGADOR_EQUIPO (
     ID SERIAL PRIMARY KEY,
     Jugador_Perfil_ID INT NOT NULL,

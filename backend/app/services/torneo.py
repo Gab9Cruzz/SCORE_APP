@@ -31,6 +31,8 @@ class TorneoService:
         ya garantiza que vino uno solo de los dos):
 
         - `torneo_grupo_nombre` -> crea un TORNEO_GRUPO nuevo, Edición 1.
+          disciplina_id/modalidad_id vienen del cliente (obligatorios acá,
+          TorneoCreate.disciplina_modalidad_requeridas_si_grupo_nuevo).
         - `torneo_grupo_id` -> edición nueva de un grupo YA existente;
           numero_edicion se calcula bajo un advisory lock (EC-21: dos
           admins creando "Edición 3" del mismo grupo a la vez no deben
@@ -38,6 +40,13 @@ class TorneoService:
           sin enterarse de por qué — mismo mecanismo que
           JugadorEquipoRepository.lock_exclusividad_torneo, serializa la
           carrera en vez de reaccionar a ella después del INSERT fallido).
+          disciplina_id/modalidad_id se HEREDAN de la edición más reciente
+          del grupo — lo que mande el cliente en esos dos campos se
+          descarta sin más (D-Eng-5/EC-26 de
+          ediciones-catalogo-disciplinas-plan.md): un "Nueva edición" con
+          disciplina distinta a la del grupo no es un error a rechazar,
+          es un campo que ya no se le hace caso al cliente, ni siquiera
+          vía un curl directo.
         """
         datos = data.model_dump(exclude={"torneo_grupo_nombre"})
 
@@ -51,6 +60,12 @@ class TorneoService:
             grupo = await self.grupo_repo.get_or_404(data.torneo_grupo_id)  # 404 claro si el id no existe
             await self.grupo_repo.lock_numero_edicion(data.torneo_grupo_id)
             datos["numero_edicion"] = await self.grupo_repo.siguiente_numero_edicion(data.torneo_grupo_id)
+
+            ediciones_previas = await self.repo.listar_ediciones_del_grupo(data.torneo_grupo_id)
+            if ediciones_previas:
+                edicion_referencia = ediciones_previas[0]  # la más reciente
+                datos["disciplina_id"] = edicion_referencia.disciplina_id
+                datos["modalidad_id"] = edicion_referencia.modalidad_id
 
         # Nombre compuesto si el cliente no mandó uno propio (Decision
         # Audit Trail #3 del plan) — así Torneo.nombre nunca queda vacío

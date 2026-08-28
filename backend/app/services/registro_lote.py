@@ -39,11 +39,27 @@ class RegistroLoteService:
         torneo = await self.torneo_repo.get_or_404(inscripcion.torneo_id)
         disciplina_id = torneo.disciplina_id
 
+        # tamano_equipo <= 2 (Pareja): tope exacto, sin banca — dos filas y
+        # se acabó (ediciones-catalogo-disciplinas-plan.md, Fase 2 parte B:
+        # "sin botón + agregar fila, la modalidad fija el tamaño"). > 2
+        # (Conjunto, ej. Fútbol 11): tamano_equipo es cuántos juegan A LA
+        # VEZ, no el tamaño máximo de la plantilla — un plantel real lleva
+        # suplentes. Desde que Modalidad_ID pasó a obligatorio para TODO
+        # torneo (catálogo unificado, Decisión A1), este método ve una
+        # Modalidad real incluso para disciplinas de equipo que antes
+        # nunca la tenían (Tipo='Equipo' => modalidad_id NULL => sin tope
+        # acá) — sin este corte, registrar un plantel de fútbol de más de
+        # 11 jugadores empezaría a rechazarse, una regresión real que el
+        # catálogo unificado no pedía introducir. Individual
+        # (tamano_equipo=1) ya ni siquiera llega a este método: desde la
+        # Decisión B1 se inscribe directo por POST /inscripciones, sin
+        # pasar por Registro por Lote / una fila en EQUIPOS.
         cupo_restante: int | None = None
         if torneo.modalidad_id is not None:
             modalidad = await self.modalidad_repo.get_or_404(torneo.modalidad_id)
-            ya_activos = await self.jugador_equipo_repo.contar_activos_en_inscripcion(inscripcion_torneo_id)
-            cupo_restante = modalidad.tamano_equipo - ya_activos
+            if modalidad.tamano_equipo <= 2:
+                ya_activos = await self.jugador_equipo_repo.contar_activos_en_inscripcion(inscripcion_torneo_id)
+                cupo_restante = modalidad.tamano_equipo - ya_activos
 
         # Normaliza espacios antes de cualquier comparación: la identidad es
         # la cédula (EC-3/EC-4), y unique_jugador_cedula compara el string
@@ -153,8 +169,8 @@ class RegistroLoteService:
                     )
                     continue
 
-            # EC-6: cupo de la modalidad (solo disciplinas individuales con
-            # Modalidad.tamano_equipo).
+            # EC-6: cupo de la modalidad (solo Pareja, tamano_equipo <= 2 —
+            # ver el comentario grande más arriba).
             if cupo_restante is not None and cupo_restante <= 0:
                 invalidos.append(
                     FilaInvalida(

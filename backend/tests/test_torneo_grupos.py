@@ -18,6 +18,7 @@ async def test_renombrar_torneo_grupo(client: AsyncClient, admin_general_headers
         json={
             "nombre": "Torneo Original Ed. 1",
             "disciplina_id": 1,
+            "modalidad_id": 1,  # "Fútbol 11" (05_seed.sql)
             "torneo_grupo_nombre": "Nombre Original",
             "fecha_inicio": "2026-05-01",
             "fecha_fin": "2026-06-01",
@@ -64,6 +65,7 @@ async def test_ec23_jugador_activo_en_dos_ediciones_del_mismo_grupo_simultaneame
         "/api/v1/torneos",
         json={
             "disciplina_id": 1,  # Fútbol (05_seed.sql)
+            "modalidad_id": 1,  # "Fútbol 11" (05_seed.sql)
             "torneo_grupo_nombre": "Liga Relámpago EC23",
             "fecha_inicio": "2026-03-01",
             "fecha_fin": "2026-05-15",
@@ -76,7 +78,6 @@ async def test_ec23_jugador_activo_en_dos_ediciones_del_mismo_grupo_simultaneame
     edicion2 = await client.post(
         "/api/v1/torneos",
         json={
-            "disciplina_id": 1,
             "torneo_grupo_id": grupo_id,
             "fecha_inicio": "2026-04-01",
             "fecha_fin": "2026-06-30",

@@ -10,9 +10,12 @@
 -- ============================================================
 
 -- DISCIPLINA
+-- chk_disciplina_tipo se eliminó junto con la columna Tipo (catálogo
+-- unificado bajo Modalidad.Tamano_Equipo — Decisión A1). unique_disciplina_nombre
+-- también sostiene el ON CONFLICT (Nombre) DO NOTHING del seed idempotente
+-- de 11_catalogo_disciplinas.sql.
 ALTER TABLE DISCIPLINA
     ADD CONSTRAINT unique_disciplina_nombre UNIQUE (Nombre),
-    ADD CONSTRAINT chk_disciplina_tipo CHECK (Tipo IN ('Equipo', 'Individual')),
     ADD CONSTRAINT chk_disciplina_estado CHECK (Estado IN ('Activo', 'Inactivo'));
 
 -- MODALIDAD
@@ -55,11 +58,25 @@ ALTER TABLE JUGADOR_PERFIL_DISCIPLINA
     ADD CONSTRAINT unique_perfil_por_disciplina UNIQUE (Jugador_ID, Disciplina_ID);
 
 -- INSCRIPCIONES_TORNEO
+-- Equipo_ID/Jugador_Perfil_ID: exactamente uno de los dos, nunca ambos ni
+-- ninguno (Decisión B1) — el service layer decide cuál setear según
+-- Modalidad.Tamano_Equipo del torneo (=1 → Jugador_Perfil_ID; >=2 →
+-- Equipo_ID). unique_inscripcion/unique_inscripcion_individual: Postgres
+-- no compara NULLs como iguales en un UNIQUE, así que ambos conviven sin
+-- chocar entre sí — cada uno cierra la duplicación dentro de su propio
+-- camino (mismo Equipo dos veces / mismo Jugador dos veces en el mismo
+-- torneo).
 ALTER TABLE INSCRIPCIONES_TORNEO
     ADD CONSTRAINT fk_inscripciones_torneo FOREIGN KEY (Torneo_ID) REFERENCES TORNEO(ID) ON DELETE CASCADE,
     ADD CONSTRAINT fk_inscripciones_equipo FOREIGN KEY (Equipo_ID) REFERENCES EQUIPOS(ID) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_inscripciones_jugador_perfil FOREIGN KEY (Jugador_Perfil_ID) REFERENCES JUGADOR_PERFIL_DISCIPLINA(ID) ON DELETE CASCADE,
     ADD CONSTRAINT chk_inscripciones_estado CHECK (Estado IN ('Inscrito', 'Cancelado', 'Confirmado')),
-    ADD CONSTRAINT unique_inscripcion UNIQUE (Torneo_ID, Equipo_ID);
+    ADD CONSTRAINT chk_inscripcion_exactamente_uno CHECK (
+        (Equipo_ID IS NOT NULL AND Jugador_Perfil_ID IS NULL) OR
+        (Equipo_ID IS NULL AND Jugador_Perfil_ID IS NOT NULL)
+    ),
+    ADD CONSTRAINT unique_inscripcion UNIQUE (Torneo_ID, Equipo_ID),
+    ADD CONSTRAINT unique_inscripcion_individual UNIQUE (Torneo_ID, Jugador_Perfil_ID);
 
 -- JUGADOR_EQUIPO
 -- unique_jugador_equipo: ya no es (JUGADOR_ID, EQUIPO_ID) sino (perfil,

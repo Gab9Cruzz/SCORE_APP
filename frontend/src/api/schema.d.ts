@@ -45,11 +45,37 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar Disciplinas */
+        /**
+         * Listar Disciplinas
+         * @description Lista plana. El selector de "Torneo nuevo" filtra `estado=Activo`
+         *     (D-Eng-7) — una disciplina desactivada deja de ofrecerse para torneos
+         *     NUEVOS sin afectar a los que ya la usan (EC-31).
+         */
         get: operations["listar_disciplinas_api_v1_disciplinas_get"];
         put?: never;
-        /** Crear Disciplina */
-        post: operations["crear_disciplina_api_v1_disciplinas_post"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/disciplinas/con-modalidades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Disciplinas Con Modalidades
+         * @description Vista jerárquica para CatalogoDisciplinasPage: cada disciplina con su
+         *     roster de modalidades en una sola llamada, en vez de que el cliente
+         *     arme el árbol cruzando /disciplinas y /modalidades por separado.
+         */
+        get: operations["listar_disciplinas_con_modalidades_api_v1_disciplinas_con_modalidades_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -67,12 +93,15 @@ export interface paths {
         get: operations["obtener_disciplina_api_v1_disciplinas__disciplina_id__get"];
         put?: never;
         post?: never;
-        /** Dar De Baja Disciplina */
-        delete: operations["dar_de_baja_disciplina_api_v1_disciplinas__disciplina_id__delete"];
+        delete?: never;
         options?: never;
         head?: never;
-        /** Actualizar Disciplina */
-        patch: operations["actualizar_disciplina_api_v1_disciplinas__disciplina_id__patch"];
+        /**
+         * Actualizar Estado Disciplina
+         * @description Único cambio permitido sobre el catálogo: activar/desactivar
+         *     (DisciplinaUpdate solo acepta `estado`, ver ese schema).
+         */
+        patch: operations["actualizar_estado_disciplina_api_v1_disciplinas__disciplina_id__patch"];
         trace?: never;
     };
     "/api/v1/modalidades": {
@@ -85,8 +114,7 @@ export interface paths {
         /** Listar Modalidades */
         get: operations["listar_modalidades_api_v1_modalidades_get"];
         put?: never;
-        /** Crear Modalidad */
-        post: operations["crear_modalidad_api_v1_modalidades_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -104,12 +132,15 @@ export interface paths {
         get: operations["obtener_modalidad_api_v1_modalidades__modalidad_id__get"];
         put?: never;
         post?: never;
-        /** Dar De Baja Modalidad */
-        delete: operations["dar_de_baja_modalidad_api_v1_modalidades__modalidad_id__delete"];
+        delete?: never;
         options?: never;
         head?: never;
-        /** Actualizar Modalidad */
-        patch: operations["actualizar_modalidad_api_v1_modalidades__modalidad_id__patch"];
+        /**
+         * Actualizar Estado Modalidad
+         * @description Único cambio permitido sobre el catálogo: activar/desactivar
+         *     (ModalidadUpdate solo acepta `estado`, ver ese schema).
+         */
+        patch: operations["actualizar_estado_modalidad_api_v1_modalidades__modalidad_id__patch"];
         trace?: never;
     };
     "/api/v1/torneos": {
@@ -450,11 +481,15 @@ export interface paths {
         get: operations["listar_inscripciones_api_v1_inscripciones_get"];
         put?: never;
         /**
-         * Inscribir Equipo
-         * @description unique_inscripcion (02_constraints.sql) evita inscribir el mismo
-         *     equipo dos veces en el mismo torneo (409).
+         * Crear Inscripcion
+         * @description Dos caminos según la Modalidad del torneo (Decisión B1,
+         *     ediciones-catalogo-disciplinas-plan.md) — ver InscripcionTorneoCreate:
+         *     `equipo_id` (Pareja/Conjunto) o `jugador_cedula`/`jugador_nombre`/
+         *     `jugador_correo_electronico` (Individual, sin fila en EQUIPOS).
+         *     unique_inscripcion/unique_inscripcion_individual (02_constraints.sql)
+         *     evitan duplicados en cada camino (409).
          */
-        post: operations["inscribir_equipo_api_v1_inscripciones_post"];
+        post: operations["crear_inscripcion_api_v1_inscripciones_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -904,41 +939,54 @@ export interface components {
             /** Rechazados */
             rechazados: components["schemas"]["FilaInvalida"][];
         };
-        /** DisciplinaCreate */
-        DisciplinaCreate: {
+        /**
+         * DisciplinaConModalidadesOut
+         * @description Vista jerárquica para CatalogoDisciplinasPage (D-Eng arquitectura):
+         *     una sola llamada trae la disciplina con su roster de modalidades, en
+         *     vez de que el cliente arme el árbol cruzando dos listas planas.
+         */
+        DisciplinaConModalidadesOut: {
+            /** Id */
+            id: number;
             /** Nombre */
             nombre: string;
             /**
-             * Tipo
+             * Estado
              * @enum {string}
              */
-            tipo: "Equipo" | "Individual";
+            estado: "Activo" | "Inactivo";
+            /**
+             * Modalidades
+             * @default []
+             */
+            modalidades: components["schemas"]["ModalidadOut"][];
         };
         /** DisciplinaOut */
         DisciplinaOut: {
-            /** Nombre */
-            nombre: string;
-            /**
-             * Tipo
-             * @enum {string}
-             */
-            tipo: "Equipo" | "Individual";
             /** Id */
             id: number;
+            /** Nombre */
+            nombre: string;
             /**
              * Estado
              * @enum {string}
              */
             estado: "Activo" | "Inactivo";
         };
-        /** DisciplinaUpdate */
+        /**
+         * DisciplinaUpdate
+         * @description Catálogo de solo lectura + toggle de Estado (Decisión C1,
+         *     ediciones-catalogo-disciplinas-plan.md) — no se acepta nombre: el
+         *     catálogo es inmutable, un admin solo puede activar/desactivar una fila
+         *     ya cargada por 11_catalogo_disciplinas.sql. `estado` es obligatorio (no
+         *     hay otro campo que un PATCH pueda mandar).
+         */
         DisciplinaUpdate: {
-            /** Nombre */
-            nombre?: string | null;
-            /** Tipo */
-            tipo?: ("Equipo" | "Individual") | null;
-            /** Estado */
-            estado?: ("Activo" | "Inactivo") | null;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Activo" | "Inactivo";
         };
         /**
          * EdicionResumen
@@ -1136,12 +1184,28 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** InscripcionTorneoCreate */
+        /**
+         * InscripcionTorneoCreate
+         * @description Exactamente uno de los dos caminos (ediciones-catalogo-disciplinas-plan.md,
+         *     Decisión B1):
+         *     - `equipo_id`: Pareja/Conjunto (Modalidad.tamano_equipo >= 2) — un
+         *       equipo ya existente se inscribe tal cual (sin cambios de acá).
+         *     - `jugador_cedula`/`jugador_nombre`/`jugador_correo_electronico`:
+         *       Individual (Modalidad.tamano_equipo == 1) — resuelve-o-crea el
+         *       Jugador + su perfil de disciplina (mismo camino que
+         *       RegistroLoteService, D-Eng-6) y NO crea ninguna fila en EQUIPOS.
+         */
         InscripcionTorneoCreate: {
             /** Torneo Id */
             torneo_id: number;
             /** Equipo Id */
-            equipo_id: number;
+            equipo_id?: number | null;
+            /** Jugador Cedula */
+            jugador_cedula?: string | null;
+            /** Jugador Nombre */
+            jugador_nombre?: string | null;
+            /** Jugador Correo Electronico */
+            jugador_correo_electronico?: string | null;
         };
         /** InscripcionTorneoOut */
         InscripcionTorneoOut: {
@@ -1150,7 +1214,9 @@ export interface components {
             /** Torneo Id */
             torneo_id: number;
             /** Equipo Id */
-            equipo_id: number;
+            equipo_id: number | null;
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number | null;
             /**
              * Estado
              * @enum {string}
@@ -1315,39 +1381,35 @@ export interface components {
             /** Estado */
             estado?: ("Activo" | "Inactivo") | null;
         };
-        /** ModalidadCreate */
-        ModalidadCreate: {
-            /** Disciplina Id */
-            disciplina_id: number;
-            /** Nombre */
-            nombre: string;
-            /** Tamano Equipo */
-            tamano_equipo: number;
-        };
         /** ModalidadOut */
         ModalidadOut: {
+            /** Id */
+            id: number;
             /** Disciplina Id */
             disciplina_id: number;
             /** Nombre */
             nombre: string;
             /** Tamano Equipo */
             tamano_equipo: number;
-            /** Id */
-            id: number;
             /**
              * Estado
              * @enum {string}
              */
             estado: "Activo" | "Inactivo";
         };
-        /** ModalidadUpdate */
+        /**
+         * ModalidadUpdate
+         * @description Catálogo de solo lectura + toggle de Estado (Decisión C1,
+         *     ediciones-catalogo-disciplinas-plan.md) — no se acepta nombre ni
+         *     tamano_equipo: el catálogo es inmutable, un admin solo puede
+         *     activar/desactivar una fila ya cargada por 11_catalogo_disciplinas.sql.
+         */
         ModalidadUpdate: {
-            /** Nombre */
-            nombre?: string | null;
-            /** Tamano Equipo */
-            tamano_equipo?: number | null;
-            /** Estado */
-            estado?: ("Activo" | "Inactivo") | null;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Activo" | "Inactivo";
         };
         /** PartidoCreate */
         PartidoCreate: {
@@ -1593,7 +1655,7 @@ export interface components {
             /** Nombre */
             nombre?: string | null;
             /** Disciplina Id */
-            disciplina_id: number;
+            disciplina_id?: number | null;
             /** Modalidad Id */
             modalidad_id?: number | null;
             /**
@@ -1669,7 +1731,7 @@ export interface components {
             /** Disciplina Id */
             disciplina_id: number;
             /** Modalidad Id */
-            modalidad_id?: number | null;
+            modalidad_id: number;
             /**
              * Fecha Inicio
              * Format: date
@@ -1927,26 +1989,24 @@ export interface operations {
             };
         };
     };
-    crear_disciplina_api_v1_disciplinas_post: {
+    listar_disciplinas_con_modalidades_api_v1_disciplinas_con_modalidades_get: {
         parameters: {
-            query?: never;
+            query?: {
+                estado?: ("Activo" | "Inactivo") | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DisciplinaCreate"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DisciplinaOut"];
+                    "application/json": components["schemas"]["DisciplinaConModalidadesOut"][];
                 };
             };
             /** @description Validation Error */
@@ -1991,38 +2051,7 @@ export interface operations {
             };
         };
     };
-    dar_de_baja_disciplina_api_v1_disciplinas__disciplina_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                disciplina_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DisciplinaOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    actualizar_disciplina_api_v1_disciplinas__disciplina_id__patch: {
+    actualizar_estado_disciplina_api_v1_disciplinas__disciplina_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -2091,39 +2120,6 @@ export interface operations {
             };
         };
     };
-    crear_modalidad_api_v1_modalidades_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ModalidadCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ModalidadOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     obtener_modalidad_api_v1_modalidades__modalidad_id__get: {
         parameters: {
             query?: never;
@@ -2155,38 +2151,7 @@ export interface operations {
             };
         };
     };
-    dar_de_baja_modalidad_api_v1_modalidades__modalidad_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                modalidad_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ModalidadOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    actualizar_modalidad_api_v1_modalidades__modalidad_id__patch: {
+    actualizar_estado_modalidad_api_v1_modalidades__modalidad_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -3321,7 +3286,7 @@ export interface operations {
             };
         };
     };
-    inscribir_equipo_api_v1_inscripciones_post: {
+    crear_inscripcion_api_v1_inscripciones_post: {
         parameters: {
             query?: never;
             header?: never;

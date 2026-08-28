@@ -110,6 +110,7 @@ async def test_ec10_agencia_libre_no_afecta_membresia_activa_en_otro_torneo(db_s
     torneo_2 = Torneo(
         nombre="Copa Paralela 2026",
         disciplina_id=1,
+        modalidad_id=1,  # "Fútbol 11" (05_seed.sql) — obligatorio, catálogo unificado
         torneo_grupo_id=grupo_2.id,
         fecha_inicio=date(2026, 2, 1),
         fecha_fin=date(2026, 4, 1),

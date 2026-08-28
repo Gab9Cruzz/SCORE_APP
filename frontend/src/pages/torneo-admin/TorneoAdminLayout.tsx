@@ -3,8 +3,7 @@ import { RequireRole } from "../../components/RequireRole";
 
 const PESTANIAS = [
   { to: "torneos", label: "Torneos" },
-  { to: "disciplinas", label: "Disciplinas" },
-  { to: "modalidades", label: "Modalidades" },
+  { to: "disciplinas", label: "Catálogo" },
   { to: "equipos", label: "Equipos" },
   { to: "jugadores", label: "Jugadores" },
 ];
@@ -19,8 +18,9 @@ const PESTANIAS = [
  * dashboard scoped (`torneos/:torneoId/*`, ver TorneoDashboard.tsx),
  * alcanzable solo con "Ver Torneo" desde la tarjeta de Torneos — mismo
  * criterio que jugadores/:jugadorId/perfil, un link, no un tab acá.
- * Disciplinas/Modalidades/Jugadores/Equipos siguen siendo catálogos
- * globales reusados entre torneos, esos sí quedan como pestaña. */
+ * Catálogo (disciplinas+modalidades, ediciones-catalogo-disciplinas-plan.md
+ * Decisión C1)/Jugadores/Equipos siguen siendo catálogos globales reusados
+ * entre torneos, esos sí quedan como pestaña. */
 export function TorneoAdminLayout() {
   return (
     <RequireRole roles={["TorneoAdmin", "AdminGeneral"]}>

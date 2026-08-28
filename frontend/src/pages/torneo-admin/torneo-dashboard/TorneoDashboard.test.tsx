@@ -47,9 +47,11 @@ describe("Torneo Admin — dashboard scoped por torneo", () => {
     mockComoTorneoAdmin();
     server.use(
       http.get("http://127.0.0.1:8000/api/v1/disciplinas", () =>
-        HttpResponse.json([{ id: 1, nombre: "Fútbol", tipo: "Equipo", estado: "Activo" }]),
+        HttpResponse.json([{ id: 1, nombre: "Fútbol", estado: "Activo" }]),
       ),
-      http.get("http://127.0.0.1:8000/api/v1/modalidades", () => HttpResponse.json([])),
+      http.get("http://127.0.0.1:8000/api/v1/modalidades", () =>
+        HttpResponse.json([{ id: 1, disciplina_id: 1, nombre: "Fútbol 11", tamano_equipo: 11, estado: "Activo" }]),
+      ),
       http.get("http://127.0.0.1:8000/api/v1/torneo-grupos", () =>
         HttpResponse.json([
           {
@@ -60,7 +62,7 @@ describe("Torneo Admin — dashboard scoped por torneo", () => {
                 id: 20,
                 numero_edicion: 2,
                 disciplina_id: 1,
-                modalidad_id: null,
+                modalidad_id: 1,
                 estado: "Activo",
                 fecha_inicio: "2026-04-01",
                 fecha_fin: "2026-06-30",
@@ -79,7 +81,7 @@ describe("Torneo Admin — dashboard scoped por torneo", () => {
           torneo_grupo_id: 7,
           numero_edicion: 2,
           disciplina_id: 1,
-          modalidad_id: null,
+          modalidad_id: 1,
           estado: "Activo",
           fecha_inicio: "2026-04-01",
           fecha_fin: "2026-06-30",

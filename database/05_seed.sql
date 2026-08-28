@@ -23,9 +23,17 @@ INSERT INTO EVENTOS (Nombre, Descripcion) VALUES
 
 -- Catálogo de disciplinas.
 -- Va ANTES que TORNEO: TORNEO.Disciplina_ID es NOT NULL (ver 01_schema.sql,
--- ya no es el texto libre 'Fútbol' de antes).
-INSERT INTO DISCIPLINA (Nombre, Tipo) VALUES
-    ('Fútbol', 'Equipo');
+-- ya no es el texto libre 'Fútbol' de antes). Ya no lleva Tipo (catálogo
+-- unificado — Decisión A1 de ediciones-catalogo-disciplinas-plan.md): toda
+-- disciplina necesita al menos una MODALIDAD, así que se carga "Fútbol 11"
+-- acá mismo. 11_catalogo_disciplinas.sql vuelve a insertar ambas filas
+-- después (idempotente vía ON CONFLICT DO NOTHING) sin duplicarlas, junto
+-- con el resto del catálogo maestro.
+INSERT INTO DISCIPLINA (Nombre) VALUES
+    ('Fútbol');
+
+INSERT INTO MODALIDAD (Disciplina_ID, Nombre, Tamano_Equipo) VALUES
+    ((SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol'), 'Fútbol 11', 11);
 
 -- Torneo Grupo — torneos-admin-plan.md, Fase 1/3. Cada TORNEO es una
 -- edición de su grupo; "Copa Ecotec" tiene una sola edición cargada hoy.
@@ -33,8 +41,13 @@ INSERT INTO TORNEO_GRUPO (Nombre) VALUES
     ('Copa Ecotec');
 
 -- Torneo
-INSERT INTO TORNEO (Nombre, Disciplina_ID, Torneo_Grupo_ID, Numero_Edicion, Fecha_Inicio, Fecha_Fin) VALUES
-    ('Copa Ecotec 2026', (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol'), (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Copa Ecotec'), 1, '2026-01-10', '2026-03-30');
+-- Modalidad_ID es NOT NULL (catálogo unificado) — Copa Ecotec 2026 se jugó
+-- con 11 por lado, de ahí "Fútbol 11".
+INSERT INTO TORNEO (Nombre, Disciplina_ID, Modalidad_ID, Torneo_Grupo_ID, Numero_Edicion, Fecha_Inicio, Fecha_Fin) VALUES
+    ('Copa Ecotec 2026',
+     (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol'),
+     (SELECT ID FROM MODALIDAD WHERE Nombre = 'Fútbol 11' AND Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol')),
+     (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Copa Ecotec'), 1, '2026-01-10', '2026-03-30');
 
 -- Equipos
 INSERT INTO EQUIPOS (Nombre) VALUES

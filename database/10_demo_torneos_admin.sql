@@ -26,9 +26,13 @@
 
 -- ------------------------------------------------------------
 -- PARTE A — Catálogo de Tenis (el seed base solo trae Fútbol)
+-- Ya no lleva Tipo (catálogo unificado — Decisión A1 de
+-- ediciones-catalogo-disciplinas-plan.md); 11_catalogo_disciplinas.sql
+-- también carga Tenis (con Singles/Dobles), así que en una base que ya
+-- corrió ese script esto es un no-op por el WHERE NOT EXISTS.
 -- ------------------------------------------------------------
-INSERT INTO DISCIPLINA (Nombre, Tipo)
-SELECT 'Tenis', 'Individual'
+INSERT INTO DISCIPLINA (Nombre)
+SELECT 'Tenis'
  WHERE NOT EXISTS (SELECT 1 FROM DISCIPLINA WHERE Nombre = 'Tenis');
 
 INSERT INTO MODALIDAD (Disciplina_ID, Nombre, Tamano_Equipo)
@@ -44,14 +48,18 @@ SELECT (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Tenis'), 'Individual', 1
 -- La disciplina "Fútbol" en esta base puede estar cargada como "Futbol"
 -- (sin tilde, dato viejo) o "Fútbol" (05_seed.sql actual) — ILIKE con
 -- '_' matchea cualquiera de las dos sin duplicar el catálogo.
+--
+-- Modalidad_ID es NOT NULL (catálogo unificado) — se asigna "Fútbol 11"
+-- por el mismo criterio de backfill que Copa Ecotec 2026 en 05_seed.sql.
 -- ------------------------------------------------------------
 INSERT INTO TORNEO_GRUPO (Nombre)
 SELECT 'Liga Relámpago' WHERE NOT EXISTS (SELECT 1 FROM TORNEO_GRUPO WHERE Nombre = 'Liga Relámpago');
 
-INSERT INTO TORNEO (Nombre, Disciplina_ID, Torneo_Grupo_ID, Numero_Edicion, Fecha_Inicio, Fecha_Fin)
+INSERT INTO TORNEO (Nombre, Disciplina_ID, Modalidad_ID, Torneo_Grupo_ID, Numero_Edicion, Fecha_Inicio, Fecha_Fin)
 SELECT
     'Liga Relámpago - Edición 1',
     (SELECT ID FROM DISCIPLINA WHERE Nombre ILIKE 'f_tbol' LIMIT 1),
+    (SELECT m.ID FROM MODALIDAD m WHERE m.Nombre = 'Fútbol 11' AND m.Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre ILIKE 'f_tbol' LIMIT 1)),
     (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Liga Relámpago'),
     1, '2026-03-01', '2026-05-15'
  WHERE NOT EXISTS (
@@ -59,10 +67,11 @@ SELECT
       WHERE Torneo_Grupo_ID = (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Liga Relámpago') AND Numero_Edicion = 1
  );
 
-INSERT INTO TORNEO (Nombre, Disciplina_ID, Torneo_Grupo_ID, Numero_Edicion, Fecha_Inicio, Fecha_Fin)
+INSERT INTO TORNEO (Nombre, Disciplina_ID, Modalidad_ID, Torneo_Grupo_ID, Numero_Edicion, Fecha_Inicio, Fecha_Fin)
 SELECT
     'Liga Relámpago - Edición 2',
     (SELECT ID FROM DISCIPLINA WHERE Nombre ILIKE 'f_tbol' LIMIT 1),
+    (SELECT m.ID FROM MODALIDAD m WHERE m.Nombre = 'Fútbol 11' AND m.Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre ILIKE 'f_tbol' LIMIT 1)),
     (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Liga Relámpago'),
     2, '2026-04-01', '2026-06-30'
  WHERE NOT EXISTS (

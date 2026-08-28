@@ -209,33 +209,26 @@ BEFORE INSERT OR UPDATE OF TORNEO_ID, EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE ON 
 FOR EACH ROW EXECUTE FUNCTION fn_validar_equipos_inscritos();
 
 -- ------------------------------------------------------------
--- Función y trigger: TORNEO.Modalidad_ID es coherente con
--- DISCIPLINA.Tipo — obligatorio si es 'Individual', prohibido si es
--- 'Equipo'. No se puede expresar con un CHECK simple porque cruza
--- TORNEO/DISCIPLINA (mismo motivo que fn_validar_equipos_inscritos no es
--- una FK: la regla vive en la combinación de dos tablas).
+-- Función y trigger: TORNEO.Modalidad_ID pertenece a TORNEO.Disciplina_ID.
+-- Antes de docs/plans/ediciones-catalogo-disciplinas-plan.md (Decisión A1)
+-- esta función también consultaba DISCIPLINA.Tipo para decidir si
+-- Modalidad_ID era obligatorio/prohibido — esa columna ya no existe:
+-- Modalidad_ID es NOT NULL a nivel de columna (01_schema.sql) para TODA
+-- disciplina, así que solo queda una regla real por validar, y esa sí
+-- cruza tablas (mismo motivo que fn_validar_equipos_inscritos no es una
+-- FK: la regla vive en la combinación de dos tablas).
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_validar_torneo_modalidad()
 RETURNS TRIGGER AS $$
 DECLARE
-    v_tipo VARCHAR(20);
     v_modalidad_disciplina INT;
 BEGIN
-    SELECT Tipo INTO v_tipo FROM DISCIPLINA WHERE ID = NEW.Disciplina_ID;
-
-    IF v_tipo = 'Individual' AND NEW.Modalidad_ID IS NULL THEN
-        RAISE EXCEPTION 'Un torneo de disciplina individual requiere Modalidad_ID.';
+    SELECT Disciplina_ID INTO v_modalidad_disciplina FROM MODALIDAD WHERE ID = NEW.Modalidad_ID;
+    IF v_modalidad_disciplina IS NULL THEN
+        RAISE EXCEPTION 'La modalidad indicada no existe.';
     END IF;
-
-    IF v_tipo = 'Equipo' AND NEW.Modalidad_ID IS NOT NULL THEN
-        RAISE EXCEPTION 'Un torneo de disciplina de equipo no admite Modalidad_ID.';
-    END IF;
-
-    IF NEW.Modalidad_ID IS NOT NULL THEN
-        SELECT Disciplina_ID INTO v_modalidad_disciplina FROM MODALIDAD WHERE ID = NEW.Modalidad_ID;
-        IF v_modalidad_disciplina <> NEW.Disciplina_ID THEN
-            RAISE EXCEPTION 'La modalidad indicada no pertenece a esta disciplina.';
-        END IF;
+    IF v_modalidad_disciplina <> NEW.Disciplina_ID THEN
+        RAISE EXCEPTION 'La modalidad indicada no pertenece a esta disciplina.';
     END IF;
 
     RETURN NEW;

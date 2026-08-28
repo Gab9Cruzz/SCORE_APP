@@ -74,3 +74,30 @@ asignación árbitro↔partido) cuando se retome — bloquea a las fases 2-4.
   otra base con datos reales, conviene primero volcar los IDs ambiguos a una
   tabla de auditoría temporal (o abortar con `RAISE EXCEPTION` en vez de
   `WARNING` cuando `v_ambiguos > 0`) antes del `DROP COLUMN`.
+
+## Deferido desde el plan de Catálogo Maestro de Disciplinas (`docs/plans/ediciones-catalogo-disciplinas-plan.md`)
+
+- **Registro de resultados/estadísticas para disciplinas de marca y tiempo**
+  (Atletismo, Natación, Ciclismo), **combate** (MMA, Boxeo, Judo, Taekwondo,
+  Karate) o **mente** (Ajedrez). `PARTIDOS`/`EVENTOS_PARTIDO` asumen siempre
+  dos equipos y goles — un tiempo de maratón o un resultado de combate no
+  encajan ahí. Merece su propio diseño (¿"partido" = combate/carrera? ¿cómo
+  se registra un tiempo o un ganador por sumisión?).
+- **Categorías de peso/cinturón reales de una federación** para las
+  disciplinas de Combate. El catálogo precarga 3 categorías genéricas por
+  disciplina ("Peso Ligero/Medio/Pesado") como placeholder editable solo
+  por migración SQL — no la tabla oficial de cada federación (varía por
+  región/edad/género).
+- **Límite superior de inscripciones por torneo** (cuántos Equipos/Jugadores
+  caben en un bracket). No fue pedido en ese plan.
+- **eSports — brackets y estadísticas.** El catálogo cubre inscripción
+  (equipos de 5, parejas, 1v1), no brackets de doble eliminación ni
+  integración con APIs de las plataformas (Riot, Steam) — es un módulo de
+  "sistema de brackets" aparte.
+- **Ajustar el catálogo maestro fuera de una migración SQL manual** (EC-32).
+  Bajo la Decisión C1 (catálogo inmutable, solo toggle de Estado) un admin
+  no tiene forma de agregar/corregir una disciplina o modalidad desde la UI
+  — es la consecuencia esperada de "inmutable", no un bug, pero si en el
+  futuro hace falta ajustar el catálogo con frecuencia, evaluar la
+  Alternativa C3 del plan (ocultar el CRUD detrás de un rol "Superadmin" en
+  vez de eliminarlo).

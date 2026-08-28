@@ -32,11 +32,15 @@ async def obtener_inscripcion(
 @router.post(
     "", response_model=InscripcionTorneoOut, status_code=201, dependencies=[Depends(require_roles("TorneoAdmin"))]
 )
-async def inscribir_equipo(
+async def crear_inscripcion(
     data: InscripcionTorneoCreate, session: AsyncSession = Depends(get_db)
 ) -> InscripcionTorneoOut:
-    """unique_inscripcion (02_constraints.sql) evita inscribir el mismo
-    equipo dos veces en el mismo torneo (409)."""
+    """Dos caminos según la Modalidad del torneo (Decisión B1,
+    ediciones-catalogo-disciplinas-plan.md) — ver InscripcionTorneoCreate:
+    `equipo_id` (Pareja/Conjunto) o `jugador_cedula`/`jugador_nombre`/
+    `jugador_correo_electronico` (Individual, sin fila en EQUIPOS).
+    unique_inscripcion/unique_inscripcion_individual (02_constraints.sql)
+    evitan duplicados en cada camino (409)."""
     return await InscripcionTorneoService(session).create(data)
 
 

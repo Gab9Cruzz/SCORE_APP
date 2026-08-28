@@ -9,7 +9,7 @@ interface EdicionResumen {
   id: number;
   numero_edicion: number;
   disciplina_id: number;
-  modalidad_id: number | null;
+  modalidad_id: number;
   estado: string;
   fecha_inicio: string;
   fecha_fin: string;
@@ -22,7 +22,6 @@ interface TorneoGrupo {
 interface DisciplinaRow {
   id: number;
   nombre: string;
-  tipo: string;
 }
 interface ModalidadRow {
   id: number;
@@ -30,8 +29,12 @@ interface ModalidadRow {
   disciplina_id: number;
 }
 interface TorneoCreatePayload {
-  disciplina_id: number;
-  modalidad_id: number | null;
+  // Ambos opcionales en el payload (ediciones-catalogo-disciplinas-plan.md,
+  // D-Eng-5): obligatorios al crear un grupo nuevo, omitidos en una nueva
+  // edición — el backend los ignora igual si vinieran, pero no tiene
+  // sentido mandar un dato que ni siquiera se le pide al admin.
+  disciplina_id?: number;
+  modalidad_id?: number;
   fecha_inicio: string;
   fecha_fin: string;
   torneo_grupo_id?: number;
@@ -73,6 +76,10 @@ export function TorneosAdminPage() {
     () => new Map((disciplinas.listQuery.data ?? []).map((d) => [d.id, d])),
     [disciplinas.listQuery.data],
   );
+  const modalidadPorId = useMemo(
+    () => new Map((modalidades.listQuery.data ?? []).map((m) => [m.id, m])),
+    [modalidades.listQuery.data],
+  );
 
   const crearTorneo = useMutation({
     mutationFn: async (body: TorneoCreatePayload) => {
@@ -90,60 +97,65 @@ export function TorneosAdminPage() {
     setModo({ tipo: "lista" });
   }
 
-  /** Modalidad condicional (torneos-admin-plan.md, Fase 2, sección A): solo
-   * se muestra si la Disciplina elegida es de Tipo="Individual", y sus
-   * opciones se filtran a las de esa disciplina. `incluirNombreGrupo`
-   * distingue "Torneo nuevo" (pide el nombre del grupo) de "Nueva edición
-   * de {grupo}" (el grupo ya está fijo, no se vuelve a pedir). */
-  function camposTorneo(incluirNombreGrupo: boolean) {
-    return (values: Record<string, ResourceFieldValue>): ResourceFormField[] => {
-      const disciplinaId = values.disciplina_id as number | null;
-      const disciplina = disciplinaId != null ? disciplinaPorId.get(disciplinaId) : undefined;
-      const campos: ResourceFormField[] = [];
-      if (incluirNombreGrupo) {
-        campos.push({ name: "torneo_grupo_nombre", label: "Nombre del torneo", type: "text", required: true });
-      }
-      campos.push({
+  /** Campos del formulario de "Torneo nuevo" (crea un TORNEO_GRUPO):
+   * Disciplina y Modalidad son siempre obligatorias (catálogo unificado —
+   * ediciones-catalogo-disciplinas-plan.md, Decisión A1: toda disciplina
+   * tiene 1+ modalidades, ya no hay un Tipo="Equipo" que las omita). Las
+   * opciones de Modalidad se filtran a las de la Disciplina elegida — sin
+   * disciplina elegida todavía, el select de Modalidad queda vacío.
+   *
+   * "Nueva edición" de un grupo YA existente NO usa esta función — ver
+   * el bloque `modo.tipo === "nueva-edicion"` más abajo: Disciplina y
+   * Modalidad se muestran como texto heredado, no como campos del form
+   * (Fase 2 parte A del plan; D-Eng-5 hace que el backend las ignore igual
+   * si se mandaran). */
+  function camposTorneoNuevo(values: Record<string, ResourceFieldValue>): ResourceFormField[] {
+    const disciplinaId = values.disciplina_id as number | null;
+    return [
+      { name: "torneo_grupo_nombre", label: "Nombre del torneo", type: "text", required: true },
+      {
         name: "disciplina_id",
         label: "Disciplina",
         type: "reference",
         required: true,
         optionsLoading: disciplinas.listQuery.isLoading,
         options: (disciplinas.listQuery.data ?? []).map((d) => ({ value: d.id, label: d.nombre })),
-      });
-      if (disciplina?.tipo === "Individual") {
-        campos.push({
-          name: "modalidad_id",
-          label: "Modalidad",
-          type: "reference",
-          required: true,
-          optionsLoading: modalidades.listQuery.isLoading,
-          options: (modalidades.listQuery.data ?? [])
-            .filter((m) => m.disciplina_id === disciplinaId)
-            .map((m) => ({ value: m.id, label: m.nombre })),
-        });
-      }
-      campos.push({ name: "fecha_inicio", label: "Fecha de inicio", type: "date", required: true });
-      campos.push({ name: "fecha_fin", label: "Fecha de fin", type: "date", required: true });
-      return campos;
-    };
+      },
+      {
+        name: "modalidad_id",
+        label: "Modalidad",
+        type: "reference",
+        required: true,
+        optionsLoading: modalidades.listQuery.isLoading,
+        options: (modalidades.listQuery.data ?? [])
+          .filter((m) => m.disciplina_id === disciplinaId)
+          .map((m) => ({ value: m.id, label: m.nombre })),
+      },
+      { name: "fecha_inicio", label: "Fecha de inicio", type: "date", required: true },
+      { name: "fecha_fin", label: "Fecha de fin", type: "date", required: true },
+    ];
   }
+
+  const camposNuevaEdicion: ResourceFormField[] = [
+    { name: "fecha_inicio", label: "Fecha de inicio", type: "date", required: true },
+    { name: "fecha_fin", label: "Fecha de fin", type: "date", required: true },
+  ];
 
   function submitCrearGrupo(values: Record<string, ResourceFieldValue>) {
     crearTorneo.mutate({
       torneo_grupo_nombre: String(values.torneo_grupo_nombre ?? ""),
       disciplina_id: values.disciplina_id as number,
-      modalidad_id: (values.modalidad_id as number | null) ?? null,
+      modalidad_id: values.modalidad_id as number,
       fecha_inicio: String(values.fecha_inicio),
       fecha_fin: String(values.fecha_fin),
     });
   }
 
   function submitNuevaEdicion(grupoId: number, values: Record<string, ResourceFieldValue>) {
+    // Sin disciplina_id/modalidad_id: se heredan del grupo del lado del
+    // backend (D-Eng-5) — este formulario ni siquiera los pide.
     crearTorneo.mutate({
       torneo_grupo_id: grupoId,
-      disciplina_id: values.disciplina_id as number,
-      modalidad_id: (values.modalidad_id as number | null) ?? null,
       fecha_inicio: String(values.fecha_inicio),
       fecha_fin: String(values.fecha_fin),
     });
@@ -154,7 +166,7 @@ export function TorneosAdminPage() {
       <div className="page">
         <h1>Torneo nuevo</h1>
         <ResourceForm
-          fields={camposTorneo(true)}
+          fields={camposTorneoNuevo}
           onSubmit={submitCrearGrupo}
           submitting={crearTorneo.isPending}
           submitError={crearTorneo.isError ? apiErrorMessage(crearTorneo.error) : null}
@@ -167,13 +179,31 @@ export function TorneosAdminPage() {
 
   if (modo.tipo === "nueva-edicion") {
     const siguienteNumero = Math.max(...modo.grupo.ediciones.map((e) => e.numero_edicion)) + 1;
+    // Heredados de la edición más reciente del grupo (mismo criterio que
+    // TorneoService.create del lado del backend, D-Eng-5) — se muestran
+    // como texto plano, no un <select disabled>: un select deshabilitado
+    // sigue pareciendo un campo de formulario y el admin puede
+    // preguntarse por qué no responde (Fase 2 parte A del plan).
+    const edicionReferencia = edicionParaAbrir(modo.grupo);
+    const disciplinaHeredada = disciplinaPorId.get(edicionReferencia?.disciplina_id);
+    const modalidadHeredada = modalidadPorId.get(edicionReferencia?.modalidad_id ?? -1);
     return (
       <div className="page">
         <h1>
           Nueva edición — {modo.grupo.nombre} (Edición {siguienteNumero})
         </h1>
+        <dl className="datos-heredados">
+          <div>
+            <dt>Disciplina</dt>
+            <dd>{disciplinaHeredada?.nombre ?? "…"}</dd>
+          </div>
+          <div>
+            <dt>Modalidad</dt>
+            <dd>{modalidadHeredada?.nombre ?? "…"}</dd>
+          </div>
+        </dl>
         <ResourceForm
-          fields={camposTorneo(false)}
+          fields={camposNuevaEdicion}
           onSubmit={(values) => submitNuevaEdicion(modo.grupo.id, values)}
           submitting={crearTorneo.isPending}
           submitError={crearTorneo.isError ? apiErrorMessage(crearTorneo.error) : null}
