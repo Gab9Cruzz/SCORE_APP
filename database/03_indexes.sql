@@ -77,8 +77,30 @@ CREATE INDEX idx_partidos_jornada ON PARTIDOS(Torneo_ID, Jornada);
 -- (Fase 3) — ambos filtran por ARBITRO_ID en cada request.
 CREATE INDEX idx_partidos_arbitro ON PARTIDOS(ARBITRO_ID);
 
+-- Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md,
+-- requerimiento #4)
+CREATE INDEX idx_partidos_fase ON PARTIDOS(Fase_ID);
+CREATE INDEX idx_partidos_grupo ON PARTIDOS(Grupo_ID);
+-- Recorrido del árbol del bracket (vista de bracket, GET /torneos/{id}/bracket).
+CREATE INDEX idx_partidos_siguiente ON PARTIDOS(Partido_Siguiente_ID);
+CREATE INDEX idx_partidos_perdedor_siguiente ON PARTIDOS(Partido_Perdedor_Siguiente_ID);
+
+CREATE INDEX idx_fase_torneo ON FASE(Torneo_ID);
+CREATE INDEX idx_grupo_fase ON GRUPO(Fase_ID);
+CREATE INDEX idx_grupo_equipo_grupo ON GRUPO_EQUIPO(Grupo_ID);
+CREATE INDEX idx_grupo_equipo_inscripcion ON GRUPO_EQUIPO(Inscripcion_Torneo_ID);
+CREATE INDEX idx_sorteos_fase ON SORTEOS(Fase_ID);
+
 -- EVENTOS_PARTIDO
 CREATE INDEX idx_eventos_partido_partido ON EVENTOS_PARTIDO(PARTIDOS_ID);
 CREATE INDEX idx_eventos_partido_jugador ON EVENTOS_PARTIDO(JUGADOR_ID);
 CREATE INDEX idx_eventos_partido_evento ON EVENTOS_PARTIDO(EVENTOS_ID);
+
+-- AUDITORIA (bitacora de cambios)
+-- Misma logica que ACCESOS: la pantalla lista siempre por fecha
+-- descendente, y los otros dos son los filtros que ofrece GET /auditoria
+-- (por entidad afectada y por quien lo hizo).
+CREATE INDEX idx_auditoria_fecha ON AUDITORIA(Fecha DESC);
+CREATE INDEX idx_auditoria_tabla_registro ON AUDITORIA(Tabla, Registro_ID);
+CREATE INDEX idx_auditoria_usuario ON AUDITORIA(Usuario_ID);
 CREATE INDEX idx_eventos_partido_equipo ON EVENTOS_PARTIDO(EQUIPO_ID);

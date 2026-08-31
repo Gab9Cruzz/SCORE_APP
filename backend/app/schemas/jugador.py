@@ -24,6 +24,7 @@ class JugadorUpdate(BaseModel):
     cedula: str | None = None
     correo_electronico: str | None = None
     estado: EstadoJugador | None = None
+    foto_url: str | None = None
 
 
 class JugadorOut(JugadorBase):
@@ -31,6 +32,7 @@ class JugadorOut(JugadorBase):
 
     id: int
     estado: EstadoJugador
+    foto_url: str | None = None
     fecha_registro: datetime
     fecha_modificacion: datetime
 
@@ -41,10 +43,15 @@ class JugadorPublicOut(BaseModel):
     ya no filtran cédula/correo a cualquiera. Un caller autenticado (el
     admin logueado del frontend, que ya manda el Bearer token en cada
     request) sigue recibiendo JugadorOut completo en la misma ruta — ver
-    get_current_user_optional en app/api/deps.py."""
+    get_current_user_optional en app/api/deps.py.
+
+    foto_url SÍ va acá (a diferencia de cédula/correo): es del mismo nivel
+    de exposición que `nombre`, y el grid de Plantillas la necesita para
+    mostrar la tarjeta de cada jugador."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     nombre: str
     estado: EstadoJugador
+    foto_url: str | None = None

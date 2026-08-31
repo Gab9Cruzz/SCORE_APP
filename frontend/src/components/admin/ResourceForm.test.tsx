@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ResourceForm, type ResourceFormField } from "./ResourceForm";
+import { ResourceForm, type ResourceFieldValue, type ResourceFormField } from "./ResourceForm";
 
 describe("ResourceForm", () => {
   it("deshabilita el submit si falta un campo requerido", () => {
@@ -104,7 +104,7 @@ describe("ResourceForm", () => {
   // torneos-admin-plan.md, Fase 2: campo Modalidad condicional a la
   // Disciplina elegida.
   describe("fields como función (campos condicionales)", () => {
-    const camposCondicionales = (values: Record<string, string | number | null>): ResourceFormField[] => [
+    const camposCondicionales = (values: Record<string, ResourceFieldValue>): ResourceFormField[] => [
       {
         name: "disciplina",
         label: "Disciplina",

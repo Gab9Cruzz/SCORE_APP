@@ -49,6 +49,7 @@ class PerfilJugadorPublicOut(BaseModel):
 
     jugador_id: int
     nombre: str
+    foto_url: str | None = None
     disciplinas: list[PerfilDisciplinaOut]
 
 

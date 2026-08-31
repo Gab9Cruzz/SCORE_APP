@@ -68,3 +68,46 @@ async def test_cedula_duplicada_es_rechazada(client: AsyncClient, admin_general_
         headers=admin_general_headers,
     )
     assert resp.status_code == 409
+
+
+# T30/T31 (motor-formatos-plantillas-navegacion-plan.md): ModalPerfilJugador
+# conecta este PATCH, hasta ahora sin ningún test ni consumidor en el
+# frontend — Decisión P8 del plan ("está ahí, sin conectar a esta vista").
+async def test_admin_edita_datos_personales_del_jugador(client: AsyncClient, admin_general_headers: dict[str, str]):
+    resp = await client.patch(
+        "/api/v1/jugadores/1",
+        json={"nombre": "Carlos Pérez Editado", "correo_electronico": "nuevo@example.com"},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["nombre"] == "Carlos Pérez Editado"
+    assert body["correo_electronico"] == "nuevo@example.com"
+    assert body["cedula"] == "0900000001"  # no tocado, sigue igual
+
+
+async def test_editar_jugador_con_cedula_duplicada_es_rechazado(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    # unique_jugador_cedula: jugador 2 no puede robarle la cédula al 1.
+    resp = await client.patch(
+        "/api/v1/jugadores/2",
+        json={"cedula": "0900000001"},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 409
+
+
+async def test_foto_url_es_opcional_y_editable(client: AsyncClient, admin_general_headers: dict[str, str]):
+    # requerimiento #3 del plan: campo de texto (URL), nullable — sin foto
+    # seteada por defecto (05_seed.sql no la carga).
+    resp = await client.get("/api/v1/jugadores/1", headers=admin_general_headers)
+    assert resp.json()["foto_url"] is None
+
+    resp = await client.patch(
+        "/api/v1/jugadores/1",
+        json={"foto_url": "https://example.com/foto.jpg"},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["foto_url"] == "https://example.com/foto.jpg"

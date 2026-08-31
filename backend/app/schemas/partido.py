@@ -7,6 +7,7 @@ EstadoPartido = Literal["Programado", "En curso", "Finalizado", "Cancelado"]
 FasePartido = Literal[
     "Regular", "Grupos", "Octavos", "Cuartos", "Semifinal", "Final", "Tercer puesto"
 ]
+SlotBracket = Literal["Local", "Visitante"]
 
 
 class PartidoBase(BaseModel):
@@ -47,13 +48,32 @@ class PartidoUpdate(BaseModel):
     # Asignación de árbitro (D6, roles-3-modulos-plan.md) — un paso
     # separado de crear el partido, por eso no está en PartidoCreate.
     arbitro_id: int | None = None
+    # Motor de Formatos (EC-48): desempate manual de un partido de
+    # Eliminación empatado en goles — se manda ANTES o junto con
+    # estado="Finalizado"; fn_validar_partido_eliminacion_desempate
+    # rechaza el cierre si hace falta y no vino.
+    ganador_desempate_id: int | None = None
 
 
 class PartidoOut(PartidoBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    # Override: nullable en un shell de bracket sin equipos definidos
+    # todavía ("Ganador Partido N") — PartidoBase los declara
+    # obligatorios porque el alta manual (PartidoCreate) sí los exige.
+    equipos_id_local: int | None
+    equipos_id_visitante: int | None
     estado: EstadoPartido
     arbitro_id: int | None
+    # Motor de Formatos — ver comentario grande en 01_schema.sql.
+    fase_id: int | None = None
+    grupo_id: int | None = None
+    ronda_nombre: str | None = None
+    partido_siguiente_id: int | None = None
+    slot_siguiente: SlotBracket | None = None
+    partido_perdedor_siguiente_id: int | None = None
+    slot_perdedor_siguiente: SlotBracket | None = None
+    ganador_desempate_id: int | None = None
     fecha_registro: datetime
     fecha_modificacion: datetime

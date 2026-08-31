@@ -39,6 +39,8 @@ Cada una aplica un plan concreto sobre una base **ya provisionada**
 | `12_migracion_catalogo_disciplinas.sql` | `ediciones-catalogo-disciplinas-plan.md` |
 | `13_migracion_equipos_disciplina.sql` | `equipos-disciplina-navegacion-plan.md` |
 | `14_migracion_auditoria_accesos.sql` | Bitácora de inicios de sesión (tabla `ACCESOS`) |
+| `15_migracion_popularidad_disciplinas.sql`, `16_migracion_foto_jugadores.sql`, `17_migracion_motor_formatos.sql` | `motor-formatos-plantillas-navegacion-plan.md` (en curso al momento de escribir esto) |
+| `18_migracion_auditoria_cambios.sql` | Auditoría de cambios: alta/modificación/baja de cualquier entidad (tabla `AUDITORIA`) — numerada 18 y no 15 porque 15-17 ya estaban tomados por el plan de arriba |
 
 **Una migración vieja no tiene por qué correr sobre el esquema de hoy, y
 eso no es un bug.** `08` referencia `DISCIPLINA.Tipo`, una columna que `12`
@@ -46,9 +48,11 @@ eliminó: aplicarla sobre una base actual falla, y está bien — su trabajo ya
 está incorporado en `01`–`06`. Son un registro de cómo se llegó acá, no
 scripts re-aplicables para siempre.
 
-La única que sí debe seguir corriendo limpio sobre el esquema actual es la
-**última** (hoy `14`), porque sobre el estado final es un no-op — y eso lo
-verifica un test (ver abajo).
+La que sí debe seguir corriendo limpio sobre el esquema actual es
+`18_migracion_auditoria_cambios.sql`, porque sobre el estado final es un
+no-op — y eso lo verifica un test (ver abajo). (`15`-`17` son de un plan
+aparte todavía en curso al momento de escribir esto; no los cubre ese
+test aún.)
 
 ### 3. `10`, `11` — datos, no esquema
 

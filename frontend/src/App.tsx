@@ -7,6 +7,7 @@ import { LoginPage } from "./pages/Login";
 import { PartidoEnVivoPage } from "./pages/PartidoEnVivo";
 import { MisPartidosPage } from "./pages/arbitro/MisPartidos";
 import { AccesosAdminPage } from "./pages/admin/AccesosAdmin";
+import { AuditoriaAdminPage } from "./pages/admin/AuditoriaAdmin";
 import { UsuariosAdminPage } from "./pages/admin/UsuariosAdmin";
 import { CatalogoDisciplinasPage } from "./pages/torneo-admin/CatalogoDisciplinas";
 import { EquiposAdminPage } from "./pages/torneo-admin/EquiposAdmin";
@@ -83,6 +84,19 @@ export function App() {
             element={
               <RequireRole roles={["AdminGeneral"]}>
                 <AccesosAdminPage />
+              </RequireRole>
+            }
+          />
+
+          {/* Auditoría de cambios — mismo gate que Accesos y por la misma
+              razón, pero más sensible todavía: expone alta/modificación/
+              baja de CUALQUIER entidad, torneos incluidos, no solo la
+              bitácora de login. */}
+          <Route
+            path="/admin/auditoria"
+            element={
+              <RequireRole roles={["AdminGeneral"]}>
+                <AuditoriaAdminPage />
               </RequireRole>
             }
           />

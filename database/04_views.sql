@@ -147,6 +147,14 @@ ORDER BY ga.TORNEO_ID, Goles DESC, Jugador;
 -- Los goles se cuentan por Equipo_Acreditado, así el autogol suma al
 -- rival y un traspaso histórico no infla el resultado.
 -- ------------------------------------------------------------
+-- Fase_ID/Grupo_ID (Motor de Formatos) se agregan además de Fase/Grupo
+-- (texto): un partido creado por el motor nuevo llena las FK, uno creado
+-- a mano por el alta manual existente sigue llenando el texto — conviven
+-- sin pisarse (ver comentario grande en 01_schema.sql, CREATE TABLE
+-- PARTIDOS). INNER JOIN contra EQUIPOS a propósito: un shell de bracket
+-- sin equipos definidos todavía ("Ganador Partido N") no tiene resultado
+-- que mostrar acá — GET /torneos/{id}/bracket consulta PARTIDOS directo
+-- con LEFT JOIN para poder mostrar esas casillas vacías.
 CREATE OR REPLACE VIEW vw_resultados_partidos AS
 SELECT
     p.ID       AS Partido_ID,
@@ -163,32 +171,45 @@ SELECT
     p.Jornada,
     p.Fase,
     p.Grupo,
+    p.Fase_ID,
+    p.Grupo_ID,
     p.Estado
 FROM PARTIDOS p
 JOIN EQUIPOS el    ON el.ID    = p.EQUIPOS_ID_LOCAL
 JOIN EQUIPOS ev_eq ON ev_eq.ID = p.EQUIPOS_ID_VISITANTE
 LEFT JOIN vw_goles_acreditados ga ON ga.PARTIDOS_ID = p.ID
 GROUP BY p.ID, p.TORNEO_ID, el.ID, el.Nombre, ev_eq.ID, ev_eq.Nombre,
-         p.Fecha_Partido, p.Jornada, p.Fase, p.Grupo, p.Estado;
+         p.Fecha_Partido, p.Jornada, p.Fase, p.Grupo, p.Fase_ID, p.Grupo_ID, p.Estado;
 
 -- ------------------------------------------------------------
 -- Tabla de posiciones
 -- Solo cuenta partidos Finalizado. 3 puntos por victoria, 1 por empate.
 -- Orden: puntos, diferencia de gol, goles a favor, nombre.
+--
+-- Reescopada por (Fase_ID, Grupo_ID) — motor-formatos-plantillas-
+-- navegacion-plan.md, requerimiento #4 (Decisión Eng #10: se reescopa la
+-- vista existente en vez de crear una nueva en paralelo). Un torneo Liga
+-- (1 sola FASE, sin GRUPO) sigue devolviendo exactamente una fila por
+-- equipo bajo su Torneo_ID — no rompe a ningún consumidor que ya filtre
+-- por Torneo_ID (T40, no-regresión). Un torneo Grupos_Playoffs con 3
+-- grupos ahora produce 3 tablas separadas bajo el mismo Torneo_ID — el
+-- consumidor tiene que filtrar también por Grupo_ID (EC-54).
 -- ------------------------------------------------------------
 CREATE OR REPLACE VIEW vw_tabla_posiciones AS
 WITH lados AS (
-    SELECT Torneo_ID, Equipo_Local_ID AS Equipo_ID,
+    SELECT Fase_ID, Grupo_ID, Torneo_ID, Equipo_Local_ID AS Equipo_ID,
            Goles_Local AS GF, Goles_Visitante AS GC
       FROM vw_resultados_partidos
      WHERE Estado = 'Finalizado'
     UNION ALL
-    SELECT Torneo_ID, Equipo_Visitante_ID,
+    SELECT Fase_ID, Grupo_ID, Torneo_ID, Equipo_Visitante_ID,
            Goles_Visitante, Goles_Local
       FROM vw_resultados_partidos
      WHERE Estado = 'Finalizado'
 )
 SELECT
+    l.Fase_ID,
+    l.Grupo_ID,
     l.Torneo_ID,
     l.Equipo_ID,
     e.Nombre AS Equipo,
@@ -203,8 +224,11 @@ SELECT
      + COUNT(*) FILTER (WHERE l.GF = l.GC))::INT AS PTS
 FROM lados l
 JOIN EQUIPOS e ON e.ID = l.Equipo_ID
-GROUP BY l.Torneo_ID, l.Equipo_ID, e.Nombre
-ORDER BY l.Torneo_ID, PTS DESC, DG DESC, GF DESC, Equipo;
+GROUP BY l.Fase_ID, l.Grupo_ID, l.Torneo_ID, l.Equipo_ID, e.Nombre
+ORDER BY l.Torneo_ID, l.Fase_ID, l.Grupo_ID NULLS FIRST, PTS DESC, DG DESC, GF DESC, Equipo;
+-- Partidos de una FASE Tipo='Eliminacion' no entran en la práctica a esta
+-- vista (no hay "tabla de posiciones" en un bracket) — el filtro natural
+-- es que el frontend/backend solo la consulten para fases Liga/Grupos.
 
 -- ------------------------------------------------------------
 -- Goleadores consolidados por disciplina, cross-torneo.

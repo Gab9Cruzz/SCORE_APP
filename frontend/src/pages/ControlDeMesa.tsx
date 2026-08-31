@@ -118,7 +118,7 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
       if (error) throw error;
       return data;
     },
-    enabled: equipoLocalId !== undefined,
+    enabled: equipoLocalId != null,
   });
 
   const plantillaVisitanteQuery = useQuery({
@@ -130,7 +130,7 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
       if (error) throw error;
       return data;
     },
-    enabled: equipoVisitanteId !== undefined,
+    enabled: equipoVisitanteId != null,
   });
 
   const equipoNombre = useMemo(
@@ -193,6 +193,18 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
   }
 
   const partido = partidoQuery.data;
+  // Motor de Formatos: un partido de bracket puede nacer con uno o los
+  // dos equipos sin definir todavía ("Ganador Partido N", TBD hasta que
+  // el partido anterior termine) — no hay nada que cargar acá hasta
+  // entonces.
+  if (partido.equipos_id_local == null || partido.equipos_id_visitante == null) {
+    return (
+      <div className="page">
+        <button type="button" className="link-button" onClick={onVolver}>← Volver a la lista</button>
+        <p className="muted">Este partido todavía no tiene los dos equipos definidos — esperá a que termine el partido anterior del bracket.</p>
+      </div>
+    );
+  }
   const nombreLocal = equipoNombre.get(partido.equipos_id_local) ?? `Equipo #${partido.equipos_id_local}`;
   const nombreVisitante = equipoNombre.get(partido.equipos_id_visitante) ?? `Equipo #${partido.equipos_id_visitante}`;
 

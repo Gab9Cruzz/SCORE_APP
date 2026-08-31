@@ -36,6 +36,10 @@ class ResultadoPartidoOut(BaseModel):
     jornada: int | None
     fase: str
     grupo: str | None
+    # Motor de Formatos: FK estructurales, en paralelo a fase/grupo (texto
+    # libre del alta manual) — ver comentario grande en 01_schema.sql.
+    fase_id: int | None = None
+    grupo_id: int | None = None
     estado: str
 
 
@@ -54,6 +58,11 @@ class PosicionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     torneo_id: int
+    # EC-54 (motor-formatos-plantillas-navegacion-plan.md): un torneo
+    # Grupos_Playoffs produce varias tablas bajo el mismo Torneo_ID — el
+    # consumidor filtra también por Grupo_ID. NULL en Liga/Eliminación.
+    fase_id: int | None = None
+    grupo_id: int | None = None
     equipo_id: int
     equipo: str
     pj: int

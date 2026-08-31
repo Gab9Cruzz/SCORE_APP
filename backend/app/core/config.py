@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     # arrancar la API (ver app/main.py). 0 = no purgar nunca.
     accesos_retencion_dias: int = 30
 
+    # Retención de la auditoría de cambios (tabla AUDITORIA: alta/
+    # modificación/baja de cualquier entidad). Un mes por defecto, mismo
+    # criterio y mismo mecanismo de purga que accesos_retencion_dias (ver
+    # app/main.py). 0 = no purgar nunca.
+    auditoria_retencion_dias: int = 30
+
     cors_origins: str = "*"
     api_v1_prefix: str = "/api/v1"
 

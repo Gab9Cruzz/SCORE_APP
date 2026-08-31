@@ -4,16 +4,19 @@ import { apiErrorMessage } from "../../../api/client";
 import { ResourceForm, type ResourceFieldValue } from "../../../components/admin/ResourceForm";
 import { ResourceTable } from "../../../components/admin/ResourceTable";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
+import { MotorFormatosPanel } from "./MotorFormatosPanel";
 import type { TorneoDashboardContext } from "./TorneoDashboard";
 
 interface PartidoRow {
   id: number;
-  equipos_id_local: number;
-  equipos_id_visitante: number;
+  equipos_id_local: number | null;
+  equipos_id_visitante: number | null;
   fecha_partido: string;
   jornada: number | null;
   fase: string;
   grupo: string | null;
+  fase_id: number | null;
+  grupo_id: number | null;
   estado: string;
   arbitro_id: number | null;
 }
@@ -46,7 +49,7 @@ const formatearFecha = (iso: string) => new Date(iso).toLocaleString("es-AR", { 
  * página global (trg_partidos_validar_inscripcion en 06_triggers.sql
  * rechaza si no, esto es solo UX). */
 export function PartidosDelTorneoPage() {
-  const { torneoId, torneoContexto } = useOutletContext<TorneoDashboardContext>();
+  const { torneoId, torneoContexto, formato } = useOutletContext<TorneoDashboardContext>();
   const [modo, setModo] = useState<Modo>({ tipo: "lista" });
 
   const crud = useResourceCrud<PartidoRow>({
@@ -94,6 +97,12 @@ export function PartidosDelTorneoPage() {
 
   return (
     <div>
+      <MotorFormatosPanel
+        torneoId={torneoId}
+        formato={formato}
+        partidos={crud.listQuery.data ?? []}
+        equiposInscritosCount={equiposInscritos.length}
+      />
       <div className="page__header">
         <h2>Partidos de esta edición</h2>
         <button type="button" onClick={() => setModo({ tipo: "crear" })}>
@@ -106,7 +115,10 @@ export function PartidosDelTorneoPage() {
           {
             key: "partido",
             label: "Partido",
-            render: (r) => `${nombreEquipo.get(r.equipos_id_local) ?? "?"} vs ${nombreEquipo.get(r.equipos_id_visitante) ?? "?"}`,
+            render: (r) =>
+              `${r.equipos_id_local != null ? (nombreEquipo.get(r.equipos_id_local) ?? "?") : "Por definir"} vs ${
+                r.equipos_id_visitante != null ? (nombreEquipo.get(r.equipos_id_visitante) ?? "?") : "Por definir"
+              }`,
           },
           { key: "fecha_partido", label: "Fecha", render: (r) => formatearFecha(r.fecha_partido) },
           { key: "fase", label: "Fase" },

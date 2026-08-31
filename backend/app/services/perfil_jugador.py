@@ -99,6 +99,7 @@ class PerfilJugadorService:
         return PerfilJugadorOut(
             jugador_id=jugador.id,
             nombre=jugador.nombre,
+            foto_url=jugador.foto_url,
             cedula=jugador.cedula,
             correo_electronico=jugador.correo_electronico,
             disciplinas=disciplinas_out,

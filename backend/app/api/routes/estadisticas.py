@@ -17,8 +17,12 @@ router = APIRouter(prefix="/estadisticas", tags=["Estadísticas"])
 
 
 @router.get("/torneos/{torneo_id}/posiciones", response_model=list[PosicionOut])
-async def tabla_posiciones(torneo_id: int, session: AsyncSession = Depends(get_db)) -> list[PosicionOut]:
-    return await EstadisticasService(session).tabla_posiciones(torneo_id)
+async def tabla_posiciones(
+    torneo_id: int, grupo_id: int | None = None, session: AsyncSession = Depends(get_db)
+) -> list[PosicionOut]:
+    # grupo_id (EC-54): un torneo Grupos_Playoffs necesita la tabla de UN
+    # grupo puntual, no las N mezcladas.
+    return await EstadisticasService(session).tabla_posiciones(torneo_id, grupo_id=grupo_id)
 
 
 @router.get("/torneos/{torneo_id}/goleadores", response_model=list[GoleadorOut])

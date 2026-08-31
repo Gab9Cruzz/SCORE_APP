@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -31,3 +31,14 @@ class Torneo(TimestampMixin, Base):
     fecha_fin: Mapped[date]
     # Valores válidos: Activo, Inactivo, Finalizado (chk_torneo_estado, 02_constraints.sql)
     estado: Mapped[str] = mapped_column(String(20), default="Activo")
+    # Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md,
+    # requerimiento #4). Valores válidos: Liga, Eliminacion,
+    # Grupos_Playoffs (chk_torneo_formato). La coherencia de los 4
+    # parámetros de abajo con el Formato la valida TorneoService (400 con
+    # mensaje claro), no un CHECK de Postgres — ver ese comentario en
+    # 02_constraints.sql.
+    formato: Mapped[str] = mapped_column(String(20), default="Liga")
+    ida_vuelta: Mapped[bool] = mapped_column(Boolean, default=False)
+    equipos_por_grupo: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    clasificados_por_grupo: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    incluye_tercer_lugar: Mapped[bool] = mapped_column(Boolean, default=True)

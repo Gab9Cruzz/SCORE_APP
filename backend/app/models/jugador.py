@@ -20,3 +20,7 @@ class Jugador(TimestampMixin, Base):
     correo_electronico: Mapped[str] = mapped_column(String(150))
     # Valores válidos: Activo, Inactivo (chk_jugadores_estado)
     estado: Mapped[str] = mapped_column(String(20), default="Activo")
+    # nullable a propósito: todos los jugadores existentes quedan sin foto,
+    # el frontend cae a iniciales (motor-formatos-plantillas-navegacion-
+    # plan.md, requerimiento #3) — sin uploader en este plan, acepta una URL.
+    foto_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

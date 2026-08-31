@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../../api/client";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
@@ -13,6 +13,11 @@ interface EdicionRow {
 interface PosicionRow {
   equipo_id: number;
   equipo: string;
+  // EC-54 (motor-formatos-plantillas-navegacion-plan.md): un torneo
+  // Grupos_Playoffs devuelve varias tablas bajo el mismo Torneo_ID — se
+  // separan acá por Grupo_ID en vez de mezclarlas en una sola.
+  fase_id: number | null;
+  grupo_id: number | null;
   pj: number;
   pg: number;
   pe: number;
@@ -21,6 +26,10 @@ interface PosicionRow {
   gc: number;
   dg: number;
   pts: number;
+}
+interface GrupoRow {
+  id: number;
+  nombre: string;
 }
 interface GoleadorRow {
   jugador_id: number;
@@ -37,7 +46,7 @@ interface GoleadorRow {
  * recargar la página (Decision Audit Trail #6: evita el bug de "edité el
  * equipo de la edición equivocada porque el desplegable decía otra cosa"). */
 export function EstadisticasDelTorneoPage() {
-  const { torneoId, torneoGrupoId } = useOutletContext<TorneoDashboardContext>();
+  const { torneoId, torneoGrupoId, formato } = useOutletContext<TorneoDashboardContext>();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [edicionId, setEdicionId] = useState<number>(() => {
@@ -79,6 +88,32 @@ export function EstadisticasDelTorneoPage() {
       return data as PosicionRow[];
     },
   });
+
+  // EC-54: un torneo Grupos_Playoffs trae varios grupos mezclados en la
+  // misma respuesta — se separan por Grupo_ID. Todas las filas de la
+  // fase de grupos comparten el mismo Fase_ID, así que alcanza con
+  // pedir los nombres UNA vez (no una llamada por grupo).
+  const faseGruposId = posicionesQuery.data?.find((p) => p.grupo_id != null)?.fase_id ?? null;
+  const gruposQuery = useResourceCrud<GrupoRow>({
+    resourceKey: "grupos",
+    basePath: "/api/v1/grupos",
+    listParams: { fase_id: faseGruposId },
+    enabled: formato === "Grupos_Playoffs" && faseGruposId != null,
+  });
+  const nombreGrupo = useMemo(
+    () => new Map((gruposQuery.listQuery.data ?? []).map((g) => [g.id, g.nombre])),
+    [gruposQuery.listQuery.data],
+  );
+  const posicionesPorGrupo = useMemo(() => {
+    const mapa = new Map<number, PosicionRow[]>();
+    for (const fila of posicionesQuery.data ?? []) {
+      if (fila.grupo_id == null) continue;
+      const arr = mapa.get(fila.grupo_id);
+      if (arr) arr.push(fila);
+      else mapa.set(fila.grupo_id, [fila]);
+    }
+    return [...mapa.entries()].sort(([a], [b]) => a - b);
+  }, [posicionesQuery.data]);
   const goleadoresQuery = useQuery({
     queryKey: ["estadisticas", "goleadores", edicionId],
     queryFn: async () => {
@@ -116,40 +151,17 @@ export function EstadisticasDelTorneoPage() {
       {posicionesQuery.isLoading && <p>Cargando...</p>}
       {posicionesQuery.isError && <p className="error-text">{apiErrorMessage(posicionesQuery.error)}</p>}
       {posicionesQuery.data?.length === 0 && <p className="muted">Sin partidos jugados todavía en esta edición.</p>}
-      {!!posicionesQuery.data?.length && (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Equipo</th>
-                <th>PJ</th>
-                <th>PG</th>
-                <th>PE</th>
-                <th>PP</th>
-                <th>GF</th>
-                <th>GC</th>
-                <th>DG</th>
-                <th>Pts</th>
-              </tr>
-            </thead>
-            <tbody>
-              {posicionesQuery.data.map((p) => (
-                <tr key={p.equipo_id}>
-                  <td>{p.equipo}</td>
-                  <td>{p.pj}</td>
-                  <td>{p.pg}</td>
-                  <td>{p.pe}</td>
-                  <td>{p.pp}</td>
-                  <td>{p.gf}</td>
-                  <td>{p.gc}</td>
-                  <td>{p.dg}</td>
-                  <td>{p.pts}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {formato === "Grupos_Playoffs" && !!posicionesQuery.data?.length
+        ? // EC-54: un torneo Grupos_Playoffs separa por grupo — mezclarlos
+          // en una sola tabla no dice nada (los puntos de un grupo no se
+          // comparan con los de otro).
+          posicionesPorGrupo.map(([grupoId, filas]) => (
+            <div key={grupoId}>
+              <h4>Grupo {nombreGrupo.get(grupoId) ?? grupoId}</h4>
+              <TablaPosiciones filas={filas} />
+            </div>
+          ))
+        : !!posicionesQuery.data?.length && <TablaPosiciones filas={posicionesQuery.data} />}
 
       <h3>Goleadores</h3>
       {goleadoresQuery.data?.length === 0 && <p className="muted">Sin goles registrados todavía en esta edición.</p>}
@@ -175,6 +187,43 @@ export function EstadisticasDelTorneoPage() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function TablaPosiciones({ filas }: { filas: PosicionRow[] }) {
+  return (
+    <div className="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Equipo</th>
+            <th>PJ</th>
+            <th>PG</th>
+            <th>PE</th>
+            <th>PP</th>
+            <th>GF</th>
+            <th>GC</th>
+            <th>DG</th>
+            <th>Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map((p) => (
+            <tr key={p.equipo_id}>
+              <td>{p.equipo}</td>
+              <td>{p.pj}</td>
+              <td>{p.pg}</td>
+              <td>{p.pe}</td>
+              <td>{p.pp}</td>
+              <td>{p.gf}</td>
+              <td>{p.gc}</td>
+              <td>{p.dg}</td>
+              <td>{p.pts}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

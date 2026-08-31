@@ -194,6 +194,108 @@ export interface paths {
         patch: operations["actualizar_torneo_api_v1_torneos__torneo_id__patch"];
         trace?: never;
     };
+    "/api/v1/torneos/{torneo_id}/fixture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generar Fixture
+         * @description Formato Liga: todos contra todos (ida y vuelta si el torneo lo
+         *     pide), método del círculo — T34/T35.
+         */
+        post: operations["generar_fixture_api_v1_torneos__torneo_id__fixture_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/torneos/{torneo_id}/sorteo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sortear
+         * @description Formato Eliminación: sortea el bracket completo (con Tercer Lugar
+         *     si aplica). Formato Grupos + Playoffs: sortea los grupos y genera el
+         *     round robin de cada uno — T36/T39/T43/T44/T47/T50.
+         */
+        post: operations["sortear_api_v1_torneos__torneo_id__sorteo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/torneos/{torneo_id}/playoffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generar Playoffs
+         * @description Solo Grupos + Playoffs, y solo cuando la Fase de Grupos ya terminó:
+         *     cruza los clasificados de cada grupo (1°A-2°B...) y sortea el bracket
+         *     de la fase eliminatoria — T42/T51.
+         */
+        post: operations["generar_playoffs_api_v1_torneos__torneo_id__playoffs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/torneos/{torneo_id}/bracket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bracket
+         * @description Solo lectura, público (mismo criterio que /estadisticas) — T46.
+         */
+        get: operations["bracket_api_v1_torneos__torneo_id__bracket_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/grupos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Grupos */
+        get: operations["listar_grupos_api_v1_grupos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/torneo-grupos": {
         parameters: {
             query?: never;
@@ -839,6 +941,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auditoria": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Auditoria
+         * @description Bitácora de cambios (alta/modificación/baja) de cualquier entidad,
+         *     del más reciente al más antiguo. `desde`/`hasta` son días completos.
+         */
+        get: operations["listar_auditoria_api_v1_auditoria_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/estadisticas/torneos/{torneo_id}/posiciones": {
         parameters: {
             query?: never;
@@ -973,6 +1096,39 @@ export interface components {
              */
             fecha: string;
         };
+        /** AuditoriaOut */
+        AuditoriaOut: {
+            /** Id */
+            id: number;
+            /** Usuario Id */
+            usuario_id: number | null;
+            /** Tabla */
+            tabla: string;
+            /** Registro Id */
+            registro_id: number;
+            /**
+             * Accion
+             * @enum {string}
+             */
+            accion: "crear" | "modificar" | "eliminar";
+            /** Datos Anteriores */
+            datos_anteriores: {
+                [key: string]: unknown;
+            } | null;
+            /** Datos Nuevos */
+            datos_nuevos: {
+                [key: string]: unknown;
+            } | null;
+            /** Ip */
+            ip: string | null;
+            /** User Agent */
+            user_agent: string | null;
+            /**
+             * Fecha
+             * Format: date-time
+             */
+            fecha: string;
+        };
         /** Body_login_api_v1_auth_login_post */
         Body_login_api_v1_auth_login_post: {
             /** Grant Type */
@@ -1020,6 +1176,8 @@ export interface components {
              * @enum {string}
              */
             estado: "Activo" | "Inactivo";
+            /** Orden Popularidad */
+            orden_popularidad?: number | null;
             /**
              * Modalidades
              * @default []
@@ -1037,6 +1195,8 @@ export interface components {
              * @enum {string}
              */
             estado: "Activo" | "Inactivo";
+            /** Orden Popularidad */
+            orden_popularidad?: number | null;
         };
         /**
          * DisciplinaUpdate
@@ -1253,6 +1413,37 @@ export interface components {
             /** Estado */
             estado?: ("Activo" | "Inactivo") | null;
         };
+        /** FaseOut */
+        FaseOut: {
+            /** Id */
+            id: number;
+            /** Torneo Id */
+            torneo_id: number;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Tipo
+             * @enum {string}
+             */
+            tipo: "Liga" | "Grupos" | "Eliminacion";
+            /** Orden */
+            orden: number;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Pendiente" | "En_Curso" | "Finalizada";
+            /**
+             * Fecha Registro
+             * Format: date-time
+             */
+            fecha_registro: string;
+            /**
+             * Fecha Modificacion
+             * Format: date-time
+             */
+            fecha_modificacion: string;
+        };
         /** FilaInvalida */
         FilaInvalida: {
             /** Fila Index */
@@ -1293,6 +1484,20 @@ export interface components {
             equipo: string;
             /** Goles */
             goles: number;
+        };
+        /** GrupoOut */
+        GrupoOut: {
+            /** Id */
+            id: number;
+            /** Fase Id */
+            fase_id: number;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Fecha Registro
+             * Format: date-time
+             */
+            fecha_registro: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1441,6 +1646,8 @@ export interface components {
              * @enum {string}
              */
             estado: "Activo" | "Inactivo";
+            /** Foto Url */
+            foto_url?: string | null;
             /**
              * Fecha Registro
              * Format: date-time
@@ -1493,6 +1700,10 @@ export interface components {
          *     admin logueado del frontend, que ya manda el Bearer token en cada
          *     request) sigue recibiendo JugadorOut completo en la misma ruta — ver
          *     get_current_user_optional en app/api/deps.py.
+         *
+         *     foto_url SÍ va acá (a diferencia de cédula/correo): es del mismo nivel
+         *     de exposición que `nombre`, y el grid de Plantillas la necesita para
+         *     mostrar la tarjeta de cada jugador.
          */
         JugadorPublicOut: {
             /** Id */
@@ -1504,6 +1715,8 @@ export interface components {
              * @enum {string}
              */
             estado: "Activo" | "Inactivo";
+            /** Foto Url */
+            foto_url?: string | null;
         };
         /** JugadorUpdate */
         JugadorUpdate: {
@@ -1515,6 +1728,8 @@ export interface components {
             correo_electronico?: string | null;
             /** Estado */
             estado?: ("Activo" | "Inactivo") | null;
+            /** Foto Url */
+            foto_url?: string | null;
         };
         /** ModalidadOut */
         ModalidadOut: {
@@ -1575,9 +1790,9 @@ export interface components {
             /** Torneo Id */
             torneo_id: number;
             /** Equipos Id Local */
-            equipos_id_local: number;
+            equipos_id_local: number | null;
             /** Equipos Id Visitante */
-            equipos_id_visitante: number;
+            equipos_id_visitante: number | null;
             /**
              * Fecha Partido
              * Format: date-time
@@ -1602,6 +1817,22 @@ export interface components {
             estado: "Programado" | "En curso" | "Finalizado" | "Cancelado";
             /** Arbitro Id */
             arbitro_id: number | null;
+            /** Fase Id */
+            fase_id?: number | null;
+            /** Grupo Id */
+            grupo_id?: number | null;
+            /** Ronda Nombre */
+            ronda_nombre?: string | null;
+            /** Partido Siguiente Id */
+            partido_siguiente_id?: number | null;
+            /** Slot Siguiente */
+            slot_siguiente?: ("Local" | "Visitante") | null;
+            /** Partido Perdedor Siguiente Id */
+            partido_perdedor_siguiente_id?: number | null;
+            /** Slot Perdedor Siguiente */
+            slot_perdedor_siguiente?: ("Local" | "Visitante") | null;
+            /** Ganador Desempate Id */
+            ganador_desempate_id?: number | null;
             /**
              * Fecha Registro
              * Format: date-time
@@ -1627,6 +1858,8 @@ export interface components {
             estado?: ("Programado" | "En curso" | "Finalizado" | "Cancelado") | null;
             /** Arbitro Id */
             arbitro_id?: number | null;
+            /** Ganador Desempate Id */
+            ganador_desempate_id?: number | null;
         };
         /** PerfilDisciplinaOut */
         PerfilDisciplinaOut: {
@@ -1654,6 +1887,8 @@ export interface components {
             jugador_id: number;
             /** Nombre */
             nombre: string;
+            /** Foto Url */
+            foto_url?: string | null;
             /** Disciplinas */
             disciplinas: components["schemas"]["PerfilDisciplinaOut"][];
             /** Cedula */
@@ -1673,6 +1908,8 @@ export interface components {
             jugador_id: number;
             /** Nombre */
             nombre: string;
+            /** Foto Url */
+            foto_url?: string | null;
             /** Disciplinas */
             disciplinas: components["schemas"]["PerfilDisciplinaOut"][];
         };
@@ -1698,6 +1935,10 @@ export interface components {
         PosicionOut: {
             /** Torneo Id */
             torneo_id: number;
+            /** Fase Id */
+            fase_id?: number | null;
+            /** Grupo Id */
+            grupo_id?: number | null;
             /** Equipo Id */
             equipo_id: number;
             /** Equipo */
@@ -1807,8 +2048,23 @@ export interface components {
             fase: string;
             /** Grupo */
             grupo: string | null;
+            /** Fase Id */
+            fase_id?: number | null;
+            /** Grupo Id */
+            grupo_id?: number | null;
             /** Estado */
             estado: string;
+        };
+        /**
+         * SorteoRequest
+         * @description Semilla opcional (Design sección E / EC del plan): auditable y
+         *     reproducible si se manda, aleatoria si no. Rehacer un sorteo (EC-52)
+         *     usa este mismo endpoint — MotorFormatosService detecta si la fase ya
+         *     tiene partidos y decide bloquear o limpiar+regenerar.
+         */
+        SorteoRequest: {
+            /** Semilla */
+            semilla?: string | null;
         };
         /** Token */
         Token: {
@@ -1851,6 +2107,26 @@ export interface components {
              * Format: date
              */
             fecha_fin: string;
+            /**
+             * Formato
+             * @default Liga
+             * @enum {string}
+             */
+            formato: "Liga" | "Eliminacion" | "Grupos_Playoffs";
+            /**
+             * Ida Vuelta
+             * @default false
+             */
+            ida_vuelta: boolean;
+            /** Equipos Por Grupo */
+            equipos_por_grupo?: number | null;
+            /** Clasificados Por Grupo */
+            clasificados_por_grupo?: number | null;
+            /**
+             * Incluye Tercer Lugar
+             * @default true
+             */
+            incluye_tercer_lugar: boolean;
             /** Torneo Grupo Id */
             torneo_grupo_id?: number | null;
             /** Torneo Grupo Nombre */
@@ -1925,6 +2201,26 @@ export interface components {
              * Format: date
              */
             fecha_fin: string;
+            /**
+             * Formato
+             * @default Liga
+             * @enum {string}
+             */
+            formato: "Liga" | "Eliminacion" | "Grupos_Playoffs";
+            /**
+             * Ida Vuelta
+             * @default false
+             */
+            ida_vuelta: boolean;
+            /** Equipos Por Grupo */
+            equipos_por_grupo?: number | null;
+            /** Clasificados Por Grupo */
+            clasificados_por_grupo?: number | null;
+            /**
+             * Incluye Tercer Lugar
+             * @default true
+             */
+            incluye_tercer_lugar: boolean;
             /** Id */
             id: number;
             /** Torneo Grupo Id */
@@ -1961,6 +2257,16 @@ export interface components {
             fecha_fin?: string | null;
             /** Estado */
             estado?: ("Activo" | "Inactivo" | "Finalizado") | null;
+            /** Formato */
+            formato?: ("Liga" | "Eliminacion" | "Grupos_Playoffs") | null;
+            /** Ida Vuelta */
+            ida_vuelta?: boolean | null;
+            /** Equipos Por Grupo */
+            equipos_por_grupo?: number | null;
+            /** Clasificados Por Grupo */
+            clasificados_por_grupo?: number | null;
+            /** Incluye Tercer Lugar */
+            incluye_tercer_lugar?: boolean | null;
         };
         /** TraspasoCreate */
         TraspasoCreate: {
@@ -2541,6 +2847,165 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TorneoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generar_fixture_api_v1_torneos__torneo_id__fixture_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                torneo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sortear_api_v1_torneos__torneo_id__sorteo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                torneo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SorteoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generar_playoffs_api_v1_torneos__torneo_id__playoffs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                torneo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bracket_api_v1_torneos__torneo_id__bracket_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                torneo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartidoOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_grupos_api_v1_grupos_get: {
+        parameters: {
+            query: {
+                fase_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrupoOut"][];
                 };
             };
             /** @description Validation Error */
@@ -4275,9 +4740,49 @@ export interface operations {
             };
         };
     };
+    listar_auditoria_api_v1_auditoria_get: {
+        parameters: {
+            query?: {
+                skip?: number;
+                limit?: number;
+                tabla?: string | null;
+                registro_id?: number | null;
+                accion?: ("crear" | "modificar" | "eliminar") | null;
+                usuario_id?: number | null;
+                desde?: string | null;
+                hasta?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditoriaOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     tabla_posiciones_api_v1_estadisticas_torneos__torneo_id__posiciones_get: {
         parameters: {
-            query?: never;
+            query?: {
+                grupo_id?: number | null;
+            };
             header?: never;
             path: {
                 torneo_id: number;

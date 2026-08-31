@@ -69,4 +69,12 @@ class BaseRepository(Generic[ModelT]):
         return obj
 
     async def soft_delete(self, id_: int, estado_inactivo: str = "Inactivo") -> ModelT:
-        return await self.update(id_, estado=estado_inactivo)
+        obj = await self.get_or_404(id_)
+        # Atributo transiente (no una columna: no se mapea ni se persiste),
+        # leído y borrado por el event listener de app/core/auditoria.py.
+        # Es lo único que distingue "esto fue una baja lógica" de "se
+        # modificó cualquier otro campo" sin adivinar por el nombre/valor
+        # de Estado — que también cambia en transiciones de negocio
+        # normales (ej. Torneo -> 'Finalizado') que no son una baja.
+        obj._auditoria_accion = "eliminar"  # type: ignore[attr-defined]
+        return await self.save_changes(obj, estado=estado_inactivo)

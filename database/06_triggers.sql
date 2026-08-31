@@ -187,6 +187,15 @@ RETURNS TRIGGER AS $$
 DECLARE
     v_inscritos INT;
 BEGIN
+    -- Motor de Formatos (Decisión Eng #13): un partido de ronda 2+ de un
+    -- bracket de Eliminación nace con uno o los dos equipos en NULL
+    -- ("Ganador Partido N", TBD) — el trigger de propagación del bracket
+    -- los completa después. Nada que validar todavía si algún lado sigue
+    -- sin definirse.
+    IF NEW.EQUIPOS_ID_LOCAL IS NULL OR NEW.EQUIPOS_ID_VISITANTE IS NULL THEN
+        RETURN NEW;
+    END IF;
+
     SELECT COUNT(*)
       INTO v_inscritos
       FROM INSCRIPCIONES_TORNEO
@@ -338,6 +347,138 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_torneo_finalizado_libera
 AFTER UPDATE ON TORNEO
 FOR EACH ROW EXECUTE FUNCTION fn_cerrar_torneo_libera_jugadores();
+
+-- ------------------------------------------------------------
+-- Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md,
+-- requerimiento #4). Tres triggers nuevos, mismos tres patrones ya
+-- establecidos en este archivo (validación cruzada, propagación,
+-- exclusividad) — ninguno introduce infraestructura nueva.
+-- ------------------------------------------------------------
+
+-- Un equipo no puede caer en 2 grupos de la MISMA fase — no se puede
+-- expresar con un UNIQUE plano porque Fase_ID no vive en GRUPO_EQUIPO
+-- (vive en GRUPO, un nivel arriba). Mismo patrón que
+-- fn_validar_exclusividad_torneo.
+CREATE OR REPLACE FUNCTION fn_validar_equipo_un_grupo_por_fase()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_conflicto INT;
+BEGIN
+    SELECT COUNT(*) INTO v_conflicto
+    FROM GRUPO_EQUIPO ge
+    JOIN GRUPO g_new ON g_new.ID = NEW.Grupo_ID
+    JOIN GRUPO g_ge  ON g_ge.ID  = ge.Grupo_ID
+    WHERE ge.Inscripcion_Torneo_ID = NEW.Inscripcion_Torneo_ID
+      AND ge.ID <> COALESCE(NEW.ID, -1)
+      AND g_ge.Fase_ID = g_new.Fase_ID;
+    IF v_conflicto > 0 THEN
+        RAISE EXCEPTION 'equipo_ya_asignado_a_otro_grupo_en_esta_fase';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_grupo_equipo_un_grupo_por_fase
+BEFORE INSERT OR UPDATE ON GRUPO_EQUIPO
+FOR EACH ROW EXECUTE FUNCTION fn_validar_equipo_un_grupo_por_fase();
+
+-- Exige Ganador_Desempate_ID en CUALQUIER partido de una fase Eliminación
+-- que termine empatado en goles — no solo los que propagan a un
+-- siguiente partido. Es lo que hace que el partido de Tercer Lugar
+-- (terminal, sin Partido_Siguiente_ID) también exija resolver el empate:
+-- separado del trigger de propagación (Decisión Eng #17) porque un solo
+-- trigger condicionado a "tiene siguiente" dejaría pasar ese caso sin
+-- validar.
+CREATE OR REPLACE FUNCTION fn_validar_partido_eliminacion_desempate()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_tipo_fase VARCHAR(20);
+    v_goles_local INT;
+    v_goles_visitante INT;
+BEGIN
+    IF NEW.Estado = 'Finalizado' AND OLD.Estado <> 'Finalizado' AND NEW.Fase_ID IS NOT NULL THEN
+        SELECT Tipo INTO v_tipo_fase FROM FASE WHERE ID = NEW.Fase_ID;
+        IF v_tipo_fase = 'Eliminacion' THEN
+            SELECT
+                COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_LOCAL),
+                COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_VISITANTE)
+              INTO v_goles_local, v_goles_visitante
+              FROM vw_goles_acreditados ga
+             WHERE ga.PARTIDOS_ID = NEW.ID;
+            IF v_goles_local = v_goles_visitante AND NEW.Ganador_Desempate_ID IS NULL THEN
+                RAISE EXCEPTION 'partido_eliminacion_empatado_sin_desempate';
+            END IF;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_partido_validar_desempate
+BEFORE UPDATE ON PARTIDOS
+FOR EACH ROW EXECUTE FUNCTION fn_validar_partido_eliminacion_desempate();
+
+-- Propaga el resultado de un partido de bracket: el GANADOR avanza vía
+-- Partido_Siguiente_ID/Slot_Siguiente (a la ronda siguiente o a la
+-- Final), y el PERDEDOR de una semifinal avanza vía
+-- Partido_Perdedor_Siguiente_ID/Slot_Perdedor_Siguiente (al partido de
+-- Tercer Lugar — Decisión Eng #18: el perdedor se calcula en el mismo
+-- trigger, ya con el ganador resuelto en la misma fila, sin un tercer
+-- trigger aparte). Corre AFTER el de validación de arriba, así que si
+-- hubo empate, Ganador_Desempate_ID ya está garantizado no-NULL acá.
+CREATE OR REPLACE FUNCTION fn_propagar_ganador_bracket()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_ganador_id INT;
+    v_perdedor_id INT;
+    v_goles_local INT;
+    v_goles_visitante INT;
+BEGIN
+    IF NEW.Estado = 'Finalizado' AND OLD.Estado <> 'Finalizado'
+       AND (NEW.Partido_Siguiente_ID IS NOT NULL OR NEW.Partido_Perdedor_Siguiente_ID IS NOT NULL) THEN
+
+        SELECT
+            COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_LOCAL),
+            COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_VISITANTE)
+          INTO v_goles_local, v_goles_visitante
+          FROM vw_goles_acreditados ga
+         WHERE ga.PARTIDOS_ID = NEW.ID;
+
+        v_ganador_id := CASE
+            WHEN v_goles_local > v_goles_visitante THEN NEW.EQUIPOS_ID_LOCAL
+            WHEN v_goles_visitante > v_goles_local THEN NEW.EQUIPOS_ID_VISITANTE
+            ELSE NEW.Ganador_Desempate_ID     -- ya validado NOT NULL por el trigger BEFORE si hubo empate
+        END;
+        v_perdedor_id := CASE WHEN v_ganador_id = NEW.EQUIPOS_ID_LOCAL
+                               THEN NEW.EQUIPOS_ID_VISITANTE ELSE NEW.EQUIPOS_ID_LOCAL END;
+
+        IF NEW.Partido_Siguiente_ID IS NOT NULL THEN
+            UPDATE PARTIDOS
+               SET EQUIPOS_ID_LOCAL     = CASE WHEN NEW.Slot_Siguiente = 'Local'
+                                                THEN v_ganador_id ELSE EQUIPOS_ID_LOCAL END,
+                   EQUIPOS_ID_VISITANTE = CASE WHEN NEW.Slot_Siguiente = 'Visitante'
+                                                THEN v_ganador_id ELSE EQUIPOS_ID_VISITANTE END
+             WHERE ID = NEW.Partido_Siguiente_ID;
+        END IF;
+
+        IF NEW.Partido_Perdedor_Siguiente_ID IS NOT NULL THEN
+            UPDATE PARTIDOS
+               SET EQUIPOS_ID_LOCAL     = CASE WHEN NEW.Slot_Perdedor_Siguiente = 'Local'
+                                                THEN v_perdedor_id ELSE EQUIPOS_ID_LOCAL END,
+                   EQUIPOS_ID_VISITANTE = CASE WHEN NEW.Slot_Perdedor_Siguiente = 'Visitante'
+                                                THEN v_perdedor_id ELSE EQUIPOS_ID_VISITANTE END
+             WHERE ID = NEW.Partido_Perdedor_Siguiente_ID;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_partido_propagar_bracket
+AFTER UPDATE ON PARTIDOS
+FOR EACH ROW EXECUTE FUNCTION fn_propagar_ganador_bracket();
+-- No dispara para partidos de Liga/Grupos (ambas columnas de "siguiente"
+-- son NULL ahí): la propagación es exclusiva de partidos de bracket.
 
 -- ------------------------------------------------------------
 -- Verificación final

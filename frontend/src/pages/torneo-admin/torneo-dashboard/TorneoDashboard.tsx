@@ -14,6 +14,8 @@ interface TorneoRow {
   estado: string;
   fecha_inicio: string;
   fecha_fin: string;
+  formato: "Liga" | "Eliminacion" | "Grupos_Playoffs";
+  incluye_tercer_lugar: boolean;
 }
 interface EdicionResumen {
   id: number;
@@ -49,6 +51,12 @@ export interface TorneoDashboardContext {
    * concatenado, pero para MOSTRARLO en una sub-pantalla sí conviene
    * componerlo una sola vez acá arriba). */
   torneoContexto: string;
+  /** Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md,
+   * requerimiento #4) — decide qué pantalla de Partidos mostrar (Generar
+   * Fixture / Hacer Sorteo / bracket) y si Estadísticas necesita filtrar
+   * por grupo (EC-54). */
+  formato: "Liga" | "Eliminacion" | "Grupos_Playoffs";
+  incluyeTercerLugar: boolean;
 }
 
 const SUBPESTANIAS = [
@@ -191,6 +199,8 @@ export function TorneoDashboardPage() {
             disciplinaId: torneo.disciplina_id,
             modalidadId: torneo.modalidad_id,
             torneoContexto,
+            formato: torneo.formato,
+            incluyeTercerLugar: torneo.incluye_tercer_lugar,
           } satisfies TorneoDashboardContext
         }
       />

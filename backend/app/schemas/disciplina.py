@@ -23,6 +23,7 @@ class DisciplinaOut(BaseModel):
     id: int
     nombre: str
     estado: EstadoDisciplina
+    orden_popularidad: int | None = None
 
 
 class DisciplinaConModalidadesOut(DisciplinaOut):

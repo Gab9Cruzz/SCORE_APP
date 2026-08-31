@@ -5,6 +5,9 @@ export interface DisciplinaRow {
   id: number;
   nombre: string;
   estado: string;
+  // NULL = sin ranking asignado, ordena al final — barra de navegación
+  // tipo SofaScore (motor-formatos-plantillas-navegacion-plan.md, #3).
+  orden_popularidad: number | null;
 }
 
 export interface ModalidadRow {

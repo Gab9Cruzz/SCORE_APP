@@ -1,11 +1,13 @@
 """Dependencias compartidas: sesión de DB, usuario autenticado, chequeo de rol."""
 from collections.abc import Callable
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auditoria import set_actor
 from app.core.config import get_settings
+from app.core.http import ip_del_cliente
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.exceptions.errors import AuthError, ForbiddenError
@@ -17,6 +19,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/lo
 
 
 async def get_current_user(
+    request: Request,
     token: str | None = Depends(oauth2_scheme),
     session: AsyncSession = Depends(get_db),
 ) -> Usuario:
@@ -28,6 +31,12 @@ async def get_current_user(
     usuario = await UsuarioRepository(session).get_by_username(payload["sub"])
     if usuario is None or usuario.estado != "Activo":
         raise AuthError("Usuario inválido o inactivo.")
+    # Deja el actor listo en el contextvar de app/core/auditoria.py ANTES
+    # de que el endpoint haga nada — así cualquier escritura que dispare
+    # (venga de un repo, un service con session.add() directo, o lo que
+    # sea) ya encuentra quién la hizo. Ver ese módulo para el porqué de
+    # contextvars en vez de pasar usuario_actual a cada repositorio.
+    set_actor(usuario_id=usuario.id, ip=ip_del_cliente(request), user_agent=request.headers.get("user-agent"))
     return usuario
 
 

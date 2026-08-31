@@ -34,6 +34,11 @@ export function NavBar() {
             Accesos
           </NavLink>
         )}
+        {session?.rol === "AdminGeneral" && (
+          <NavLink to="/admin/auditoria" className={({ isActive }) => (isActive ? "active" : undefined)}>
+            Auditoría
+          </NavLink>
+        )}
       </nav>
       <div className="nav-bar__session">
         {session ? (

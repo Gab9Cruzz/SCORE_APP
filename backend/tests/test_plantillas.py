@@ -79,7 +79,11 @@ async def test_dorsal_repetido_en_roster_vigente_es_rechazado(
     client: AsyncClient, admin_general_headers: dict[str, str]
 ):
     # uq_dorsal_por_roster_vigente (03_indexes.sql): el dorsal 10 en la
-    # inscripción 1 ya lo tiene Carlos Pérez (05_seed.sql).
+    # inscripción 1 ya lo tiene Carlos Pérez (05_seed.sql). EC-45
+    # (motor-formatos-plantillas-navegacion-plan.md, T24): el alta
+    # individual ahora valida en Python ANTES del índice, mismo criterio
+    # y mismo mensaje que registro_lote.py — 400 con un motivo legible,
+    # no el 409 genérico de "restricción de unicidad".
     perfil_id = await _crear_perfil(client, admin_general_headers, "Otro Jugador")
 
     resp = await client.post(
@@ -92,7 +96,8 @@ async def test_dorsal_repetido_en_roster_vigente_es_rechazado(
         },
         headers=admin_general_headers,
     )
-    assert resp.status_code == 409
+    assert resp.status_code == 400, resp.text
+    assert "dorsal 10 ya está en uso en este equipo" in resp.json()["detail"]
 
 
 async def test_perfil_ya_activo_en_el_torneo_es_rechazado(
@@ -127,3 +132,7 @@ async def test_perfil_ya_activo_en_el_torneo_es_rechazado(
         headers=admin_general_headers,
     )
     assert resp.status_code == 400, resp.text
+    # Motor de Plantilla consolidado (Design sección A del plan): mensaje
+    # específico ("ya juega en X — usa Traspasos"), no la excepción cruda
+    # del trigger.
+    assert "usa Traspasos" in resp.json()["detail"]

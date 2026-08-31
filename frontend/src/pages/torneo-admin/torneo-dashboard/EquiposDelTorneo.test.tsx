@@ -13,6 +13,8 @@ const CONTEXTO: TorneoDashboardContext = {
   disciplinaId: 1,
   modalidadId: 1,
   torneoContexto: "Liga Relámpago — Edición 2",
+  formato: "Liga",
+  incluyeTercerLugar: true,
 };
 
 const mockNavigate = vi.fn();
@@ -107,6 +109,67 @@ describe("EquiposDelTorneoPage — Pareja/Conjunto (tamano_equipo >= 2)", () => 
         volverA: "/torneo-admin/torneos/20/equipos",
       },
     });
+  });
+
+  // T26 (Design sección A, motor-formatos-plantillas-navegacion-plan.md):
+  // el modal muestra el roster de ESE equipo apenas se abre, sin que el
+  // admin tenga que pedir nada — los datos ya vienen del mismo fetch de
+  // /plantillas?torneo_id= que ya carga la página (filtrado acá a esta
+  // inscripción puntual vía un GET aparte con inscripcion_torneo_id=).
+  it("Gestionar plantilla: muestra el roster de ese equipo al abrir", async () => {
+    server.use(
+      http.get(INSCRIPCIONES, () => HttpResponse.json([{ id: 1, torneo_id: 20, equipo_id: 1, jugador_perfil_id: null, estado: "Inscrito" }])),
+      http.get(EQUIPOS, () => HttpResponse.json([{ id: 1, nombre: "Halcones FC" }])),
+      http.get(MODALIDADES, () => HttpResponse.json(MODALIDAD_CONJUNTO)),
+      http.get(PLANTILLAS, ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get("inscripcion_torneo_id") === "1") {
+          return HttpResponse.json([{ id: 100, jugador_perfil_id: 5, inscripcion_torneo_id: 1, dorsal: 10, estado: "Activo" }]);
+        }
+        return HttpResponse.json([]);
+      }),
+      http.get("http://127.0.0.1:8000/api/v1/jugadores", () => HttpResponse.json([{ id: 9, nombre: "J. Pérez", cedula: "001", correo_electronico: "j@mail.com" }])),
+      http.get("http://127.0.0.1:8000/api/v1/perfiles", () => HttpResponse.json([{ id: 5, jugador_id: 9, disciplina_id: 1 }])),
+    );
+    const user = userEvent.setup();
+    renderPagina();
+
+    await user.click(await screen.findByRole("button", { name: "Gestionar plantilla" }));
+
+    expect(await screen.findByText("Jugadores actuales (1)")).toBeInTheDocument();
+    expect(await screen.findByText("J. Pérez")).toBeInTheDocument();
+    expect(screen.getByText("#10")).toBeInTheDocument();
+  });
+
+  // T27 — "Quitar" manda fecha_fin=hoy directo, sin pedir un formulario de
+  // fecha (Design sección A: el caso retroactivo sigue en Plantillas).
+  it("Gestionar plantilla: Quitar manda fecha_fin=hoy sin formulario", async () => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    server.use(
+      http.get(INSCRIPCIONES, () => HttpResponse.json([{ id: 1, torneo_id: 20, equipo_id: 1, jugador_perfil_id: null, estado: "Inscrito" }])),
+      http.get(EQUIPOS, () => HttpResponse.json([{ id: 1, nombre: "Halcones FC" }])),
+      http.get(MODALIDADES, () => HttpResponse.json(MODALIDAD_CONJUNTO)),
+      http.get(PLANTILLAS, () => HttpResponse.json([{ id: 100, jugador_perfil_id: 5, inscripcion_torneo_id: 1, dorsal: 10, estado: "Activo" }])),
+      http.get("http://127.0.0.1:8000/api/v1/jugadores", () => HttpResponse.json([{ id: 9, nombre: "J. Pérez", cedula: "001", correo_electronico: "j@mail.com" }])),
+      http.get("http://127.0.0.1:8000/api/v1/perfiles", () => HttpResponse.json([{ id: 5, jugador_id: 9, disciplina_id: 1 }])),
+    );
+    let queryRecibido: URLSearchParams | null = null;
+    server.use(
+      http.post("http://127.0.0.1:8000/api/v1/plantillas/100/baja", ({ request }) => {
+        queryRecibido = new URL(request.url).searchParams;
+        return HttpResponse.json({ id: 100, estado: "Inactivo" });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPagina();
+
+    await user.click(await screen.findByRole("button", { name: "Gestionar plantilla" }));
+    await screen.findByText("J. Pérez");
+    await user.click(screen.getByRole("button", { name: "Quitar" }));
+    expect(screen.getByText(/¿Quitar a J. Pérez de este equipo\?/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sí, quitar" }));
+
+    await waitFor(() => expect(queryRecibido?.get("fecha_fin")).toBe(hoy));
   });
 });
 

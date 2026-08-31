@@ -13,6 +13,8 @@ const CONTEXTO: TorneoDashboardContext = {
   disciplinaId: 1,
   modalidadId: 1,
   torneoContexto: "Liga Relámpago — Edición 2",
+  formato: "Liga",
+  incluyeTercerLugar: true,
 };
 
 const mockSetSearchParams = vi.fn();
@@ -82,5 +84,40 @@ describe("EstadisticasDelTorneoPage", () => {
     await user.selectOptions(screen.getByRole("combobox", { name: "Edición:" }), "10");
 
     expect(await screen.findByText("Halcones FC (Ed. 1)")).toBeInTheDocument();
+  });
+
+  // T41 (EC-54, motor-formatos-plantillas-navegacion-plan.md): un torneo
+  // Grupos_Playoffs separa la tabla de posiciones por grupo, con el
+  // nombre del grupo (no el Grupo_ID crudo) como encabezado.
+  it("Grupos_Playoffs: separa la tabla de posiciones por grupo", async () => {
+    CONTEXTO.formato = "Grupos_Playoffs";
+    try {
+      server.use(
+        http.get(TORNEOS, () => HttpResponse.json([{ id: 20, numero_edicion: 1, estado: "Activo" }])),
+        http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/20/posiciones", () =>
+          HttpResponse.json([
+            { equipo_id: 1, equipo: "Tigres", fase_id: 5, grupo_id: 100, pj: 1, pg: 1, pe: 0, pp: 0, gf: 2, gc: 0, dg: 2, pts: 3 },
+            { equipo_id: 2, equipo: "Leones", fase_id: 5, grupo_id: 100, pj: 1, pg: 0, pe: 0, pp: 1, gf: 0, gc: 2, dg: -2, pts: 0 },
+            { equipo_id: 3, equipo: "Osos", fase_id: 5, grupo_id: 200, pj: 1, pg: 1, pe: 0, pp: 0, gf: 1, gc: 0, dg: 1, pts: 3 },
+            { equipo_id: 4, equipo: "Águilas", fase_id: 5, grupo_id: 200, pj: 1, pg: 0, pe: 0, pp: 1, gf: 0, gc: 1, dg: -1, pts: 0 },
+          ]),
+        ),
+        http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/20/goleadores", () => HttpResponse.json([])),
+        http.get("http://127.0.0.1:8000/api/v1/grupos", () =>
+          HttpResponse.json([
+            { id: 100, fase_id: 5, nombre: "A" },
+            { id: 200, fase_id: 5, nombre: "B" },
+          ]),
+        ),
+      );
+      renderPagina();
+
+      expect(await screen.findByText("Grupo A")).toBeInTheDocument();
+      expect(screen.getByText("Grupo B")).toBeInTheDocument();
+      expect(screen.getByText("Tigres")).toBeInTheDocument();
+      expect(screen.getByText("Osos")).toBeInTheDocument();
+    } finally {
+      CONTEXTO.formato = "Liga";
+    }
   });
 });

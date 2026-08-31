@@ -174,6 +174,57 @@ describe("TorneosAdminPage", () => {
     );
   });
 
+  // Motor de Formatos (Design sección E, motor-formatos-plantillas-
+  // navegacion-plan.md): el selector solo muestra los campos que aplican
+  // al Formato elegido, y los manda todos en el submit.
+  it("Torneo nuevo: Formato Grupos + Playoffs muestra sus parámetros y los manda en el submit", async () => {
+    mockCatalogos();
+    server.use(http.get("http://127.0.0.1:8000/api/v1/torneo-grupos", () => HttpResponse.json([])));
+    let bodyRecibido: unknown;
+    server.use(
+      http.post("http://127.0.0.1:8000/api/v1/torneos", async ({ request }) => {
+        bodyRecibido = await request.json();
+        return HttpResponse.json({ id: 1, torneo_grupo_id: 1, numero_edicion: 1 }, { status: 201 });
+      }),
+    );
+    const user = userEvent.setup();
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <TorneosAdminPage />
+      </Wrapper>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "+ Torneo nuevo" }));
+    // Por defecto (Liga): "Ida y vuelta" está, los de Grupos no.
+    expect(await screen.findByLabelText("Ida y vuelta")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Equipos por grupo")).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Formato"), "Grupos_Playoffs");
+    expect(screen.queryByLabelText("Ida y vuelta")).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("Jugar partido por el 3er lugar")).toBeInTheDocument();
+    expect(screen.getByLabelText("Equipos por grupo")).toBeInTheDocument();
+
+    await user.type(await screen.findByLabelText("Nombre del torneo"), "Mundialito");
+    await user.selectOptions(screen.getByLabelText("Disciplina"), "Fútbol");
+    await user.selectOptions(await screen.findByLabelText("Modalidad"), "Fútbol 11");
+    await user.type(screen.getByLabelText("Equipos por grupo"), "4");
+    await user.type(screen.getByLabelText("Clasifican por grupo"), "2");
+    await user.type(screen.getByLabelText("Fecha de inicio"), "2026-03-01");
+    await user.type(screen.getByLabelText("Fecha de fin"), "2026-05-15");
+    await user.click(screen.getByRole("button", { name: "Crear" }));
+
+    await waitFor(() =>
+      expect(bodyRecibido).toMatchObject({
+        formato: "Grupos_Playoffs",
+        equipos_por_grupo: 4,
+        clasificados_por_grupo: 2,
+        incluye_tercer_lugar: true,
+      }),
+    );
+    expect((bodyRecibido as Record<string, unknown>).ida_vuelta).toBeUndefined();
+  });
+
   it("Nueva edición: muestra Disciplina/Modalidad heredadas como texto, sin pedirlas ni mandarlas (D-Eng-5)", async () => {
     mockCatalogos();
     server.use(
@@ -379,5 +430,36 @@ describe("TorneosAdminPage — redirección tras Nueva edición (pedido C)", () 
     await user.click(screen.getByRole("button", { name: "Crear edición" }));
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/torneo-admin/torneos/42/equipos"));
+  });
+
+  // T25 (EC-46, motor-formatos-plantillas-navegacion-plan.md): el mismo
+  // camino roto, en la OTRA rama del formulario — crear un torneo la
+  // PRIMERA vez (grupo nuevo) se quedaba en el listado en vez de
+  // redirigir igual que "Nueva edición".
+  it("Torneo nuevo (grupo nuevo): también navega a Agregar Equipo tras crear", async () => {
+    mockCatalogos();
+    server.use(
+      http.get("http://127.0.0.1:8000/api/v1/torneo-grupos", () => HttpResponse.json([])),
+      http.post("http://127.0.0.1:8000/api/v1/torneos", () =>
+        HttpResponse.json({ id: 99, torneo_grupo_id: 5, numero_edicion: 1 }, { status: 201 }),
+      ),
+    );
+    const user = userEvent.setup();
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <TorneosAdminPage />
+      </Wrapper>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "+ Torneo nuevo" }));
+    await user.type(await screen.findByLabelText("Nombre del torneo"), "Liga Relámpago");
+    await user.selectOptions(screen.getByLabelText("Disciplina"), "Fútbol");
+    await user.selectOptions(await screen.findByLabelText("Modalidad"), "Fútbol 11");
+    await user.type(screen.getByLabelText("Fecha de inicio"), "2026-03-01");
+    await user.type(screen.getByLabelText("Fecha de fin"), "2026-05-15");
+    await user.click(screen.getByRole("button", { name: "Crear" }));
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/torneo-admin/torneos/99/equipos"));
   });
 });

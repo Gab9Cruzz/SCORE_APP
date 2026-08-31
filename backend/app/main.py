@@ -5,10 +5,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
+from app.core import auditoria as _auditoria_listener  # noqa: F401 - registra el event listener de flush (ver ese módulo)
 from app.core.config import get_settings
 from app.db.database import async_session_factory
 from app.exceptions.handlers import register_exception_handlers
 from app.repositories.acceso import AccesoRepository
+from app.repositories.auditoria import AuditoriaRepository
 from app.services.usuario import UsuarioService
 
 settings = get_settings()
@@ -78,12 +80,36 @@ async def _purgar_accesos_viejos() -> None:
         print(f"[accesos] no se pudo purgar la bitácora: {exc!r}")
 
 
+async def _purgar_auditoria_vieja() -> None:
+    """Borra de AUDITORIA lo más viejo que `auditoria_retencion_dias` (30
+    por defecto — "1 mes", como se pidió). Mismo mecanismo, mismo
+    razonamiento y mismas limitaciones que `_purgar_accesos_viejos` de
+    arriba: corre al arrancar la API porque este proyecto no tiene
+    scheduler, así que un servidor que queda semanas sin reiniciarse no
+    purga (ver esa función para el detalle completo)."""
+    if settings.auditoria_retencion_dias <= 0:
+        return
+    try:
+        async with async_session_factory() as session:
+            repo = AuditoriaRepository(session)
+            borrados = await repo.purgar_anteriores_a(settings.auditoria_retencion_dias)
+            if borrados:
+                print(
+                    f"[auditoria] purga: {borrados} registro(s) de más de "
+                    f"{settings.auditoria_retencion_dias} días eliminados; "
+                    f"quedan {await repo.contar()}."
+                )
+    except Exception as exc:  # noqa: BLE001 - se loguea, no se propaga (ver docstring)
+        print(f"[auditoria] no se pudo purgar la bitácora: {exc!r}")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     asyncio.create_task(_bootstrap_admin_con_reintentos())
     # Después del bootstrap y también en background: si la base todavía no
     # responde, no vale la pena bloquear el arranque por una limpieza.
     asyncio.create_task(_purgar_accesos_viejos())
+    asyncio.create_task(_purgar_auditoria_vieja())
     yield
 
 

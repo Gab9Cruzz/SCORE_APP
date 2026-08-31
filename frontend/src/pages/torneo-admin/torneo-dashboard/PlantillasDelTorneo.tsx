@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
-import { useNavigate, useOutletContext } from "react-router-dom";
+import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { apiErrorMessage } from "../../../api/client";
 import { ResourceForm, type ResourceFieldValue } from "../../../components/admin/ResourceForm";
-import { ResourceTable } from "../../../components/admin/ResourceTable";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
+import { useCatalogo } from "../../../hooks/useCatalogo";
+import { AvatarJugador } from "../AvatarJugador";
+import { iconoDisciplina } from "../iconosDisciplina";
 import type { RegistroLoteAlcanceTorneo } from "../RegistroLoteAdmin";
+import { ModalPerfilJugador } from "./ModalPerfilJugador";
 import type { TorneoDashboardContext } from "./TorneoDashboard";
 
 interface PlantillaRow {
@@ -19,6 +22,7 @@ interface PlantillaRow {
 interface JugadorRow {
   id: number;
   nombre: string;
+  foto_url: string | null;
 }
 interface PerfilRow {
   id: number;
@@ -36,17 +40,23 @@ interface EquipoRow {
 
 type Modo = { tipo: "lista" } | { tipo: "crear" } | { tipo: "editar"; fila: PlantillaRow } | { tipo: "baja"; fila: PlantillaRow };
 
-/** Sub-pestaña "Plantillas" del dashboard scoped, con el mismo alcance
- * funcional que la extinta pestaña global PlantillasAdmin.tsx (Fase 3 del
- * plan: consolidación) — alta/edición/baja de vínculos jugador↔equipo,
- * pero acotado a este torneo y sin volver a preguntar la Disciplina (ya la
- * fija el torneo, `disciplinaId` del contexto). */
+/** Sub-pestaña "Plantillas" del dashboard scoped — grid de tarjetas
+ * agrupado por equipo (Design sección D, motor-formatos-plantillas-
+ * navegacion-plan.md), reemplaza la tabla plana anterior. Mismo alcance
+ * funcional de antes (alta/edición/baja de vínculos jugador↔equipo,
+ * acotado a este torneo, sin volver a preguntar la Disciplina) — el grid
+ * cambia CÓMO se ve la lista, no qué se puede hacer con ella: "Editar
+ * vínculo"/"Dar de baja" siguen siendo las mismas dos pantallas de antes,
+ * ahora alcanzables desde cada tarjeta en vez de una fila de tabla. Lo
+ * nuevo es el click en la tarjeta, que abre el Perfil de Jugador (editable)
+ * en un modal — Decisión Audit #7: mantiene el contexto del grid detrás. */
 export function PlantillasDelTorneoPage() {
   const { torneoId, disciplinaId, torneoContexto } = useOutletContext<TorneoDashboardContext>();
   const navigate = useNavigate();
   const [modo, setModo] = useState<Modo>({ tipo: "lista" });
   const [errorPerfil, setErrorPerfil] = useState<string | null>(null);
   const [resolviendoPerfil, setResolviendoPerfil] = useState(false);
+  const [perfilAbierto, setPerfilAbierto] = useState<number | null>(null); // jugador_id
 
   const crud = useResourceCrud<PlantillaRow>({
     resourceKey: "plantillas",
@@ -65,17 +75,20 @@ export function PlantillasDelTorneoPage() {
     listParams: { torneo_id: torneoId },
   });
   const equipos = useResourceCrud<EquipoRow>({ resourceKey: "equipos", basePath: "/api/v1/equipos" });
+  const catalogo = useCatalogo();
 
-  const nombreJugador = useMemo(
-    () => new Map((jugadores.listQuery.data ?? []).map((j) => [j.id, j.nombre])),
+  const jugadorPorId = useMemo(
+    () => new Map((jugadores.listQuery.data ?? []).map((j) => [j.id, j])),
     [jugadores.listQuery.data],
+  );
+  const nombreEquipo = useMemo(
+    () => new Map((equipos.listQuery.data ?? []).map((e) => [e.id, e.nombre])),
+    [equipos.listQuery.data],
   );
   const nombreEquipoDeInscripcion = useMemo(() => {
     const inscripcionAEquipo = new Map((inscripciones.listQuery.data ?? []).map((i) => [i.id, i.equipo_id]));
-    const equipoANombre = new Map((equipos.listQuery.data ?? []).map((e) => [e.id, e.nombre]));
-    return (inscripcionId: number) =>
-      equipoANombre.get(inscripcionAEquipo.get(inscripcionId) ?? -1) ?? `Inscripción #${inscripcionId}`;
-  }, [inscripciones.listQuery.data, equipos.listQuery.data]);
+    return (inscripcionId: number) => nombreEquipo.get(inscripcionAEquipo.get(inscripcionId) ?? -1) ?? `Inscripción #${inscripcionId}`;
+  }, [inscripciones.listQuery.data, nombreEquipo]);
   const perfilPorId = useMemo(
     () => new Map((perfiles.listQuery.data ?? []).map((p) => [p.id, p])),
     [perfiles.listQuery.data],
@@ -85,10 +98,36 @@ export function PlantillasDelTorneoPage() {
     [perfiles.listQuery.data],
   );
 
-  function etiquetaJugador(perfilId: number): string {
+  function jugadorDeVinculo(perfilId: number): JugadorRow | undefined {
     const p = perfilPorId.get(perfilId);
-    return p ? (nombreJugador.get(p.jugador_id) ?? `Jugador #${p.jugador_id}`) : `Perfil #${perfilId}`;
+    return p ? jugadorPorId.get(p.jugador_id) : undefined;
   }
+  function etiquetaJugador(perfilId: number): string {
+    return jugadorDeVinculo(perfilId)?.nombre ?? `Perfil #${perfilId}`;
+  }
+
+  // Un card por equipo INSCRITO, no solo por equipo con jugadores — un
+  // equipo recién matriculado y sin plantilla todavía es un estado real,
+  // no un error (estados de interacción del grid, Fase 2).
+  const gruposPorEquipo = useMemo(() => {
+    const vinculosPorInscripcion = new Map<number, PlantillaRow[]>();
+    for (const p of crud.listQuery.data ?? []) {
+      const arr = vinculosPorInscripcion.get(p.inscripcion_torneo_id);
+      if (arr) arr.push(p);
+      else vinculosPorInscripcion.set(p.inscripcion_torneo_id, [p]);
+    }
+    return (inscripciones.listQuery.data ?? []).map((i) => {
+      const vinculos = vinculosPorInscripcion.get(i.id) ?? [];
+      return {
+        inscripcionId: i.id,
+        equipoNombre: nombreEquipo.get(i.equipo_id) ?? `Equipo #${i.equipo_id}`,
+        vinculos,
+        activos: vinculos.filter((v) => v.estado === "Activo").length,
+      };
+    });
+  }, [crud.listQuery.data, inscripciones.listQuery.data, nombreEquipo]);
+
+  const iconoTorneo = iconoDisciplina(catalogo.nombreDisciplina(disciplinaId));
 
   function volver() {
     setModo({ tipo: "lista" });
@@ -219,6 +258,9 @@ export function PlantillasDelTorneoPage() {
     );
   }
 
+  const cargando =
+    crud.listQuery.isLoading || jugadores.listQuery.isLoading || perfiles.listQuery.isLoading || inscripciones.listQuery.isLoading;
+
   return (
     <div>
       <div className="page__header">
@@ -232,22 +274,64 @@ export function PlantillasDelTorneoPage() {
           </button>
         </div>
       </div>
-      <ResourceTable<PlantillaRow>
-        rows={crud.listQuery.data ?? []}
-        columns={[
-          { key: "jugador", label: "Jugador", render: (r) => etiquetaJugador(r.jugador_perfil_id) },
-          { key: "equipo", label: "Equipo", render: (r) => nombreEquipoDeInscripcion(r.inscripcion_torneo_id) },
-          { key: "dorsal", label: "Dorsal", render: (r) => (r.dorsal ? `#${r.dorsal}` : "—") },
-          { key: "estado", label: "Estado" },
-        ]}
-        isLoading={crud.listQuery.isLoading}
-        isError={crud.listQuery.isError}
-        emptyMessage="Sin jugadores registrados todavía en esta edición."
-        onSelect={(fila) => setModo({ tipo: "editar", fila })}
-        onSoftDelete={(fila) => setModo({ tipo: "baja", fila })}
-        softDeleteLabel="Dar de baja"
-        estadosDeBaja={["Inactivo", "Traspasado"]}
-      />
+
+      {cargando && <p>Cargando...</p>}
+      {!cargando && gruposPorEquipo.length === 0 && (
+        <p className="muted">
+          Todavía no hay equipos matriculados en este torneo. <Link to={`/torneo-admin/torneos/${torneoId}/equipos`}>Ir a Equipos</Link>
+        </p>
+      )}
+
+      {gruposPorEquipo.map((grupo) => (
+        <section key={grupo.inscripcionId} className="grid-plantillas__equipo">
+          <h3>
+            {iconoTorneo && <span aria-hidden="true">{iconoTorneo} </span>}
+            {grupo.equipoNombre} ({grupo.activos} jugador{grupo.activos === 1 ? "" : "es"})
+          </h3>
+          {grupo.vinculos.length === 0 ? (
+            <p className="muted">
+              Sin jugadores todavía —{" "}
+              <Link to={`/torneo-admin/torneos/${torneoId}/equipos`}>Ir a Equipos para agregar</Link>
+            </p>
+          ) : (
+            <div className="grid-plantillas__jugadores">
+              {grupo.vinculos.map((v) => {
+                const jugador = jugadorDeVinculo(v.jugador_perfil_id);
+                return (
+                  <div key={v.id} className="tarjeta-jugador">
+                    <button
+                      type="button"
+                      className="tarjeta-jugador__cuerpo"
+                      onClick={() => jugador && setPerfilAbierto(jugador.id)}
+                    >
+                      <AvatarJugador
+                        jugadorId={jugador?.id ?? v.jugador_perfil_id}
+                        nombre={jugador?.nombre ?? etiquetaJugador(v.jugador_perfil_id)}
+                        fotoUrl={jugador?.foto_url}
+                      />
+                      <span className="tarjeta-jugador__dorsal">{v.dorsal != null ? `#${v.dorsal}` : "—"}</span>
+                      <span className="tarjeta-jugador__nombre">{jugador?.nombre ?? etiquetaJugador(v.jugador_perfil_id)}</span>
+                      {v.estado !== "Activo" && <span className="badge badge--suspendido">{v.estado}</span>}
+                    </button>
+                    <div className="tarjeta-jugador__acciones">
+                      <button type="button" className="link-button" onClick={() => setModo({ tipo: "editar", fila: v })}>
+                        Editar vínculo
+                      </button>
+                      <button type="button" className="link-button" onClick={() => setModo({ tipo: "baja", fila: v })}>
+                        Dar de baja
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ))}
+
+      {perfilAbierto != null && (
+        <ModalPerfilJugador jugadorId={perfilAbierto} onClose={() => setPerfilAbierto(null)} />
+      )}
     </div>
   );
 }

@@ -12,9 +12,11 @@ desarrollo, roto. Se descubrió a mano.
 Qué se prueba y qué NO:
 
 - SÍ: los scripts que deben poder correr sobre una base al día — el seed
-  de demo (10), el catálogo maestro (11) y la última migración (hoy la 14, que
-  sobre el esquema final es un no-op). Se corren DOS veces: todos se
-  documentan como re-ejecutables, y esa promesa también se verifica.
+  de demo (10), el catálogo maestro (11) y las migraciones de auditoría
+  (14 y 18 — este archivo no cubre 15/16/17, de un plan aparte todavía en
+  curso), que sobre el esquema final son un no-op. Se corren DOS veces:
+  todos se documentan como re-ejecutables, y esa promesa también se
+  verifica.
 - NO: 07/08/09/12/13. Son migraciones HISTÓRICAS, escritas para el esquema
   que existía cuando se aplicaron; 08 referencia `DISCIPLINA.Tipo`, que
   12 eliminó. Que fallen sobre el esquema actual es correcto, no un bug —
@@ -35,6 +37,7 @@ SCRIPTS_VIGENTES = [
     "10_demo_torneos_admin.sql",
     "11_catalogo_disciplinas.sql",
     "14_migracion_auditoria_accesos.sql",
+    "18_migracion_auditoria_cambios.sql",
 ]
 
 DB_SCRIPTS = "torneos_mvp_scripts_test"

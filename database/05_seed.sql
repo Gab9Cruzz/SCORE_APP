@@ -101,11 +101,20 @@ INSERT INTO JUGADOR_EQUIPO (Jugador_Perfil_ID, Inscripcion_Torneo_ID, Dorsal, Fe
     ((SELECT ID FROM JUGADOR_PERFIL_DISCIPLINA WHERE Jugador_ID = 5), (SELECT ID FROM INSCRIPCIONES_TORNEO WHERE Torneo_ID = 1 AND Equipo_ID = 3), 11, '2026-01-01'),
     ((SELECT ID FROM JUGADOR_PERFIL_DISCIPLINA WHERE Jugador_ID = 6), (SELECT ID FROM INSCRIPCIONES_TORNEO WHERE Torneo_ID = 1 AND Equipo_ID = 3), 4,  '2026-01-01');
 
+-- Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md,
+-- requerimiento #4): todo torneo tiene una FASE por defecto (Decisión
+-- G1). El seed no pasa por TorneoService.create (que la arma sola para
+-- cada torneo nuevo) — se crea a mano acá, mismo criterio. Copa Ecotec
+-- 2026 es Formato='Liga' (default de TORNEO), 'En_Curso' porque ya tiene
+-- partidos con resultado.
+INSERT INTO FASE (Torneo_ID, Nombre, Tipo, Orden, Estado) VALUES
+    (1, 'Liga Regular', 'Liga', 1, 'En_Curso');
+
 -- Partidos
-INSERT INTO PARTIDOS (Torneo_ID, EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE, Fecha_Partido, Jornada, Estado) VALUES
-    (1, 1, 2, '2026-01-15 16:00:00', 1, 'Finalizado'),
-    (1, 2, 3, '2026-01-22 16:00:00', 2, 'Finalizado'),
-    (1, 3, 1, '2026-01-29 16:00:00', 3, 'Programado');
+INSERT INTO PARTIDOS (Torneo_ID, EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE, Fecha_Partido, Jornada, Estado, Fase_ID) VALUES
+    (1, 1, 2, '2026-01-15 16:00:00', 1, 'Finalizado', (SELECT ID FROM FASE WHERE Torneo_ID = 1 AND Orden = 1)),
+    (1, 2, 3, '2026-01-22 16:00:00', 2, 'Finalizado', (SELECT ID FROM FASE WHERE Torneo_ID = 1 AND Orden = 1)),
+    (1, 3, 1, '2026-01-29 16:00:00', 3, 'Programado', (SELECT ID FROM FASE WHERE Torneo_ID = 1 AND Orden = 1));
 
 -- Eventos del partido 1 (Tiburones vs Águilas).
 -- EQUIPO_ID es obligatorio: es el equipo del jugador en ese partido.

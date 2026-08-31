@@ -4,6 +4,7 @@ import { ResourceTable } from "../../../components/admin/ResourceTable";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
 import type { RegistroLotePreResuelto } from "../RegistroLoteAdmin";
 import { ModalAgregarInscripcion } from "./ModalAgregarInscripcion";
+import { ModalGestionarPlantilla } from "./ModalGestionarPlantilla";
 import type { TorneoDashboardContext } from "./TorneoDashboard";
 
 interface InscripcionRow {
@@ -170,6 +171,9 @@ function VistaEquipo(props: {
 }) {
   const { torneoId, disciplinaId, torneoContexto, inscripciones, esPareja, modalAbierto, setModalAbierto, modalidadId, navigate } =
     props;
+  // Fila del equipo cuya plantilla se está gestionando (Design sección A
+  // del plan: modal consolidado, scoped a ESE equipo+torneo). null = cerrado.
+  const [gestionandoPlantillaDe, setGestionandoPlantillaDe] = useState<InscripcionRow | null>(null);
 
   // Solo los de esta disciplina: alcanza para resolver el nombre de cada
   // inscripción de este torneo (todas son de su disciplina por la
@@ -242,9 +246,14 @@ function VistaEquipo(props: {
         softDeletePending={inscripciones.update.isPending}
         estadosDeBaja={["Cancelado"]}
         extraActions={(fila) => (
-          <button type="button" className="link-button" onClick={() => irARegistroLote(fila)}>
-            + Agregar jugadores
-          </button>
+          <>
+            <button type="button" className="link-button" onClick={() => setGestionandoPlantillaDe(fila)}>
+              Gestionar plantilla
+            </button>{" "}
+            <button type="button" className="link-button" onClick={() => irARegistroLote(fila)}>
+              + Agregar jugadores
+            </button>
+          </>
         )}
       />
       {modalAbierto && (
@@ -255,6 +264,16 @@ function VistaEquipo(props: {
           torneoDisciplinaId={disciplinaId}
           equiposYaInscritosIds={inscritosIds}
           onClose={() => setModalAbierto(false)}
+        />
+      )}
+      {gestionandoPlantillaDe && (
+        <ModalGestionarPlantilla
+          inscripcionTorneoId={gestionandoPlantillaDe.id}
+          equipoNombre={nombreEquipo.get(gestionandoPlantillaDe.equipo_id ?? -1) ?? `Equipo #${gestionandoPlantillaDe.equipo_id}`}
+          torneoId={torneoId}
+          torneoContexto={torneoContexto}
+          disciplinaId={disciplinaId}
+          onClose={() => setGestionandoPlantillaDe(null)}
         />
       )}
     </div>

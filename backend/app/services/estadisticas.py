@@ -14,8 +14,8 @@ class EstadisticasService:
     def __init__(self, session: AsyncSession):
         self.repo = EstadisticasRepository(session)
 
-    async def tabla_posiciones(self, torneo_id: int) -> list[PosicionOut]:
-        filas = await self.repo.tabla_posiciones(torneo_id)
+    async def tabla_posiciones(self, torneo_id: int, grupo_id: int | None = None) -> list[PosicionOut]:
+        filas = await self.repo.tabla_posiciones(torneo_id, grupo_id=grupo_id)
         return [PosicionOut.model_validate(f) for f in filas]
 
     async def goleadores(self, torneo_id: int, limit: int = 50) -> list[GoleadorOut]:

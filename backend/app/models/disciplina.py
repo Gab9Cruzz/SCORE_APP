@@ -1,4 +1,4 @@
-from sqlalchemy import String
+from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -25,3 +25,7 @@ class Disciplina(Base):
     nombre: Mapped[str] = mapped_column(String(50))
     # Valores válidos: Activo, Inactivo (chk_disciplina_estado)
     estado: Mapped[str] = mapped_column(String(20), default="Activo")
+    # NULL = no seteado, ordena al final (NULLS LAST) — motor-formatos-
+    # plantillas-navegacion-plan.md, requerimiento #3 (barra tipo
+    # SofaScore ordenada por popularidad, no alfabético).
+    orden_popularidad: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -18,7 +18,18 @@ class EstadisticasRepository:
         result = await self.session.execute(text(sql), params)
         return [dict(row) for row in result.mappings().all()]
 
-    async def tabla_posiciones(self, torneo_id: int) -> list[dict[str, Any]]:
+    async def tabla_posiciones(self, torneo_id: int, grupo_id: int | None = None) -> list[dict[str, Any]]:
+        # EC-54: sin grupo_id, un torneo Grupos_Playoffs devuelve sus N
+        # tablas mezcladas (mismo comportamiento que antes del motor de
+        # formatos para Liga, que nunca tiene grupo) — el consumidor que
+        # sabe que está mirando un torneo de grupos pasa grupo_id.
+        if grupo_id is not None:
+            return await self._fetch(
+                "SELECT * FROM vw_tabla_posiciones WHERE torneo_id = :torneo_id AND grupo_id = :grupo_id "
+                "ORDER BY pts DESC, dg DESC, gf DESC, equipo",
+                torneo_id=torneo_id,
+                grupo_id=grupo_id,
+            )
         return await self._fetch(
             "SELECT * FROM vw_tabla_posiciones WHERE torneo_id = :torneo_id "
             "ORDER BY pts DESC, dg DESC, gf DESC, equipo",

@@ -1,5 +1,21 @@
 # TODOS
 
+## Auditoría de cambios (tabla `AUDITORIA`) — implementado
+
+Plan en `docs/plans/auditoria-cambios-plan.md`. Alta/modificación/baja de
+cualquier entidad del sistema, quién la hizo y qué cambió, retenida 1 mes.
+Se consulta en `/admin/auditoria`, solo `AdminGeneral`.
+
+Deferido desde ese plan:
+
+- **Filtro por tabla en la UI es texto exacto**, sin autocomplete de las 18
+  tablas posibles (`torneo`, `equipos`, `jugadores`, ...) — hay que saber
+  el nombre tal cual lo usa SQLAlchemy (`obj.__tablename__`), no el que se
+  ve en pantalla.
+- **Sin filtro de `registro_id` en la pantalla** (sí existe en `GET
+  /auditoria?registro_id=`).
+- **Sin export/descarga** (CSV u otro formato) de la bitácora.
+
 ## Roles y 3 módulos (Admin General / Torneo Admin / Árbitro)
 
 Plan fase por fase en `docs/plans/roles-3-modulos-plan.md`. Vista al ingresar
@@ -245,3 +261,44 @@ Pendiente, si el volumen lo pide:
 - **Nada alerta sobre N fallos seguidos.** Hoy el dato está y hay que ir a
   mirarlo. Un bloqueo temporal por intentos fallidos (rate limiting) sería
   el paso siguiente natural, y ahora tiene de dónde leer.
+
+## Motor de Formatos + Plantillas + Navegación — implementado
+
+Plan en `docs/plans/motor-formatos-plantillas-navegacion-plan.md`. Los
+4 requerimientos están construidos y probados (189 tests backend, 141
+frontend). Una decisión se apartó del texto literal del plan, documentada
+acá porque un futuro "convergé esto" no debería sorprender a nadie:
+
+- **`PARTIDOS.Fase`/`Grupo` (texto libre) NO se soltaron, a diferencia de
+  lo que decía el plan ("se sueltan tras el backfill").** El motor nuevo
+  escribe `Fase_ID`/`Grupo_ID`/`Ronda_Nombre` (estructura real); el alta
+  manual de partidos ya existente (`POST /partidos`, pantalla "Partidos"
+  con el botón "+ Nuevo") sigue escribiendo `Fase`/`Grupo` como texto,
+  sin tocar. Migrar esa pantalla para que también hable en `Fase_ID` es
+  una reescritura completa de una feature que funciona hoy y que ningún
+  test cubre todavía en términos del motor nuevo — se dejó fuera por
+  costo/beneficio (P3), no por descuido. Las dos formas conviven sin
+  pisarse: `vw_tabla_posiciones`/`vw_resultados_partidos` (rescopadas)
+  leen `Fase_ID`/`Grupo_ID`; un partido cargado a mano en un torneo Liga
+  simplemente queda con esas dos columnas en `NULL` y no aparece
+  separado por fase/grupo (mismo comportamiento que tenía ANTES de este
+  plan, no una regresión). Ver el comentario grande en
+  `database/01_schema.sql` (`CREATE TABLE PARTIDOS`).
+- **Convergerlas de verdad** — que "+ Nuevo" en la pestaña Partidos
+  también arme/reutilice una `FASE`/`GRUPO` en vez de texto libre — es
+  candidato a un plan aparte cuando haga falta (ej. si un admin empieza a
+  mezclar alta manual con el motor en el MISMO torneo, caso hoy no
+  ejercitado por ninguna pantalla).
+- **Desempate en la tabla de posiciones de un grupo (EC-51).** La vista
+  ordena por PTS/DG/GF — enfrentamiento directo y resolución manual del
+  admin (la decisión confirmada con el usuario) no tienen UI todavía; si
+  el auto-orden alcanza para separar a los clasificados, `Generar
+  Playoffs` funciona igual.
+- **Bracket visual.** `GET /torneos/{id}/bracket` + `MotorFormatosPanel`
+  muestran las rondas en columnas con "Ganador Partido N" / "Perdedor
+  Semifinal N" en las casillas sin definir — no dibuja las líneas de
+  conexión del árbol (un bracket con SVG/canvas es una pieza de diseño
+  aparte, no bloqueaba la funcionalidad).
+- **Walkover/retiro a mitad de una fase de Eliminación** — ya estaba
+  fuera de alcance en el plan (EC-52 renombrado), sigue sin decisión de
+  producto.

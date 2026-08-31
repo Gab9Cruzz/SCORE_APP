@@ -4,6 +4,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 EstadoTorneo = Literal["Activo", "Inactivo", "Finalizado"]
+# Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md,
+# requerimiento #4) — F1: CHECK enum, no tabla catálogo.
+FormatoTorneo = Literal["Liga", "Eliminacion", "Grupos_Playoffs"]
 
 
 class TorneoBase(BaseModel):
@@ -26,6 +29,15 @@ class TorneoBase(BaseModel):
     modalidad_id: int | None = None
     fecha_inicio: date
     fecha_fin: date
+    # Motor de Formatos — Formato decide qué parámetros aplican (Design
+    # sección E del plan). Coherencia validada en TorneoService (400 con
+    # mensaje claro, no un CHECK de Postgres) — ver
+    # validar_parametros_formato en ese servicio.
+    formato: FormatoTorneo = "Liga"
+    ida_vuelta: bool = False
+    equipos_por_grupo: int | None = None
+    clasificados_por_grupo: int | None = None
+    incluye_tercer_lugar: bool = True
 
     @field_validator("fecha_fin")
     @classmethod
@@ -82,6 +94,13 @@ class TorneoUpdate(BaseModel):
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
     estado: EstadoTorneo | None = None
+    # EC-55: cambiar Formato con PARTIDOS ya creados se rechaza en
+    # TorneoService.update, no acá (necesita consultar la base).
+    formato: FormatoTorneo | None = None
+    ida_vuelta: bool | None = None
+    equipos_por_grupo: int | None = None
+    clasificados_por_grupo: int | None = None
+    incluye_tercer_lugar: bool | None = None
 
 
 class TorneoOut(TorneoBase):

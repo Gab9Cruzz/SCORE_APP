@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 
-export type ResourceFieldValue = string | number | null;
+export type ResourceFieldValue = string | number | boolean | null;
 
 export interface ResourceFormFieldOption {
   value: number;
@@ -12,8 +12,11 @@ export interface ResourceFormField {
   label: string;
   /** "reference": select con opciones cargadas de otro recurso (id
    * numérico). "select": select con una lista fija de strings (ej. un
-   * Literal de estado) — no pide nada a la API. */
-  type: "text" | "number" | "date" | "datetime" | "password" | "reference" | "select";
+   * Literal de estado) — no pide nada a la API. "checkbox": booleano
+   * simple (ej. Ida_Vuelta del motor de formatos,
+   * motor-formatos-plantillas-navegacion-plan.md) — sin opciones, `false`
+   * por defecto si no viene en `initialValues`. */
+  type: "text" | "number" | "date" | "datetime" | "password" | "reference" | "select" | "checkbox";
   required?: boolean;
   /** Solo para type "reference". */
   options?: ResourceFormFieldOption[];
@@ -90,7 +93,7 @@ export function ResourceForm(props: ResourceFormProps) {
             <label key={f.name}>
               {f.label}
               <select
-                value={values[f.name] ?? ""}
+                value={(values[f.name] as string | number | null | undefined) ?? ""}
                 onChange={(e) => setField(f.name, e.target.value ? Number(e.target.value) : null)}
                 disabled={f.optionsLoading}
               >
@@ -108,7 +111,10 @@ export function ResourceForm(props: ResourceFormProps) {
           return (
             <label key={f.name}>
               {f.label}
-              <select value={values[f.name] ?? ""} onChange={(e) => setField(f.name, e.target.value || null)}>
+              <select
+                value={(values[f.name] as string | number | null | undefined) ?? ""}
+                onChange={(e) => setField(f.name, e.target.value || null)}
+              >
                 <option value="">Elegir...</option>
                 {(f.choices ?? []).map((c) => (
                   <option key={c} value={c}>
@@ -119,13 +125,25 @@ export function ResourceForm(props: ResourceFormProps) {
             </label>
           );
         }
+        if (f.type === "checkbox") {
+          return (
+            <label key={f.name} className="resource-form__checkbox">
+              <input
+                type="checkbox"
+                checked={Boolean(values[f.name])}
+                onChange={(e) => setField(f.name, e.target.checked)}
+              />
+              {f.label}
+            </label>
+          );
+        }
         const inputType = f.type === "datetime" ? "datetime-local" : f.type;
         return (
           <label key={f.name}>
             {f.label}
             <input
               type={inputType}
-              value={values[f.name] ?? ""}
+              value={(values[f.name] as string | number | null | undefined) ?? ""}
               onChange={(e) =>
                 setField(f.name, f.type === "number" ? (e.target.value ? Number(e.target.value) : null) : e.target.value)
               }

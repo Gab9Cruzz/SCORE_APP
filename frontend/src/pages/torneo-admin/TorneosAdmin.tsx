@@ -31,6 +31,14 @@ interface TorneoCreatePayload {
   fecha_fin: string;
   torneo_grupo_id?: number;
   torneo_grupo_nombre?: string;
+  // Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md) —
+  // solo se mandan al crear un grupo nuevo, igual que disciplina/modalidad
+  // (una "Nueva edición" hereda el Formato del grupo, D-Eng-5 extendido).
+  formato?: "Liga" | "Eliminacion" | "Grupos_Playoffs";
+  ida_vuelta?: boolean;
+  incluye_tercer_lugar?: boolean;
+  equipos_por_grupo?: number;
+  clasificados_por_grupo?: number;
 }
 
 const formatearFecha = (iso: string) => new Date(iso).toLocaleDateString("es-AR");
@@ -89,8 +97,16 @@ export function TorneosAdminPage() {
   const chipsDisciplina = useMemo(() => {
     const ids = new Set(grupos.map(disciplinaDeGrupo).filter((id): id is number => id != null));
     return [...ids]
-      .map((id) => ({ id, nombre: disciplinaPorId.get(id)?.nombre ?? "—" }))
-      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+      .map((id) => ({
+        id,
+        nombre: disciplinaPorId.get(id)?.nombre ?? "—",
+        ordenPopularidad: disciplinaPorId.get(id)?.orden_popularidad ?? null,
+      }))
+      // Barra tipo SofaScore ordenada por popularidad, no alfabético
+      // (motor-formatos-plantillas-navegacion-plan.md, #3) — sigue
+      // mostrando solo disciplinas con torneos (D-Eng-16, sin cambios),
+      // la popularidad decide el ORDEN entre las que aparecen.
+      .sort((a, b) => (a.ordenPopularidad ?? 999) - (b.ordenPopularidad ?? 999));
   }, [grupos, disciplinaPorId]);
 
   const chipsModalidad = useMemo(() => {
@@ -151,6 +167,12 @@ export function TorneosAdminPage() {
    * si se mandaran). */
   function camposTorneoNuevo(values: Record<string, ResourceFieldValue>): ResourceFormField[] {
     const disciplinaId = values.disciplina_id as number | null;
+    // Motor de Formatos (Design sección E, motor-formatos-plantillas-
+    // navegacion-plan.md): Formato decide qué parámetros aplican — el
+    // selector nunca muestra un campo que el Formato elegido no usa, y el
+    // backend (TorneoService._validar_parametros_formato) rechaza igual
+    // cualquiera que llegara de otra forma.
+    const formato = (values.formato as string | null) ?? "Liga";
     return [
       { name: "torneo_grupo_nombre", label: "Nombre del torneo", type: "text", required: true },
       {
@@ -169,6 +191,25 @@ export function TorneosAdminPage() {
         optionsLoading: catalogo.cargando,
         options: catalogo.modalidadesDe(disciplinaId).map((m) => ({ value: m.id, label: m.nombre })),
       },
+      {
+        name: "formato",
+        label: "Formato",
+        type: "select",
+        required: true,
+        choices: ["Liga", "Eliminacion", "Grupos_Playoffs"],
+      },
+      ...(formato === "Liga"
+        ? ([{ name: "ida_vuelta", label: "Ida y vuelta", type: "checkbox" }] as ResourceFormField[])
+        : []),
+      ...(formato !== "Liga"
+        ? ([{ name: "incluye_tercer_lugar", label: "Jugar partido por el 3er lugar", type: "checkbox" }] as ResourceFormField[])
+        : []),
+      ...(formato === "Grupos_Playoffs"
+        ? ([
+            { name: "equipos_por_grupo", label: "Equipos por grupo", type: "number" },
+            { name: "clasificados_por_grupo", label: "Clasifican por grupo", type: "number" },
+          ] as ResourceFormField[])
+        : []),
       { name: "fecha_inicio", label: "Fecha de inicio", type: "date", required: true },
       { name: "fecha_fin", label: "Fecha de fin", type: "date", required: true },
     ];
@@ -181,6 +222,7 @@ export function TorneosAdminPage() {
 
   function submitCrearGrupo(values: Record<string, ResourceFieldValue>) {
     const disciplinaId = values.disciplina_id as number;
+    const formato = (values.formato as "Liga" | "Eliminacion" | "Grupos_Playoffs" | null) ?? "Liga";
     crearTorneo.mutate(
       {
         torneo_grupo_nombre: String(values.torneo_grupo_nombre ?? ""),
@@ -188,9 +230,23 @@ export function TorneosAdminPage() {
         modalidad_id: values.modalidad_id as number,
         fecha_inicio: String(values.fecha_inicio),
         fecha_fin: String(values.fecha_fin),
+        formato,
+        ida_vuelta: formato === "Liga" ? Boolean(values.ida_vuelta) : undefined,
+        incluye_tercer_lugar: formato !== "Liga" ? Boolean(values.incluye_tercer_lugar) : undefined,
+        equipos_por_grupo:
+          formato === "Grupos_Playoffs" && values.equipos_por_grupo ? Number(values.equipos_por_grupo) : undefined,
+        clasificados_por_grupo:
+          formato === "Grupos_Playoffs" && values.clasificados_por_grupo
+            ? Number(values.clasificados_por_grupo)
+            : undefined,
       },
       {
-        onSuccess: () => {
+        // EC-46 (motor-formatos-plantillas-navegacion-plan.md): mismo
+        // onSuccess que submitNuevaEdicion — crear un torneo la PRIMERA
+        // vez (grupo nuevo) usa la misma mutación crearTorneo, que
+        // devuelve el TORNEO con .id en los dos casos, así que cae
+        // directo en "Agregar Equipo" igual que la rama de Nueva Edición.
+        onSuccess: (nuevoTorneo) => {
           queryClient.invalidateQueries({ queryKey: ["torneo-grupos"] });
           // EC-42: si la barra estaba filtrada por otra disciplina, el
           // torneo recién creado no aparecería y el admin creería que
@@ -199,6 +255,7 @@ export function TorneosAdminPage() {
             seleccionarDisciplina(null);
           }
           setModo({ tipo: "lista" });
+          navigate(`/torneo-admin/torneos/${nuevoTorneo.id}/equipos`);
         },
       },
     );
@@ -236,6 +293,7 @@ export function TorneosAdminPage() {
         <h1>Torneo nuevo</h1>
         <ResourceForm
           fields={camposTorneoNuevo}
+          initialValues={{ formato: "Liga", incluye_tercer_lugar: true }}
           onSubmit={submitCrearGrupo}
           submitting={crearTorneo.isPending}
           submitError={crearTorneo.isError ? apiErrorMessage(crearTorneo.error) : null}
