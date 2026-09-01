@@ -1,177 +1,221 @@
 # TODOS
 
+**Estado de esta lista, al día:** todo lo que seguía genuinamente
+pendiente al 2026-09-01 fue triado en
+`docs/plans/cierre-backlog-todos-plan.md` — cada ítem quedó en uno de 3
+estados: **hecho** (retirado de acá), **en curso** (con tarea y fase
+concreta dentro de ese plan) o **aparcado a propósito** (su propia
+sección más abajo, con la razón). Si algo de lo que sigue en esta lista
+ya se resolvió y no se actualizó, es la lista la que está desactualizada,
+no el código — verificar contra el repo antes de asumir que falta algo
+(dos secciones enteras de esta misma lista estaban así de desactualizadas
+la última vez que se auditó).
+
 ## Auditoría de cambios (tabla `AUDITORIA`) — implementado
 
 Plan en `docs/plans/auditoria-cambios-plan.md`. Alta/modificación/baja de
 cualquier entidad del sistema, quién la hizo y qué cambió, retenida 1 mes.
 Se consulta en `/admin/auditoria`, solo `AdminGeneral`.
 
-Deferido desde ese plan:
+Deferido desde ese plan — **en curso** (accionable, sin decisión de
+producto pendiente, ver `docs/plans/cierre-backlog-todos-plan.md` §3A):
 
 - **Filtro por tabla en la UI es texto exacto**, sin autocomplete de las 18
-  tablas posibles (`torneo`, `equipos`, `jugadores`, ...) — hay que saber
-  el nombre tal cual lo usa SQLAlchemy (`obj.__tablename__`), no el que se
-  ve en pantalla.
+  tablas posibles — 3A-1.
 - **Sin filtro de `registro_id` en la pantalla** (sí existe en `GET
-  /auditoria?registro_id=`).
-- **Sin export/descarga** (CSV u otro formato) de la bitácora.
+  /auditoria?registro_id=`) — 3A-2.
+- **Sin export/descarga** (CSV u otro formato) de la bitácora — 3A-3.
 
-## Roles y 3 módulos (Admin General / Torneo Admin / Árbitro)
+## Roles y 3 módulos (Admin General / Torneo Admin / Árbitro) — implementado
 
-Plan fase por fase en `docs/plans/roles-3-modulos-plan.md`. Vista al ingresar
-para el frontend actual: confirmada sin cambios (Admin y Árbitro comparten
-`/dashboard` hasta la Fase 2/3). Empezar por la Fase 1 (backend: roles +
-asignación árbitro↔partido) cuando se retome — bloquea a las fases 2-4.
+Plan fase por fase en `docs/plans/roles-3-modulos-plan.md`. **Las 4 fases
+están completas y committeadas** (58/58 tareas `[x]`, verificado con
+`.\verificar.ps1` en verde: 237 tests backend + 148 frontend). Roles
+reales (`AdminGeneral`/`TorneoAdmin`/`Arbitro`/`Publico`), asignación
+árbitro↔partido, y las 3 pantallas (`/torneo-admin`, `/arbitro`,
+`/admin/usuarios`) están en producción sobre esta rama.
+
+Riesgo aceptado documentado por su propio Eng Review, nunca listado acá
+hasta ahora — **en curso**, ver `cierre-backlog-todos-plan.md` §3A-8:
+
+- **`MesaPanel` no valida `partido.estado` antes de aceptar un evento.**
+  La protección hoy vive solo en el filtro de la lista
+  (`ControlDeMesaPage` solo deja *seleccionar* partidos Programado/En
+  curso), no en el panel — "Mis partidos" es un segundo camino de entrada
+  al mismo componente que no pasa por ese filtro. Aceptado como riesgo en
+  su momento (decisión D6), con la recomendación explícita de agregarlo
+  acá si se volvía relevante.
+
+## Gestión Avanzada de Equipos + Control de Mesa — implementado
+
+Plan en `docs/plans/gestion-avanzada-equipos-control-mesa-plan.md`.
+Plantilla Base de equipo (jugadores de un club antes de cualquier
+torneo, con alerta de multimilitancia no bloqueante), cronómetro
+configurable por torneo (Períodos/Corrido) con hitos auditables, y
+corrección de minuto tanto en hitos de tiempo como en eventos de
+gol/tarjeta ya cargados. Verificado en verde junto con el resto del
+sistema (ver arriba). Resuelve, de otras secciones de este archivo:
+
+- La necesidad funcional de "jugador del club antes de un torneo" —
+  vía `EQUIPO_JUGADOR_BASE` (Decisión D1-C), una tabla delgada y
+  **no autoritativa**, no la alternativa completa que se había evaluado
+  y rechazado antes (ver "Equipo con roster autoritativo permanente" más
+  abajo, que sigue aparcada — D1-C no es esa alternativa, es una más
+  liviana).
+- La falta de `PATCH /eventos-partido/{id}` para corregir el minuto de un
+  gol/tarjeta ya cargado.
+
+Deferido desde ese mismo plan:
+
+- **Offline-first en Control de Mesa — alcance reducido, sigue sin UI
+  dedicada.** El estado del cronómetro ya sobrevive una desconexión (se
+  recalcula del último Hito guardado en el servidor al reconectar), pero
+  no hay indicador de "sin conexión" en pantalla ni cola de reintento
+  para el evento que se estaba cargando justo al cortarse — **en curso**,
+  ver `cierre-backlog-todos-plan.md` §3B-1 (recomendación con default
+  seguro, procede salvo objeción).
+- **Tiempo extra / prórroga / penales** como estructura de cronómetro
+  propia — no pedido; un torneo que los usa hoy los resuelve como ya lo
+  hace (`Ganador_Desempate_ID`), sin cronómetro dedicado.
+
+## Equipo con roster autoritativo permanente — aparcado
+
+Evaluado y rechazado dos veces (primero en
+`equipos-disciplina-navegacion-plan.md`, reabierto y vuelto a acotar en
+`gestion-avanzada-equipos-control-mesa-plan.md` — ver sección anterior).
+Es la versión "grande" de un equipo como entidad rica: roster estable,
+escudo, sede, palmarés, staff — con su propia noción de vigencia que
+habría que conciliar con la vigencia real de `JUGADOR_EQUIPO` (por
+torneo). La necesidad funcional que la motivaba ya está cubierta por
+`EQUIPO_JUGADOR_BASE` (no autoritativo). Si en algún momento el equipo
+necesita existir como entidad con socios estables, es un plan aparte —
+dos fuentes de verdad de "quién es del equipo" que `fn_validar_jugador_partido`
+y `fn_validar_exclusividad_torneo` hoy no saben conciliar.
 
 ## Frontend — deferido desde el design doc de Dashboard/Control de Mesa/Partido en Vivo
 
-- Qué pasa cuando el árbitro pierde conectividad a mitad de un partido en
-  Control de Mesa (offline-first, reintentos, cola local). No definido —
-  candidato para `/plan-eng-review` cuando se retome esta área.
-- El modelo de datos no distingue titular/suplente. El flujo de Cambio usa
-  toda la plantilla vigente como candidatos a entrar/salir (ver limitación
-  documentada en `frontend/README.md`). Si se vuelve un problema real en uso,
-  evaluar agregar el concepto de "convocados a este partido" en el backend.
+- El modelo de datos no distingue titular/suplente ni "convocado a este
+  partido". El flujo de Cambio usa toda la plantilla vigente como
+  candidatos a entrar/salir (ver limitación documentada en
+  `frontend/README.md`). **En curso** (necesita confirmar si el problema
+  ya duele en uso real antes de construirse), ver
+  `cierre-backlog-todos-plan.md` §3B-2.
 
 ## Deferido desde el plan de Equipos y Jugadores (`docs/plans/equipos-jugadores-plan.md`)
 
-- Desactivación de una persona (`JUGADORES.Estado → Inactivo`) que tiene
-  perfiles de disciplina o membresías de equipo activas. No definido qué pasa
-  con esas membresías (¿se fuerza cierre? ¿se anonimiza?) — es una decisión
-  de producto, no solo técnica. Candidato para `/plan-eng-review` cuando se
-  retome.
-- Límite de tamaño de plantilla para disciplinas de equipo (Fútbol). El plan
-  sí limita pareja/individual vía `Modalidad.Tamano_Equipo`, pero no pone
-  techo a un roster de fútbol.
-- Notificación por correo al jugador cuando es traspasado o pasa a jugador
-  libre. El campo `Correo_Electronico` se captura en este módulo pero
-  enviarlo es un módulo de notificaciones aparte.
-- Importación masiva desde CSV/Excel para el registro por lote. El plan
-  asume formulario multi-fila en la UI; si se necesita carga de archivo, es
-  una extensión sobre el mismo endpoint de validación.
+- **Desactivación de una persona** (`JUGADORES.Estado → Inactivo`) que
+  tiene perfiles de disciplina o membresías de equipo activas. **En
+  curso** (necesita confirmar el default — bloquear vs. cascada — antes
+  de implementar), ver `cierre-backlog-todos-plan.md` §3B-3, que ya trae
+  una recomendación (bloquear con 409, no cascada silenciosa).
+- **Límite de tamaño de plantilla** para disciplinas de equipo grande
+  (Fútbol). El plan sí limita pareja/individual vía
+  `Modalidad.Tamano_Equipo`, pero no pone techo a un roster de fútbol.
+  **En curso** (falta el número real, competitivo/reglamentario, no
+  técnico), ver `cierre-backlog-todos-plan.md` §3B-4.
+- **Notificación por correo** al jugador cuando es traspasado o pasa a
+  jugador libre — **aparcado**. Módulo de notificaciones aparte, requiere
+  decidir proveedor de correo primero (decisión de infraestructura, no de
+  este archivo).
+- **Importación masiva desde CSV/Excel** para el registro por lote — **aparcado**.
+  No pedido; formato/validación de archivo es diseño propio si se pide.
 
 ## Deferido desde el plan de Administración de Torneos (`docs/plans/torneos-admin-plan.md`)
 
-- Vista consolidada de estadísticas cruzando **todas las ediciones** de un
-  mismo `TORNEO_GRUPO` (ej. goleador histórico de "Liga Relámpago" sumando
-  Edición 1 + 2). El selector de edición de ese plan solo cambia de
-  contexto, no fusiona números — mezclar jugadores que cambiaron de equipo
-  entre ediciones es una decisión de producto propia.
-- Clonar la plantilla de una edición a la siguiente al crear una edición
-  nueva (fichajes que se repiten de temporada a temporada). No pedido;
-  cada edición nace con roster vacío.
-- Archivar/eliminar un `TORNEO_GRUPO` completo con todas sus ediciones.
-- Traspasos entre ediciones distintas del mismo grupo (`TRASPASOS` asume
-  origen/destino dentro del mismo torneo; mover a un jugador a otra
-  edición sería un alta nueva, no un traspaso).
-- Filtro `?torneo_id=` real en `/plantillas`, `/traspasos`, `/partidos`
-  (hoy devuelven el sistema completo sin filtrar) — es trabajo de
-  implementación necesario para que el dashboard scoped por torneo
-  muestre solo lo de ese torneo, no un nice-to-have.
+- **Vista consolidada de estadísticas cruzando todas las ediciones** de un
+  mismo `TORNEO_GRUPO`. **En curso** (recomendación: no construir todavía
+  — mezclar jugadores que cambiaron de equipo entre ediciones necesita
+  una regla de negocio antes que una respuesta técnica), ver
+  `cierre-backlog-todos-plan.md` §3B-5.
+- **Clonar la plantilla de una edición a la siguiente** al crear una
+  edición nueva. **En curso** (recomendación: no implementar, sigue sin
+  pedirse), ver `cierre-backlog-todos-plan.md` §3B-6.
+- **Archivar/eliminar un `TORNEO_GRUPO` completo** con todas sus
+  ediciones. **En curso** (recomendación: baja lógica, sin cascada a las
+  ediciones), ver `cierre-backlog-todos-plan.md` §3B-7.
+- **Traspasos entre ediciones distintas** del mismo grupo. **En curso**
+  (recomendación: alta nueva en la edición destino, no traspaso, sin
+  cambio de esquema), ver `cierre-backlog-todos-plan.md` §3B-8.
+- ~~Filtro `?torneo_id=` real en `/plantillas`, `/traspasos`,
+  `/partidos`~~ — **hecho.** Los 3 endpoints ya filtran de verdad
+  (verificado contra el código el 2026-09-01, no solo contra este
+  archivo, que decía lo contrario).
 
 ## Deferido desde el `/review` de equipos-jugadores-plan.md (Fase 3)
 
 - **Cupo de modalidad (EC-6) sin lock.** `RegistroLoteService._validar_lote`
   calcula `cupo_restante` leyendo el conteo de activos una sola vez, sin
-  `SELECT ... FOR UPDATE` ni advisory lock — dos `/confirmar` verdaderamente
-  simultáneos contra la misma inscripción podrían hacer que un roster de
-  modalidad "Dobles" (tope 2) termine con 3 jugadores. Requiere el mismo
-  patrón de `pg_advisory_xact_lock` que ya se agregó para la exclusividad
-  por torneo (`JugadorEquipoRepository.lock_exclusividad_torneo`), pero
-  keyeado por `inscripcion_torneo_id` en vez de `(perfil, torneo)`.
+  `SELECT ... FOR UPDATE` ni advisory lock. **En curso** (accionable,
+  patrón de lock ya existe en el repo para copiar), ver
+  `cierre-backlog-todos-plan.md` §3A-4.
 - **Migración `08_migracion_equipos_jugadores.sql`, Parte E, sin rastro de
   auditoría.** Cuando una fila vieja de `JUGADOR_EQUIPO` tiene más de una
-  `INSCRIPCIONES_TORNEO` candidata (mismo equipo en torneos solapados), el
-  script elige la más antigua y solo deja un `RAISE WARNING` con un conteo
-  — no los IDs de las filas ambiguas — y dos sentencias después dropea
-  `JUGADOR_ID`/`EQUIPO_ID`, la única fuente que permitiría auditar/corregir
-  eso a mano. Ya corrió una vez contra `torneos_mvp` con backup previo, así
-  que el riesgo pasado está mitigado; si el script se vuelve a correr contra
-  otra base con datos reales, conviene primero volcar los IDs ambiguos a una
-  tabla de auditoría temporal (o abortar con `RAISE EXCEPTION` en vez de
-  `WARNING` cuando `v_ambiguos > 0`) antes del `DROP COLUMN`.
+  `INSCRIPCIONES_TORNEO` candidata, el script elige la más antigua y solo
+  deja un `RAISE WARNING` — no los IDs de las filas ambiguas — antes de
+  dropear `JUGADOR_ID`/`EQUIPO_ID`. **En curso** (accionable, mismo
+  criterio de blindaje que el resto de la deuda técnica de este archivo,
+  no hace falta esperar a que se re-corra), ver
+  `cierre-backlog-todos-plan.md` §3A-11.
 
 ## Deferido desde el plan de Catálogo Maestro de Disciplinas (`docs/plans/ediciones-catalogo-disciplinas-plan.md`)
 
 - **Registro de resultados/estadísticas para disciplinas de marca y tiempo**
   (Atletismo, Natación, Ciclismo), **combate** (MMA, Boxeo, Judo, Taekwondo,
-  Karate) o **mente** (Ajedrez). `PARTIDOS`/`EVENTOS_PARTIDO` asumen siempre
-  dos equipos y goles — un tiempo de maratón o un resultado de combate no
-  encajan ahí. Merece su propio diseño (¿"partido" = combate/carrera? ¿cómo
-  se registra un tiempo o un ganador por sumisión?).
+  Karate) o **mente** (Ajedrez) — **aparcado**. `PARTIDOS`/`EVENTOS_PARTIDO`
+  asumen siempre dos equipos y goles; merece su propio diseño de producto
+  (¿"partido" = combate/carrera? ¿cómo se registra un tiempo o un ganador
+  por sumisión?), rechazado explícitamente de re-abrirse en 2 planes
+  posteriores.
 - **Categorías de peso/cinturón reales de una federación** para las
-  disciplinas de Combate. El catálogo precarga 3 categorías genéricas por
-  disciplina ("Peso Ligero/Medio/Pesado") como placeholder editable solo
-  por migración SQL — no la tabla oficial de cada federación (varía por
-  región/edad/género).
+  disciplinas de Combate — **aparcado**. El catálogo precarga 3
+  categorías genéricas como placeholder editable solo por migración SQL —
+  no la tabla oficial de cada federación (varía por región/edad/género),
+  y no es una decisión técnica.
 - **Límite superior de inscripciones por torneo** (cuántos Equipos/Jugadores
-  caben en un bracket). No fue pedido en ese plan.
-- **eSports — brackets y estadísticas.** El catálogo cubre inscripción
-  (equipos de 5, parejas, 1v1), no brackets de doble eliminación ni
-  integración con APIs de las plataformas (Riot, Steam) — es un módulo de
-  "sistema de brackets" aparte.
+  caben en un bracket). **En curso** (falta el número, depende del
+  torneo), ver `cierre-backlog-todos-plan.md` §3B-10.
+- **eSports — brackets y estadísticas** — **aparcado**. El catálogo cubre
+  inscripción (equipos de 5, parejas, 1v1), no brackets de doble
+  eliminación ni integración con APIs de plataformas (Riot, Steam) — es
+  un módulo de "sistema de brackets" aparte, integración externa.
 - **Ajustar el catálogo maestro fuera de una migración SQL manual** (EC-32).
   Bajo la Decisión C1 (catálogo inmutable, solo toggle de Estado) un admin
-  no tiene forma de agregar/corregir una disciplina o modalidad desde la UI
-  — es la consecuencia esperada de "inmutable", no un bug, pero si en el
-  futuro hace falta ajustar el catálogo con frecuencia, evaluar la
-  Alternativa C3 del plan (ocultar el CRUD detrás de un rol "Superadmin" en
-  vez de eliminarlo).
+  no tiene forma de agregar/corregir una disciplina desde la UI. **En
+  curso, pero con ciclo propio** (toca el `CHECK` de roles y cada
+  `require_roles(...)` del código, mismo orden de magnitud que la
+  paginación con cursor de abajo — no es una decisión rápida), ver
+  `cierre-backlog-todos-plan.md` §3B-11.
 
 ## Deferido desde el plan de Equipos con Disciplina + Navegación (`docs/plans/equipos-disciplina-navegacion-plan.md`)
 
-Implementado con las opciones recomendadas: **A1** (plantilla derivada, sin
-tabla de roster permanente), **B1** (Categoría = Modalidad), **C2**
-(backfill + `NOT NULL`), **EC-44** literal (solo se valida la Disciplina al
-inscribir, no la Modalidad) y las **4 mejoras** propuestas. Lo que quedó
-afuera:
+Implementado con las opciones recomendadas: **A1** (plantilla derivada,
+sin tabla de roster permanente — superada por D1-C, ver sección de
+"Gestión Avanzada" arriba), **B1** (Categoría = Modalidad), **C2**
+(backfill + `NOT NULL`), **EC-44** literal y las **4 mejoras**
+propuestas. Lo que quedó afuera:
 
-- **Tabla `EQUIPO_MIEMBRO` / roster permanente del equipo** (Alternativa A2).
-  Hoy "la plantilla del equipo" es un dato derivado: perfiles distintos con
-  membresía Activo en cualquiera de sus inscripciones. Un equipo creado
-  desde `/torneo-admin/equipos` no tiene dónde colgar jugadores hasta que se
-  inscribe a un torneo — la UI lo dice y ofrece el camino, pero no lo
-  elimina. Si el equipo tiene que existir como entidad con socios estables
-  (escudo, sede, palmarés, staff), es un plan aparte: dos fuentes de verdad
-  de "quién es del equipo" que `fn_validar_jugador_partido` y
-  `fn_validar_exclusividad_torneo` hoy no saben conciliar.
 - **Catálogo de categorías etarias/de género** (`Sub-13`, `Libre`,
-  `Femenino`, `Mixto`...) — Alternativa B2. La columna "Categoría" de la
-  grilla muestra la Modalidad. Si "Categoría" tiene que significar la edad o
-  el género, es un módulo propio: tabla, seed, UI de catálogo y reglas de
-  elegibilidad (¿un Sub-15 puede jugar un torneo Libre?).
-- **Iconos SVG propios por disciplina.** `iconosDisciplina.ts` mapea las 28
-  disciplinas a emoji, con la inicial como fallback. Está en su propio
-  módulo justamente para que cambiarlos sea reemplazar un archivo. 28 SVGs
-  son trabajo de diseño.
-- **Paginación real con cursor en `/equipos`.** El plan subió el techo y lo
-  hizo VISIBLE (filtros server-side + banner "mostrando los primeros 200"),
-  que era el bug: hasta ahora la fila 201 no existía para el frontend, sin
-  aviso. El cursor sigue pendiente, y con él la búsqueda por nombre
-  server-side (`?nombre=`) — hoy el texto se filtra en memoria sobre lo que
-  la página ya trajo.
-- **Filtro por Estado del torneo en la barra de disciplinas.** El pedido
-  eran Disciplinas y Modalidades; un tercer eje es alcance nuevo.
-- **Persistir el filtro elegido en la URL.** `TorneosAdminPage` LEE
-  `?disciplina_id=` al entrar (para que "agregar plantilla" desde la grilla
-  de Equipos caiga filtrado), pero no escribe de vuelta el filtro que el
-  admin elige con los chips — un link compartible del listado filtrado es
-  nice-to-have, no pedido.
-- **`UNIQUE (Nombre, Disciplina_ID)` en `EQUIPOS`** (EC-43). Dos equipos con
-  el mismo nombre en la misma disciplina siguen permitidos: hoy tampoco hay
-  UNIQUE sobre `Nombre`, y agregarlo rompería datos existentes sin que nadie
-  lo haya pedido.
-- **`Equipo A` (id=271) se borró al migrar `torneos_mvp`.** Era el único
-  equipo sin disciplina inferible (creado el 2026-08-27 probando el
-  formulario viejo, sin inscripciones ni partidos). La migración frenó como
-  está diseñada y se resolvió borrándolo. Si hacía falta, está en
-  `database/backups/torneos_mvp_pre_equipos_disciplina_20260827_211414.dump`.
-- **Las inscripciones cruzadas PREEXISTENTES no se cancelan solas.** Si en
-  `torneos_mvp` hay un equipo inscrito en un torneo de otra disciplina (los
-  "ambiguos" que reporta la PARTE D de `13_migracion_equipos_disciplina.sql`),
-  la migración las deja donde están y la PARTE G las cuenta en un `NOTICE`.
-  La API ya no permite crear nuevas; limpiarlas es una decisión de datos, no
-  de esquema.
+  `Femenino`, `Mixto`...) — **aparcado**. La columna "Categoría" de la
+  grilla muestra la Modalidad; si tiene que significar edad/género es un
+  módulo propio (tabla, seed, UI de catálogo, reglas de elegibilidad).
+- **Iconos SVG propios por disciplina** — **aparcado**. `iconosDisciplina.ts`
+  mapea las 28 disciplinas a emoji con inicial como fallback; es trabajo
+  de diseño gráfico, no de ingeniería.
+- **Paginación real con cursor en `/equipos` (y ahora también
+  `/jugadores`).** El banner de "primeros 200" ya avisa cuando trunca; el
+  cursor real (y la búsqueda `?nombre=`/`?q=` server-side) siguen
+  pendientes. **En curso, pero con ciclo propio** (cambio de contrato de
+  API — rompe cualquier cliente que asuma offset, no es un fix acotado),
+  ver `cierre-backlog-todos-plan.md` §3B-9.
+- **Filtro por Estado del torneo en la barra de disciplinas.** **En
+  curso**, ver `cierre-backlog-todos-plan.md` §3A-9.
+- **Persistir el filtro elegido en la URL** en `TorneosAdminPage`. **En
+  curso**, ver `cierre-backlog-todos-plan.md` §3A-10.
+- **`UNIQUE (Nombre, Disciplina_ID)` en `EQUIPOS`** (EC-43) — **aparcado**.
+  Rompería datos existentes sin que nadie lo haya pedido.
+- **Las inscripciones cruzadas PREEXISTENTES no se cancelan solas** — es
+  limpieza de datos puntual, no una tarea de código; el caso conocido ya
+  se resolvió a mano.
 
 ## Deuda técnica cerrada al finalizar ese plan (contexto, no pendiente)
 
@@ -196,31 +240,26 @@ afuera:
   a mano en `EquiposAdmin`. Ahora el hook exporta `LIMITE_LISTA` y
   devuelve `truncado` ya calculado; cualquier página que liste puede
   mostrar el aviso sin repetir el número. **Las demás grillas todavía no
-  lo muestran** — es una línea por página cuando haga falta.
+  lo muestran** — en curso, ver `cierre-backlog-todos-plan.md` §3A-5.
 
 ## Ideas para cuando se retome (no bloquean nada)
 
 - **Las otras grillas no avisan cuando truncan.** `useResourceCrud` ya
-  expone `truncado`; falta usarlo en Jugadores, Usuarios y los listados
-  del dashboard de torneo. Barato, y evita el mismo fallo silencioso que
-  Equipos ya no tiene.
+  expone `truncado`; falta usarlo en Jugadores, Usuarios y los 5
+  listados del dashboard de torneo. **En curso**, ver
+  `cierre-backlog-todos-plan.md` §3A-5.
 - **Los tipos de fila del frontend se declaran a mano en cada componente**
-  (`EquipoRow` existe en 3 archivos con formas distintas, `ModalidadRow`
-  en 4). `schema.d.ts` ya tiene la forma real generada del backend:
-  centralizar alias del estilo
-  `type Equipo = components["schemas"]["EquipoOut"]` en un solo módulo
-  haría que un cambio de contrato se note en `tsc` en vez de pasar
-  desapercibido en un componente que declaró el campo de más.
-- **No hay CI.** `verificar.ps1` corre todo local; moverlo a un workflow de
-  GitHub Actions es directo (necesita un servicio de PostgreSQL) y sacaría
-  el "me acordé de correrlo" de la ecuación.
+  (`EquipoRow` existe en 8 archivos, no 3 — creció desde que se escribió
+  esta nota — `ModalidadRow` en 4). `schema.d.ts` ya tiene la forma real
+  generada del backend. **En curso**, ver
+  `cierre-backlog-todos-plan.md` §3A-6.
+- **No hay CI.** `verificar.ps1` corre todo local — **aparcado**, mover a
+  GitHub Actions es infraestructura nueva, no deuda de producto.
 - **La demo `10_*.sql` sigue usando el patrón viejo para Copa Raíces**
   (Tenis Individual): crea un EQUIPOS fantasma llamado "Micky Fernández" e
-  inscribe por `Equipo_ID`. Desde `ediciones-catalogo-disciplinas-plan.md`
-  (Decisión B1) una inscripción individual va por `Jugador_Perfil_ID`
-  directo, así que la pestaña "Jugadores inscritos" de ese torneo muestra
-  "—" para el único participante. Los datos son válidos (no violan ninguna
-  constraint), pero la demo muestra peor de lo que la app hace hoy.
+  inscribe por `Equipo_ID`, en vez de inscripción individual por
+  `Jugador_Perfil_ID` (Decisión B1). **En curso**, ver
+  `cierre-backlog-todos-plan.md` §3A-7.
 
 ## Auditoría de accesos (tabla `ACCESOS`) — implementado
 
@@ -255,50 +294,48 @@ Pendiente, si el volumen lo pide:
   máquina), pero si pasa a correr como servicio permanente hay que mudar la
   purga a un scheduler real — pg_cron, o un cron del sistema llamando a
   `AccesoRepository.purgar_anteriores_a`.
-- **No se registra el logout.** El token es JWT sin estado del lado del
-  servidor, así que "cerró sesión" no es un evento que la API vea. Para
-  tenerlo haría falta una lista de tokens revocados, que es otro diseño.
+- **No se registra el logout** — **aparcado**. El token es JWT sin estado
+  del lado del servidor; tenerlo requiere una lista de tokens revocados,
+  que es otro diseño de seguridad propio.
 - **Nada alerta sobre N fallos seguidos.** Hoy el dato está y hay que ir a
-  mirarlo. Un bloqueo temporal por intentos fallidos (rate limiting) sería
-  el paso siguiente natural, y ahora tiene de dónde leer.
+  mirarlo. **En curso** (patrón estándar, procede salvo objeción), ver
+  `cierre-backlog-todos-plan.md` §3B-14.
 
 ## Motor de Formatos + Plantillas + Navegación — implementado
 
 Plan en `docs/plans/motor-formatos-plantillas-navegacion-plan.md`. Los
-4 requerimientos están construidos y probados (189 tests backend, 141
-frontend). Una decisión se apartó del texto literal del plan, documentada
-acá porque un futuro "convergé esto" no debería sorprender a nadie:
+4 requerimientos están construidos y probados. Una decisión se apartó del
+texto literal del plan, documentada acá porque un futuro "convergé esto"
+no debería sorprender a nadie:
 
 - **`PARTIDOS.Fase`/`Grupo` (texto libre) NO se soltaron, a diferencia de
   lo que decía el plan ("se sueltan tras el backfill").** El motor nuevo
   escribe `Fase_ID`/`Grupo_ID`/`Ronda_Nombre` (estructura real); el alta
   manual de partidos ya existente (`POST /partidos`, pantalla "Partidos"
   con el botón "+ Nuevo") sigue escribiendo `Fase`/`Grupo` como texto,
-  sin tocar. Migrar esa pantalla para que también hable en `Fase_ID` es
-  una reescritura completa de una feature que funciona hoy y que ningún
-  test cubre todavía en términos del motor nuevo — se dejó fuera por
-  costo/beneficio (P3), no por descuido. Las dos formas conviven sin
-  pisarse: `vw_tabla_posiciones`/`vw_resultados_partidos` (rescopadas)
-  leen `Fase_ID`/`Grupo_ID`; un partido cargado a mano en un torneo Liga
-  simplemente queda con esas dos columnas en `NULL` y no aparece
-  separado por fase/grupo (mismo comportamiento que tenía ANTES de este
-  plan, no una regresión). Ver el comentario grande en
-  `database/01_schema.sql` (`CREATE TABLE PARTIDOS`).
+  sin tocar. Las dos formas conviven sin pisarse. Ver el comentario
+  grande en `database/01_schema.sql` (`CREATE TABLE PARTIDOS`).
 - **Convergerlas de verdad** — que "+ Nuevo" en la pestaña Partidos
   también arme/reutilice una `FASE`/`GRUPO` en vez de texto libre — es
   candidato a un plan aparte cuando haga falta (ej. si un admin empieza a
   mezclar alta manual con el motor en el MISMO torneo, caso hoy no
   ejercitado por ninguna pantalla).
-- **Desempate en la tabla de posiciones de un grupo (EC-51).** La vista
-  ordena por PTS/DG/GF — enfrentamiento directo y resolución manual del
-  admin (la decisión confirmada con el usuario) no tienen UI todavía; si
-  el auto-orden alcanza para separar a los clasificados, `Generar
-  Playoffs` funciona igual.
-- **Bracket visual.** `GET /torneos/{id}/bracket` + `MotorFormatosPanel`
-  muestran las rondas en columnas con "Ganador Partido N" / "Perdedor
-  Semifinal N" en las casillas sin definir — no dibuja las líneas de
-  conexión del árbol (un bracket con SVG/canvas es una pieza de diseño
-  aparte, no bloqueaba la funcionalidad).
-- **Walkover/retiro a mitad de una fase de Eliminación** — ya estaba
-  fuera de alcance en el plan (EC-52 renombrado), sigue sin decisión de
-  producto.
+- **Desempate en la tabla de posiciones de un grupo (EC-51).** La decisión
+  de producto (enfrentamiento directo y resolución manual del admin) ya
+  está confirmada — solo falta la UI. **En curso**, ver
+  `cierre-backlog-todos-plan.md` §3A-12.
+- **Bracket visual** — **aparcado**. `GET /torneos/{id}/bracket` +
+  `MotorFormatosPanel` muestran las rondas en columnas sin las líneas de
+  conexión del árbol — es pieza de diseño gráfico (SVG/canvas), no
+  bloqueaba la funcionalidad.
+- **Walkover/retiro a mitad de una fase de Eliminación.** **En curso**
+  (necesita una sesión de diseño propia, sin opción "obviamente
+  correcta" para recomendar todavía), ver
+  `cierre-backlog-todos-plan.md` §3B-13.
+
+---
+
+Para el detalle de cada decisión "en curso" (recomendación, alternativas
+consideradas, edge cases, tests) — no repetido acá para que esta lista no
+vuelva a desincronizarse del documento que sí lo mantiene — ver
+`docs/plans/cierre-backlog-todos-plan.md`.
