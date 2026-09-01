@@ -1,4 +1,9 @@
 import { useMemo } from "react";
+// 3A-6 (docs/plans/cierre-backlog-todos-plan.md): ModalidadRow acá era la
+// 4ta declaración ad-hoc del mismo shape que components["schemas"]["ModalidadOut"]
+// ya genera — re-exportado desde el alias central en vez de mantener dos
+// fuentes de verdad para la misma forma.
+import type { Modalidad as ModalidadRow } from "../api/types";
 import { useResourceCrud } from "./useResourceCrud";
 
 export interface DisciplinaRow {
@@ -10,13 +15,7 @@ export interface DisciplinaRow {
   orden_popularidad: number | null;
 }
 
-export interface ModalidadRow {
-  id: number;
-  nombre: string;
-  disciplina_id: number;
-  tamano_equipo: number;
-  estado: string;
-}
+export type { ModalidadRow };
 
 /**
  * Catálogo Disciplina/Modalidad en un solo lugar

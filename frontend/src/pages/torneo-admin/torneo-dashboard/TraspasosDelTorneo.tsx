@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
+import type { Equipo as EquipoRow } from "../../../api/types";
 import { apiErrorMessage } from "../../../api/client";
 import { ResourceForm } from "../../../components/admin/ResourceForm";
 import { ResourceTable } from "../../../components/admin/ResourceTable";
-import { useResourceCrud } from "../../../hooks/useResourceCrud";
+import { LIMITE_LISTA, useResourceCrud } from "../../../hooks/useResourceCrud";
 import type { TorneoDashboardContext } from "./TorneoDashboard";
 
 interface TraspasoRow {
@@ -26,10 +27,6 @@ interface PerfilRow {
 interface InscripcionRow {
   id: number;
   equipo_id: number;
-}
-interface EquipoRow {
-  id: number;
-  nombre: string;
 }
 
 type Modo = { tipo: "lista" } | { tipo: "crear" };
@@ -139,6 +136,9 @@ export function TraspasosDelTorneoPage() {
         </button>
       </div>
       {crud.customAction.isError && <p className="error-text">{apiErrorMessage(crud.customAction.error)}</p>}
+      {crud.truncado && (
+        <p className="muted">Mostrando los primeros {LIMITE_LISTA} traspasos de esta edición.</p>
+      )}
       <ResourceTable<TraspasoRow>
         rows={crud.listQuery.data ?? []}
         columns={[

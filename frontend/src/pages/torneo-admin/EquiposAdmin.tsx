@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import type { Equipo as EquipoRow } from "../../api/types";
 import { apiErrorMessage } from "../../api/client";
 import { FiltrosRecurso } from "../../components/admin/FiltrosRecurso";
 import { ResourceForm, type ResourceFieldValue, type ResourceFormField } from "../../components/admin/ResourceForm";
@@ -7,15 +8,6 @@ import { ResourceTable, type ResourceTableColumn } from "../../components/admin/
 import { useCatalogo } from "../../hooks/useCatalogo";
 import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
 import { iconoDisciplina } from "./iconosDisciplina";
-
-interface EquipoRow {
-  id: number;
-  nombre: string;
-  disciplina_id: number;
-  modalidad_id: number;
-  plantilla_total: number;
-  estado: string;
-}
 
 type Modo = { tipo: "lista" } | { tipo: "crear" } | { tipo: "editar"; fila: EquipoRow };
 

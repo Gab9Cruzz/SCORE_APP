@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router-dom";
+import type { Equipo as EquipoRow } from "../../../api/types";
 import { apiErrorMessage } from "../../../api/client";
 import { ResourceForm, type ResourceFieldValue } from "../../../components/admin/ResourceForm";
-import { useResourceCrud } from "../../../hooks/useResourceCrud";
+import { LIMITE_LISTA, useResourceCrud } from "../../../hooks/useResourceCrud";
 import { useCatalogo } from "../../../hooks/useCatalogo";
 import { AvatarJugador } from "../AvatarJugador";
 import { iconoDisciplina } from "../iconosDisciplina";
@@ -32,10 +33,6 @@ interface PerfilRow {
 interface InscripcionRow {
   id: number;
   equipo_id: number;
-}
-interface EquipoRow {
-  id: number;
-  nombre: string;
 }
 
 type Modo = { tipo: "lista" } | { tipo: "crear" } | { tipo: "editar"; fila: PlantillaRow } | { tipo: "baja"; fila: PlantillaRow };
@@ -276,6 +273,12 @@ export function PlantillasDelTorneoPage() {
       </div>
 
       {cargando && <p>Cargando...</p>}
+      {/* 3A-5: LIMITE_LISTA es sobre los vínculos (crud), no sobre los
+          equipos agrupados — un torneo con muchos equipos chicos puede
+          tocar el techo aunque `gruposPorEquipo.length` sea bajo. */}
+      {crud.truncado && (
+        <p className="muted">Mostrando los primeros {LIMITE_LISTA} vínculos jugador-equipo de esta edición.</p>
+      )}
       {!cargando && gruposPorEquipo.length === 0 && (
         <p className="muted">
           Todavía no hay equipos matriculados en este torneo. <Link to={`/torneo-admin/torneos/${torneoId}/equipos`}>Ir a Equipos</Link>

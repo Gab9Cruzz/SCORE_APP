@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
+import type { Equipo as EquipoRow } from "../../../api/types";
 import { api, apiErrorMessage } from "../../../api/client";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
 
@@ -19,11 +20,6 @@ interface PartidoRow {
   grupo_id: number | null;
   estado: string;
 }
-interface EquipoRow {
-  id: number;
-  nombre: string;
-}
-
 interface MotorFormatosPanelProps {
   torneoId: number;
   formato: "Liga" | "Eliminacion" | "Grupos_Playoffs";

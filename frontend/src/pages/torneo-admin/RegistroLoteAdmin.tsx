@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import type { Equipo as EquipoRow } from "../../api/types";
 import { api, apiErrorMessage } from "../../api/client";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
 
@@ -57,10 +58,6 @@ interface FilaInvalida {
   cedula: string;
   nombre: string;
   motivo: string;
-}
-interface EquipoRow {
-  id: number;
-  nombre: string;
 }
 interface TorneoRow {
   id: number;

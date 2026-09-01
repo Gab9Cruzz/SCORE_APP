@@ -1,23 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import type { Equipo as EquipoRow, Modalidad as ModalidadRow } from "../../../api/types";
 import { api, apiErrorMessage } from "../../../api/client";
 import { useCatalogo } from "../../../hooks/useCatalogo";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
 import type { RegistroLotePreResuelto } from "../RegistroLoteAdmin";
 
-interface EquipoRow {
-  id: number;
-  nombre: string;
-  disciplina_id: number;
-  estado: string;
-}
-interface ModalidadRow {
-  id: number;
-  nombre: string;
-  disciplina_id: number;
-  tamano_equipo: number;
-}
 interface JugadorRow {
   id: number;
   nombre: string;

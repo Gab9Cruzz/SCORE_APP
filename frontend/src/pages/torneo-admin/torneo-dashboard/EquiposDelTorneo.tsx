@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
+import type { Equipo as EquipoRow, Modalidad as ModalidadRow } from "../../../api/types";
 import { ResourceTable } from "../../../components/admin/ResourceTable";
-import { useResourceCrud } from "../../../hooks/useResourceCrud";
+import { LIMITE_LISTA, useResourceCrud } from "../../../hooks/useResourceCrud";
 import type { RegistroLotePreResuelto } from "../RegistroLoteAdmin";
 import { ModalAgregarInscripcion } from "./ModalAgregarInscripcion";
 import { ModalGestionarPlantilla } from "./ModalGestionarPlantilla";
@@ -14,18 +15,10 @@ interface InscripcionRow {
   jugador_perfil_id: number | null;
   estado: string;
 }
-interface EquipoRow {
-  id: number;
-  nombre: string;
-}
 interface PlantillaRow {
   id: number;
   inscripcion_torneo_id: number;
   estado: string;
-}
-interface ModalidadRow {
-  id: number;
-  tamano_equipo: number;
 }
 interface PerfilRow {
   id: number;
@@ -127,6 +120,11 @@ function VistaIndividual(props: {
           + Agregar Jugador
         </button>
       </div>
+      {/* 3A-5: mismo banner que EquiposAdmin/AccesosAdmin/AuditoriaAdmin —
+          esta grilla no lo tenía. */}
+      {inscripciones.truncado && (
+        <p className="muted">Mostrando los primeros {LIMITE_LISTA} jugadores inscritos.</p>
+      )}
       <ResourceTable<InscripcionRow>
         rows={inscripciones.listQuery.data ?? []}
         columns={[
@@ -227,6 +225,11 @@ function VistaEquipo(props: {
           {esPareja ? "+ Agregar Pareja" : "+ Agregar Equipo"}
         </button>
       </div>
+      {inscripciones.truncado && (
+        <p className="muted">
+          Mostrando los primeros {LIMITE_LISTA} {esPareja ? "parejas inscritas" : "equipos inscritos"}.
+        </p>
+      )}
       <ResourceTable<InscripcionRow>
         rows={inscripciones.listQuery.data ?? []}
         columns={[

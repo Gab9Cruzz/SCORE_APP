@@ -125,4 +125,24 @@ describe("SimpleResourceAdminPage", () => {
 
     expect(await screen.findByText("nombre duplicado")).toBeInTheDocument();
   });
+
+  it("avisa cuando la lista llegó al techo de LIMITE_LISTA (3A-5)", async () => {
+    server.use(
+      http.get(BASE, () =>
+        HttpResponse.json(
+          Array.from({ length: 200 }, (_, i) => ({ id: i + 1, nombre: `Fila ${i + 1}`, estado: "Activo" })),
+        ),
+      ),
+    );
+    renderPagina();
+
+    expect(await screen.findByText(/Mostrando los primeros 200/)).toBeInTheDocument();
+  });
+
+  it("no avisa truncado cuando la lista no llegó al techo", async () => {
+    renderPagina();
+    await screen.findByText("Uno");
+
+    expect(screen.queryByText(/Mostrando los primeros/)).not.toBeInTheDocument();
+  });
 });

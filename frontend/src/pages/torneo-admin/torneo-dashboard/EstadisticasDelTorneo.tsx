@@ -38,6 +38,14 @@ interface GoleadorRow {
   goles: number;
 }
 
+// 3A-5 (docs/plans/cierre-backlog-todos-plan.md): GET
+// /estadisticas/torneos/{id}/goleadores tiene su propio tope, `limit=50`
+// por default (backend/app/api/routes/estadisticas.py) — distinto de
+// LIMITE_LISTA (200, useResourceCrud) porque esta pantalla no pasa por ese
+// hook (es un GET directo, no un CRUD paginado). Mismo criterio de "sin
+// endpoint que devuelva el total real, se infiere truncado === tope".
+const LIMITE_GOLEADORES = 50;
+
 /** Selector de Edición (torneos-admin-plan.md, Fase 2, parte B): SOLO
  * cambia qué edición alimenta esta tabla — no navega a otra URL visible
  * como página distinta, no toca las demás sub-pestañas (Equipos/Plantillas/...
@@ -165,6 +173,9 @@ export function EstadisticasDelTorneoPage() {
 
       <h3>Goleadores</h3>
       {goleadoresQuery.data?.length === 0 && <p className="muted">Sin goles registrados todavía en esta edición.</p>}
+      {goleadoresQuery.data?.length === LIMITE_GOLEADORES && (
+        <p className="muted">Mostrando los primeros {LIMITE_GOLEADORES} goleadores.</p>
+      )}
       {!!goleadoresQuery.data?.length && (
         <div className="table-scroll">
           <table>

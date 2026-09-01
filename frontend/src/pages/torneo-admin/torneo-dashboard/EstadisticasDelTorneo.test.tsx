@@ -120,4 +120,24 @@ describe("EstadisticasDelTorneoPage", () => {
       CONTEXTO.formato = "Liga";
     }
   });
+
+  it("avisa cuando goleadores llega al techo del backend (3A-5, límite=50 distinto de LIMITE_LISTA)", async () => {
+    server.use(
+      http.get(TORNEOS, () => HttpResponse.json([{ id: 20, numero_edicion: 2, estado: "Activo" }])),
+      http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/20/posiciones", () => HttpResponse.json([])),
+      http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/20/goleadores", () =>
+        HttpResponse.json(
+          Array.from({ length: 50 }, (_, i) => ({
+            jugador_id: i + 1,
+            jugador: `Goleador ${i + 1}`,
+            equipo: "Halcones FC",
+            goles: 1,
+          })),
+        ),
+      ),
+    );
+    renderPagina();
+
+    expect(await screen.findByText(/Mostrando los primeros 50 goleadores/)).toBeInTheDocument();
+  });
 });

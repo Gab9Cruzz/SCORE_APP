@@ -1,12 +1,7 @@
+import type { Modalidad as ModalidadRow } from "../../api/types";
 import { apiErrorMessage } from "../../api/client";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
 
-interface ModalidadRow {
-  id: number;
-  nombre: string;
-  tamano_equipo: number;
-  estado: "Activo" | "Inactivo";
-}
 interface DisciplinaRow {
   id: number;
   nombre: string;

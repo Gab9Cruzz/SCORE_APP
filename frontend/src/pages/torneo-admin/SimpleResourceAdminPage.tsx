@@ -3,7 +3,7 @@ import { useState } from "react";
 import { apiErrorMessage } from "../../api/client";
 import { ResourceForm, type ResourceFieldValue, type ResourceFormField } from "../../components/admin/ResourceForm";
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
-import { useResourceCrud } from "../../hooks/useResourceCrud";
+import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
 
 interface RowBase {
   id: number;
@@ -95,6 +95,16 @@ export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResou
           Beneficia a los 4 recursos que usan esta página compartida, no
           solo a Usuarios. */}
       {crud.softDelete.isError && <p className="error-text">{apiErrorMessage(crud.softDelete.error)}</p>}
+      {/* 3A-5 (docs/plans/cierre-backlog-todos-plan.md): esta página
+          genérica sirve a Jugadores y Usuarios — antes ninguno de los dos
+          avisaba el techo de LIMITE_LISTA, a diferencia de EquiposAdmin/
+          AccesosAdmin/AuditoriaAdmin, que ya lo hacían cada uno por su
+          cuenta. Un solo banner acá arregla los dos de una vez. */}
+      {crud.truncado && (
+        <p className="muted">
+          Mostrando los primeros {LIMITE_LISTA}. Usá los filtros o la búsqueda para ver el resto.
+        </p>
+      )}
       <ResourceTable<TOut>
         rows={crud.listQuery.data ?? []}
         columns={columns}

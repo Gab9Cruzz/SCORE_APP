@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
+import type { Equipo as EquipoRow } from "../../../api/types";
 import { apiErrorMessage } from "../../../api/client";
 import { ResourceForm, type ResourceFieldValue } from "../../../components/admin/ResourceForm";
 import { ResourceTable } from "../../../components/admin/ResourceTable";
-import { useResourceCrud } from "../../../hooks/useResourceCrud";
+import { LIMITE_LISTA, useResourceCrud } from "../../../hooks/useResourceCrud";
 import { MotorFormatosPanel } from "./MotorFormatosPanel";
 import type { TorneoDashboardContext } from "./TorneoDashboard";
 
@@ -19,10 +20,6 @@ interface PartidoRow {
   grupo_id: number | null;
   estado: string;
   arbitro_id: number | null;
-}
-interface EquipoRow {
-  id: number;
-  nombre: string;
 }
 interface InscripcionRow {
   id: number;
@@ -109,6 +106,9 @@ export function PartidosDelTorneoPage() {
           + Nuevo
         </button>
       </div>
+      {crud.truncado && (
+        <p className="muted">Mostrando los primeros {LIMITE_LISTA} partidos de esta edición.</p>
+      )}
       <ResourceTable<PartidoRow>
         rows={crud.listQuery.data ?? []}
         columns={[
