@@ -175,7 +175,11 @@ ALTER TABLE GRUPO
 ALTER TABLE GRUPO_EQUIPO
     ADD CONSTRAINT fk_grupo_equipo_grupo FOREIGN KEY (Grupo_ID) REFERENCES GRUPO(ID) ON DELETE CASCADE,
     ADD CONSTRAINT fk_grupo_equipo_inscripcion FOREIGN KEY (Inscripcion_Torneo_ID) REFERENCES INSCRIPCIONES_TORNEO(ID),
-    ADD CONSTRAINT unique_grupo_equipo UNIQUE (Grupo_ID, Inscripcion_Torneo_ID);
+    ADD CONSTRAINT unique_grupo_equipo UNIQUE (Grupo_ID, Inscripcion_Torneo_ID),
+    -- 3A-12 (EC-51): un "puesto 0" o negativo no tiene sentido — NULL
+    -- (sin override) sigue permitido, el CHECK solo acota el valor SI se
+    -- setea uno.
+    ADD CONSTRAINT chk_grupo_equipo_orden_manual CHECK (Orden_Manual IS NULL OR Orden_Manual > 0);
 
 ALTER TABLE SORTEOS
     ADD CONSTRAINT fk_sorteos_fase FOREIGN KEY (Fase_ID) REFERENCES FASE(ID) ON DELETE CASCADE,

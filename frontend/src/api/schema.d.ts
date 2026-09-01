@@ -296,6 +296,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/grupos/equipos/{grupo_equipo_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Definir Orden Manual
+         * @description Desempate manual en la tabla de posiciones (3A-12, EC-51 de
+         *     motor-formatos-plantillas-navegacion-plan.md): `orden_manual=null`
+         *     saca el override y vuelve al orden automático (PTS/DG/GF) —
+         *     vw_tabla_posiciones lo aplica como desempate de ÚLTIMA instancia,
+         *     nunca puede promover a un equipo por encima de otro con más puntos.
+         */
+        patch: operations["definir_orden_manual_api_v1_grupos_equipos__grupo_equipo_id__patch"];
+        trace?: never;
+    };
     "/api/v1/torneo-grupos": {
         parameters: {
             query?: never;
@@ -1839,6 +1863,38 @@ export interface components {
             /** Goles */
             goles: number;
         };
+        /**
+         * GrupoEquipoOrdenManualUpdate
+         * @description 3A-12 (docs/plans/cierre-backlog-todos-plan.md, EC-51): `None`
+         *     explícito es un valor válido acá — "sacar el desempate manual, volver
+         *     al orden automático de PTS/DG/GF" — por eso el campo no es opcional
+         *     (si lo fuera, un PATCH con `{"orden_manual": null}` y uno sin el campo
+         *     serían indistinguibles para Pydantic; ver GrupoEquipoRepository.set_orden_manual
+         *     para la otra mitad de esta misma decisión).
+         * @example {
+         *       "orden_manual": 1
+         *     }
+         */
+        GrupoEquipoOrdenManualUpdate: {
+            /** Orden Manual */
+            orden_manual: number | null;
+        };
+        /** GrupoEquipoOut */
+        GrupoEquipoOut: {
+            /** Id */
+            id: number;
+            /** Grupo Id */
+            grupo_id: number;
+            /** Inscripcion Torneo Id */
+            inscripcion_torneo_id: number;
+            /** Orden Manual */
+            orden_manual?: number | null;
+            /**
+             * Fecha Registro
+             * Format: date-time
+             */
+            fecha_registro: string;
+        };
         /** GrupoOut */
         GrupoOut: {
             /** Id */
@@ -2389,6 +2445,10 @@ export interface components {
             dg: number;
             /** Pts */
             pts: number;
+            /** Grupo Equipo Id */
+            grupo_equipo_id?: number | null;
+            /** Orden Manual */
+            orden_manual?: number | null;
         };
         /** ProximoPartidoOut */
         ProximoPartidoOut: {
@@ -3439,6 +3499,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GrupoOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    definir_orden_manual_api_v1_grupos_equipos__grupo_equipo_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grupo_equipo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrupoEquipoOrdenManualUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrupoEquipoOut"];
                 };
             };
             /** @description Validation Error */

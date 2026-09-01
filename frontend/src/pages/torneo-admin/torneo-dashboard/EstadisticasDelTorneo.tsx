@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../../api/client";
@@ -26,6 +26,11 @@ interface PosicionRow {
   gc: number;
   dg: number;
   pts: number;
+  // 3A-12 (docs/plans/cierre-backlog-todos-plan.md, EC-51): NULL en Liga
+  // (sin Fase de Grupos) — grupo_equipo_id es a lo que apunta el PATCH de
+  // desempate manual, orden_manual es el valor ya guardado (si hay).
+  grupo_equipo_id: number | null;
+  orden_manual: number | null;
 }
 interface GrupoRow {
   id: number;
@@ -56,6 +61,7 @@ const LIMITE_GOLEADORES = 50;
 export function EstadisticasDelTorneoPage() {
   const { torneoId, torneoGrupoId, formato } = useOutletContext<TorneoDashboardContext>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
 
   const [edicionId, setEdicionId] = useState<number>(() => {
     const desdeUrl = Number(searchParams.get("edicion"));
@@ -133,6 +139,21 @@ export function EstadisticasDelTorneoPage() {
     },
   });
 
+  // 3A-12 (EC-51): PATCH /grupos/equipos/{id} — orden_manual: null saca
+  // el override. Invalida "posiciones" (no "grupos": el nombre del grupo
+  // no cambia) para que la tabla se reordene con el valor recién guardado.
+  const definirOrdenManual = useMutation({
+    mutationFn: async ({ grupoEquipoId, ordenManual }: { grupoEquipoId: number; ordenManual: number | null }) => {
+      const { data, error } = await api.PATCH("/api/v1/grupos/equipos/{grupo_equipo_id}", {
+        params: { path: { grupo_equipo_id: grupoEquipoId } },
+        body: { orden_manual: ordenManual },
+      } as never);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["estadisticas", "posiciones", edicionId] }),
+  });
+
   return (
     <div>
       <h2>Estadísticas</h2>
@@ -158,6 +179,7 @@ export function EstadisticasDelTorneoPage() {
       <h3>Tabla de posiciones</h3>
       {posicionesQuery.isLoading && <p>Cargando...</p>}
       {posicionesQuery.isError && <p className="error-text">{apiErrorMessage(posicionesQuery.error)}</p>}
+      {definirOrdenManual.isError && <p className="error-text">{apiErrorMessage(definirOrdenManual.error)}</p>}
       {posicionesQuery.data?.length === 0 && <p className="muted">Sin partidos jugados todavía en esta edición.</p>}
       {formato === "Grupos_Playoffs" && !!posicionesQuery.data?.length
         ? // EC-54: un torneo Grupos_Playoffs separa por grupo — mezclarlos
@@ -166,7 +188,13 @@ export function EstadisticasDelTorneoPage() {
           posicionesPorGrupo.map(([grupoId, filas]) => (
             <div key={grupoId}>
               <h4>Grupo {nombreGrupo.get(grupoId) ?? grupoId}</h4>
-              <TablaPosiciones filas={filas} />
+              <TablaPosiciones
+                filas={filas}
+                onDefinirOrdenManual={(grupoEquipoId, ordenManual) =>
+                  definirOrdenManual.mutate({ grupoEquipoId, ordenManual })
+                }
+                guardando={definirOrdenManual.isPending}
+              />
             </div>
           ))
         : !!posicionesQuery.data?.length && <TablaPosiciones filas={posicionesQuery.data} />}
@@ -202,7 +230,39 @@ export function EstadisticasDelTorneoPage() {
   );
 }
 
-function TablaPosiciones({ filas }: { filas: PosicionRow[] }) {
+/** 3A-12 (EC-51): equipos cuyos PTS/DG/GF coinciden con al menos un
+ * vecino en la tabla YA ordenada — el enfrentamiento directo no está
+ * calculado acá (el admin lo resuelve a ojo, este componente solo
+ * persiste la decisión), así que "empatado" se define por esos tres
+ * campos nada más, no por posición. */
+function idsEmpatados(filas: PosicionRow[]): Set<number> {
+  const empatados = new Set<number>();
+  const mismosPuntos = (a: PosicionRow, b: PosicionRow) => a.pts === b.pts && a.dg === b.dg && a.gf === b.gf;
+  for (let i = 0; i < filas.length; i++) {
+    const anterior = filas[i - 1];
+    const siguiente = filas[i + 1];
+    if ((anterior && mismosPuntos(filas[i], anterior)) || (siguiente && mismosPuntos(filas[i], siguiente))) {
+      empatados.add(filas[i].equipo_id);
+    }
+  }
+  return empatados;
+}
+
+function TablaPosiciones({
+  filas,
+  onDefinirOrdenManual,
+  guardando,
+}: {
+  filas: PosicionRow[];
+  /** Solo se pasa desde la rama Grupos_Playoffs (Liga no tiene
+   * grupo_equipo_id) — su sola presencia habilita la columna de
+   * desempate, no hace falta un booleano aparte. */
+  onDefinirOrdenManual?: (grupoEquipoId: number, ordenManual: number | null) => void;
+  guardando?: boolean;
+}) {
+  const empatados = useMemo(() => idsEmpatados(filas), [filas]);
+  const hayColumnaDesempate = Boolean(onDefinirOrdenManual);
+
   return (
     <div className="table-scroll">
       <table>
@@ -217,6 +277,7 @@ function TablaPosiciones({ filas }: { filas: PosicionRow[] }) {
             <th>GC</th>
             <th>DG</th>
             <th>Pts</th>
+            {hayColumnaDesempate && <th>Desempate</th>}
           </tr>
         </thead>
         <tbody>
@@ -231,10 +292,96 @@ function TablaPosiciones({ filas }: { filas: PosicionRow[] }) {
               <td>{p.gc}</td>
               <td>{p.dg}</td>
               <td>{p.pts}</td>
+              {hayColumnaDesempate && (
+                <td>
+                  {/* Solo se ofrece si de verdad hay algo que desempatar
+                      (EC-51: "cuando PTS/DG/GF no alcanzan") — mostrarlo
+                      en cada fila invitaría a "ordenar" una tabla que ya
+                      está resuelta por puntos. */}
+                  {p.grupo_equipo_id != null && empatados.has(p.equipo_id) && (
+                    <CeldaOrdenManual
+                      grupoEquipoId={p.grupo_equipo_id}
+                      ordenManual={p.orden_manual}
+                      onGuardar={(valor) => onDefinirOrdenManual?.(p.grupo_equipo_id as number, valor)}
+                      guardando={guardando ?? false}
+                    />
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** Mismo patrón de ícono de lápiz que EventoTimelineFila (ControlDeMesa.tsx)
+ * y Cronometro.tsx: click para editar inline, sin navegar a otra pantalla.
+ * `null` es un valor de guardado válido (sacar el override), distinto de
+ * "no tocar nada" — por eso el botón "Quitar" existe aparte de Cancelar. */
+function CeldaOrdenManual(props: {
+  grupoEquipoId: number;
+  ordenManual: number | null;
+  onGuardar: (valor: number | null) => void;
+  guardando: boolean;
+}) {
+  const { ordenManual, onGuardar, guardando } = props;
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState(ordenManual != null ? String(ordenManual) : "");
+
+  if (!editando) {
+    return (
+      <button
+        type="button"
+        className="link-button"
+        onClick={() => {
+          setValor(ordenManual != null ? String(ordenManual) : "");
+          setEditando(true);
+        }}
+      >
+        {ordenManual != null ? `#${ordenManual} ✏️` : "Definir manualmente"}
+      </button>
+    );
+  }
+
+  return (
+    <span className="orden-manual-editor">
+      <input
+        type="number"
+        aria-label="Orden manual"
+        min={1}
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        style={{ width: "3.5rem" }}
+        autoFocus
+      />
+      <button
+        type="button"
+        disabled={guardando || valor === ""}
+        onClick={() => {
+          onGuardar(Number(valor));
+          setEditando(false);
+        }}
+      >
+        Guardar
+      </button>
+      {ordenManual != null && (
+        <button
+          type="button"
+          className="link-button"
+          disabled={guardando}
+          onClick={() => {
+            onGuardar(null);
+            setEditando(false);
+          }}
+        >
+          Quitar
+        </button>
+      )}
+      <button type="button" className="link-button" onClick={() => setEditando(false)}>
+        Cancelar
+      </button>
+    </span>
   );
 }

@@ -23,16 +23,21 @@ class EstadisticasRepository:
         # tablas mezcladas (mismo comportamiento que antes del motor de
         # formatos para Liga, que nunca tiene grupo) — el consumidor que
         # sabe que está mirando un torneo de grupos pasa grupo_id.
+        # orden_manual (3A-12, EC-51): desempate de ÚLTIMA instancia, entre
+        # pts/dg/gf y equipo — mismo criterio que el ORDER BY interno de
+        # vw_tabla_posiciones (04_views.sql), repetido acá porque envolver
+        # la vista en un SELECT * con su propio ORDER BY no hereda el de
+        # adentro.
         if grupo_id is not None:
             return await self._fetch(
                 "SELECT * FROM vw_tabla_posiciones WHERE torneo_id = :torneo_id AND grupo_id = :grupo_id "
-                "ORDER BY pts DESC, dg DESC, gf DESC, equipo",
+                "ORDER BY pts DESC, dg DESC, gf DESC, orden_manual NULLS LAST, equipo",
                 torneo_id=torneo_id,
                 grupo_id=grupo_id,
             )
         return await self._fetch(
             "SELECT * FROM vw_tabla_posiciones WHERE torneo_id = :torneo_id "
-            "ORDER BY pts DESC, dg DESC, gf DESC, equipo",
+            "ORDER BY pts DESC, dg DESC, gf DESC, orden_manual NULLS LAST, equipo",
             torneo_id=torneo_id,
         )
 

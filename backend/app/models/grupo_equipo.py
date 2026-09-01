@@ -20,4 +20,8 @@ class GrupoEquipo(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     grupo_id: Mapped[int] = mapped_column(ForeignKey("grupo.id"))
     inscripcion_torneo_id: Mapped[int] = mapped_column(ForeignKey("inscripciones_torneo.id"))
+    # 3A-12 (docs/plans/cierre-backlog-todos-plan.md, EC-51): NULL = sin
+    # override, el orden automático de vw_tabla_posiciones (PTS/DG/GF)
+    # manda solo — ver el comentario de la columna en 01_schema.sql.
+    orden_manual: Mapped[int | None] = mapped_column(nullable=True)
     fecha_registro: Mapped[datetime] = mapped_column(nullable=True, server_default=text("CURRENT_TIMESTAMP"))

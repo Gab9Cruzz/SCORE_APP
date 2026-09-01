@@ -316,10 +316,19 @@ CREATE TABLE GRUPO (
 -- torneo) cayó en qué grupo. Ancla en INSCRIPCIONES_TORNEO, no en
 -- EQUIPOS directo — mismo criterio que JUGADOR_EQUIPO (reusa el ancla
 -- "equipo-en-este-torneo" ya existente).
+--
+-- Orden_Manual (3A-12, docs/plans/cierre-backlog-todos-plan.md — EC-51 de
+-- motor-formatos-plantillas-navegacion-plan.md, "enfrentamiento directo
+-- primero; si persiste el empate, resolución manual del admin"): NULL por
+-- default (orden automático de vw_tabla_posiciones sin tocar). Un admin
+-- lo setea SOLO para desempatar — vw_tabla_posiciones lo usa como
+-- desempate de ÚLTIMA instancia, DESPUÉS de PTS/DG/GF, así que nunca
+-- puede promover a un equipo por encima de otro con más puntos.
 CREATE TABLE GRUPO_EQUIPO (
     ID SERIAL PRIMARY KEY,
     Grupo_ID INT NOT NULL,
     Inscripcion_Torneo_ID INT NOT NULL,
+    Orden_Manual INT,
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -221,11 +221,24 @@ SELECT
     SUM(l.GC)::INT                            AS GC,
     (SUM(l.GF) - SUM(l.GC))::INT              AS DG,
     (COUNT(*) FILTER (WHERE l.GF > l.GC) * 3
-     + COUNT(*) FILTER (WHERE l.GF = l.GC))::INT AS PTS
+     + COUNT(*) FILTER (WHERE l.GF = l.GC))::INT AS PTS,
+    -- 3A-12 (EC-51): desempate manual del admin, solo aplica a partidos
+    -- de una Fase de Grupos (Grupo_ID no-NULL) — Liga no tiene
+    -- GRUPO_EQUIPO, así que ge.* sale NULL ahí por construcción, no hace
+    -- falta filtrar aparte. Grupo_Equipo_ID va expuesto para que el
+    -- frontend pueda dirigir el PATCH sin resolverlo aparte.
+    ge.ID          AS Grupo_Equipo_ID,
+    ge.Orden_Manual
 FROM lados l
 JOIN EQUIPOS e ON e.ID = l.Equipo_ID
-GROUP BY l.Fase_ID, l.Grupo_ID, l.Torneo_ID, l.Equipo_ID, e.Nombre
-ORDER BY l.Torneo_ID, l.Fase_ID, l.Grupo_ID NULLS FIRST, PTS DESC, DG DESC, GF DESC, Equipo;
+LEFT JOIN INSCRIPCIONES_TORNEO it ON it.Torneo_ID = l.Torneo_ID AND it.Equipo_ID = l.Equipo_ID
+LEFT JOIN GRUPO_EQUIPO ge ON ge.Grupo_ID = l.Grupo_ID AND ge.Inscripcion_Torneo_ID = it.ID
+GROUP BY l.Fase_ID, l.Grupo_ID, l.Torneo_ID, l.Equipo_ID, e.Nombre, ge.ID, ge.Orden_Manual
+-- Orden_Manual entra DESPUÉS de PTS/DG/GF a propósito (ver el comentario
+-- de la columna en 01_schema.sql): es el desempate de última instancia,
+-- nunca puede promover a un equipo con menos puntos por encima de otro
+-- con más.
+ORDER BY l.Torneo_ID, l.Fase_ID, l.Grupo_ID NULLS FIRST, PTS DESC, DG DESC, GF DESC, ge.Orden_Manual NULLS LAST, Equipo;
 -- Partidos de una FASE Tipo='Eliminacion' no entran en la práctica a esta
 -- vista (no hay "tabla de posiciones" en un bracket) — el filtro natural
 -- es que el frontend/backend solo la consulten para fases Liga/Grupos.

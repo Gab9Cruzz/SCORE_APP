@@ -73,6 +73,12 @@ class PosicionOut(BaseModel):
     gc: int
     dg: int
     pts: int
+    # 3A-12 (docs/plans/cierre-backlog-todos-plan.md, EC-51): NULL en Liga
+    # (sin GRUPO_EQUIPO) y en cualquier fila sin desempate manual seteado.
+    # grupo_equipo_id es lo que el frontend manda de vuelta en el PATCH de
+    # PUT /grupos/equipos/{id} — evita resolverlo aparte.
+    grupo_equipo_id: int | None = None
+    orden_manual: int | None = None
 
 
 class PlantillaJugadorOut(BaseModel):

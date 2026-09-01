@@ -40,6 +40,7 @@ SCRIPTS_VIGENTES = [
     "18_migracion_auditoria_cambios.sql",
     "19_migracion_plantilla_base_equipo.sql",
     "20_migracion_control_mesa_tiempos.sql",
+    "21_migracion_desempate_manual.sql",
 ]
 
 DB_SCRIPTS = "torneos_mvp_scripts_test"
