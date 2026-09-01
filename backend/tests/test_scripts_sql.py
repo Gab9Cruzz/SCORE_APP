@@ -127,3 +127,24 @@ async def test_la_demo_deja_datos_coherentes_con_el_filtro_por_disciplina(base_a
         " WHERE e.Disciplina_ID <> t.Disciplina_ID"
     )
     assert cruzadas == 0, f"{cruzadas} inscripcion(es) de la demo con equipo de otra disciplina"
+
+
+async def test_la_demo_no_usa_equipo_fantasma_para_inscripciones_individuales(base_al_dia):
+    """3A-7 (docs/plans/cierre-backlog-todos-plan.md): Copa Raíces (Tenis,
+    Individual) inventaba un EQUIPOS 'Micky Fernández' para poder anclar la
+    inscripción vía Equipo_ID — el patrón viejo, previo a la Decisión B1
+    (ediciones-catalogo-disciplinas-plan.md), que dice que Individual
+    (Modalidad.tamano_equipo=1) se inscribe directo por Jugador_Perfil_ID,
+    sin ninguna fila en EQUIPOS. Esta es la regresión permanente: ninguna
+    inscripción de una modalidad individual debe tener Equipo_ID, y
+    ninguna debe quedar sin Jugador_Perfil_ID."""
+    mal_ancladas = await base_al_dia.fetchval(
+        "SELECT COUNT(*) FROM INSCRIPCIONES_TORNEO i"
+        " JOIN TORNEO t ON t.ID = i.Torneo_ID"
+        " JOIN MODALIDAD m ON m.ID = t.Modalidad_ID"
+        " WHERE m.Tamano_Equipo = 1 AND (i.Equipo_ID IS NOT NULL OR i.Jugador_Perfil_ID IS NULL)"
+    )
+    assert mal_ancladas == 0, (
+        f"{mal_ancladas} inscripción(es) de una modalidad Individual con Equipo_ID en vez de "
+        "Jugador_Perfil_ID (patrón viejo de equipo fantasma)"
+    )

@@ -158,27 +158,18 @@ SELECT t.ID, 'Corrido'
  WHERE g.Nombre = 'Copa Raíces' AND t.Numero_Edicion = 1
    AND NOT EXISTS (SELECT 1 FROM CONFIGURACION_TIEMPO_TORNEO c WHERE c.Torneo_ID = t.ID);
 
--- D-Eng-4 del plan: en una disciplina de Tamano_Equipo=1, el "equipo" es
--- el jugador mismo — se nombra igual que él, no se le inventa un nombre
--- de equipo aparte.
-INSERT INTO EQUIPOS (Nombre, Disciplina_ID, Modalidad_ID)
-SELECT 'Micky Fernández', (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Tenis'), (SELECT ID FROM MODALIDAD WHERE Nombre = 'Individual'
-        AND Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Tenis'))
- WHERE NOT EXISTS (SELECT 1 FROM EQUIPOS WHERE Nombre = 'Micky Fernández');
-
-INSERT INTO INSCRIPCIONES_TORNEO (Torneo_ID, Equipo_ID)
-SELECT
-    (SELECT t.ID FROM TORNEO t JOIN TORNEO_GRUPO g ON g.ID = t.Torneo_Grupo_ID WHERE g.Nombre = 'Copa Raíces' AND t.Numero_Edicion = 1),
-    (SELECT ID FROM EQUIPOS WHERE Nombre = 'Micky Fernández')
- WHERE NOT EXISTS (
-     SELECT 1 FROM INSCRIPCIONES_TORNEO
-      WHERE Torneo_ID = (SELECT t.ID FROM TORNEO t JOIN TORNEO_GRUPO g ON g.ID = t.Torneo_Grupo_ID WHERE g.Nombre = 'Copa Raíces' AND t.Numero_Edicion = 1)
-        AND Equipo_ID = (SELECT ID FROM EQUIPOS WHERE Nombre = 'Micky Fernández')
- );
-
 -- ------------------------------------------------------------
 -- PARTE D — Micky Fernández: identidad + perfil de Fútbol + perfil de
 -- Tenis, completamente aislados (unique_perfil_por_disciplina)
+--
+-- 3A-7 (docs/plans/cierre-backlog-todos-plan.md): esta parte ya no
+-- inventa un EQUIPOS "Micky Fernández" fantasma para Copa Raíces —
+-- Individual (Modalidad.tamano_equipo=1) se inscribe directo por
+-- Jugador_Perfil_ID (Decisión B1, ediciones-catalogo-disciplinas-plan.md;
+-- mismo patrón que InscripcionTorneoService._crear_individual), sin
+-- ninguna fila en EQUIPOS. Va ANTES de la INSCRIPCIONES_TORNEO de Copa
+-- Raíces (más abajo) porque esa fila necesita el Jugador_Perfil_ID de
+-- Tenis ya creado.
 -- ------------------------------------------------------------
 INSERT INTO JUGADORES (Nombre, Cedula, Correo_Electronico)
 SELECT 'Micky Fernández', '0102030405', 'micky.fernandez@example.com'
@@ -202,6 +193,22 @@ SELECT
      SELECT 1 FROM JUGADOR_PERFIL_DISCIPLINA
       WHERE Jugador_ID = (SELECT ID FROM JUGADORES WHERE Cedula = '0102030405')
         AND Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Tenis')
+ );
+
+-- Inscripción de Copa Raíces — ancla directo a Jugador_Perfil_ID (Tenis),
+-- Equipo_ID queda NULL (Decisión B1, ver comentario de PARTE D arriba).
+INSERT INTO INSCRIPCIONES_TORNEO (Torneo_ID, Jugador_Perfil_ID)
+SELECT
+    (SELECT t.ID FROM TORNEO t JOIN TORNEO_GRUPO g ON g.ID = t.Torneo_Grupo_ID WHERE g.Nombre = 'Copa Raíces' AND t.Numero_Edicion = 1),
+    (SELECT jpd.ID FROM JUGADOR_PERFIL_DISCIPLINA jpd
+      WHERE jpd.Jugador_ID = (SELECT ID FROM JUGADORES WHERE Cedula = '0102030405')
+        AND jpd.Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Tenis'))
+ WHERE NOT EXISTS (
+     SELECT 1 FROM INSCRIPCIONES_TORNEO
+      WHERE Torneo_ID = (SELECT t.ID FROM TORNEO t JOIN TORNEO_GRUPO g ON g.ID = t.Torneo_Grupo_ID WHERE g.Nombre = 'Copa Raíces' AND t.Numero_Edicion = 1)
+        AND Jugador_Perfil_ID = (SELECT jpd.ID FROM JUGADOR_PERFIL_DISCIPLINA jpd
+                                    WHERE jpd.Jugador_ID = (SELECT ID FROM JUGADORES WHERE Cedula = '0102030405')
+                                      AND jpd.Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Tenis'))
  );
 
 -- ------------------------------------------------------------
