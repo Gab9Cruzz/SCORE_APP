@@ -15,16 +15,11 @@ la última vez que se auditó).
 
 Plan en `docs/plans/auditoria-cambios-plan.md`. Alta/modificación/baja de
 cualquier entidad del sistema, quién la hizo y qué cambió, retenida 1 mes.
-Se consulta en `/admin/auditoria`, solo `AdminGeneral`.
-
-Deferido desde ese plan — **en curso** (accionable, sin decisión de
-producto pendiente, ver `docs/plans/cierre-backlog-todos-plan.md` §3A):
-
-- **Filtro por tabla en la UI es texto exacto**, sin autocomplete de las 18
-  tablas posibles — 3A-1.
-- **Sin filtro de `registro_id` en la pantalla** (sí existe en `GET
-  /auditoria?registro_id=`) — 3A-2.
-- **Sin export/descarga** (CSV u otro formato) de la bitácora — 3A-3.
+Se consulta en `/admin/auditoria`, solo `AdminGeneral` — con autocomplete
+de tabla (nombres reales de `__tablename__`, no un texto libre), filtro
+por `registro_id` y export CSV client-side con aviso si hay más de 200
+filas (3A-1/3A-2/3A-3, `docs/plans/cierre-backlog-todos-plan.md`, hecho el
+2026-09-01).
 
 ## Roles y 3 módulos (Admin General / Torneo Admin / Árbitro) — implementado
 
@@ -35,16 +30,14 @@ reales (`AdminGeneral`/`TorneoAdmin`/`Arbitro`/`Publico`), asignación
 árbitro↔partido, y las 3 pantallas (`/torneo-admin`, `/arbitro`,
 `/admin/usuarios`) están en producción sobre esta rama.
 
-Riesgo aceptado documentado por su propio Eng Review, nunca listado acá
-hasta ahora — **en curso**, ver `cierre-backlog-todos-plan.md` §3A-8:
+Riesgo aceptado documentado por su propio Eng Review (decisión D6) —
+**resuelto:**
 
-- **`MesaPanel` no valida `partido.estado` antes de aceptar un evento.**
-  La protección hoy vive solo en el filtro de la lista
-  (`ControlDeMesaPage` solo deja *seleccionar* partidos Programado/En
-  curso), no en el panel — "Mis partidos" es un segundo camino de entrada
-  al mismo componente que no pasa por ese filtro. Aceptado como riesgo en
-  su momento (decisión D6), con la recomendación explícita de agregarlo
-  acá si se volvía relevante.
+- ~~`MesaPanel` no valida `partido.estado` antes de aceptar un evento~~ —
+  **hecho.** El guard vive ahora en `EventoPartidoService.create`
+  (backend) y en `MesaPanel` (frontend) — "Mis partidos" (segundo camino
+  de entrada al mismo componente) ya no puede esquivarlo (3A-8,
+  `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-01).
 
 ## Gestión Avanzada de Equipos + Control de Mesa — implementado
 
@@ -67,13 +60,14 @@ sistema (ver arriba). Resuelve, de otras secciones de este archivo:
 
 Deferido desde ese mismo plan:
 
-- **Offline-first en Control de Mesa — alcance reducido, sigue sin UI
-  dedicada.** El estado del cronómetro ya sobrevive una desconexión (se
-  recalcula del último Hito guardado en el servidor al reconectar), pero
-  no hay indicador de "sin conexión" en pantalla ni cola de reintento
-  para el evento que se estaba cargando justo al cortarse — **en curso**,
-  ver `cierre-backlog-todos-plan.md` §3B-1 (recomendación con default
-  seguro, procede salvo objeción).
+- ~~Offline-first en Control de Mesa — alcance reducido~~ — **hecho.**
+  Indicador de "sin conexión" (`useOnlineStatus`) + cola de UN evento
+  pendiente por partido en `localStorage` — un fallo de RED (no un
+  rechazo real del backend) lo encola en vez de perderlo, con reintento
+  automático (evento `online` del navegador + intervalo de respaldo cada
+  15s, para wifi de cancha intermitente que no siempre dispara ese
+  evento) y "Reintentar ahora"/"Descartar" manuales (3B-1,
+  `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-01).
 - **Tiempo extra / prórroga / penales** como estructura de cronómetro
   propia — no pedido; un torneo que los usa hoy los resuelve como ya lo
   hace (`Ganador_Desempate_ID`), sin cronómetro dedicado.
@@ -130,32 +124,35 @@ y `fn_validar_exclusividad_torneo` hoy no saben conciliar.
 - **Clonar la plantilla de una edición a la siguiente** al crear una
   edición nueva. **En curso** (recomendación: no implementar, sigue sin
   pedirse), ver `cierre-backlog-todos-plan.md` §3B-6.
-- **Archivar/eliminar un `TORNEO_GRUPO` completo** con todas sus
-  ediciones. **En curso** (recomendación: baja lógica, sin cascada a las
-  ediciones), ver `cierre-backlog-todos-plan.md` §3B-7.
-- **Traspasos entre ediciones distintas** del mismo grupo. **En curso**
-  (recomendación: alta nueva en la edición destino, no traspaso, sin
-  cambio de esquema), ver `cierre-backlog-todos-plan.md` §3B-8.
+- ~~Archivar/eliminar un `TORNEO_GRUPO` completo~~ con todas sus
+  ediciones — **hecho.** Baja lógica (`Estado` Activo/Archivado), nunca
+  DELETE, sin cascada a las ediciones existentes — oculto de `GET
+  /torneo-grupos` por default, botón Archivar/Reactivar + toggle "Ver
+  archivados" en la UI (3B-7, `docs/plans/cierre-backlog-todos-plan.md`,
+  hecho el 2026-09-01).
+- ~~Traspasos entre ediciones distintas~~ del mismo grupo — **hecho.**
+  `TraspasoService.crear` rechaza un origen/destino de ediciones
+  distintas y dirige a dar de alta en la edición destino en vez de un
+  traspaso — sin cambio de esquema (3B-8,
+  `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-01).
 - ~~Filtro `?torneo_id=` real en `/plantillas`, `/traspasos`,
   `/partidos`~~ — **hecho.** Los 3 endpoints ya filtran de verdad
   (verificado contra el código el 2026-09-01, no solo contra este
   archivo, que decía lo contrario).
 
-## Deferido desde el `/review` de equipos-jugadores-plan.md (Fase 3)
+## Deferido desde el `/review` de equipos-jugadores-plan.md (Fase 3) — implementado
 
-- **Cupo de modalidad (EC-6) sin lock.** `RegistroLoteService._validar_lote`
-  calcula `cupo_restante` leyendo el conteo de activos una sola vez, sin
-  `SELECT ... FOR UPDATE` ni advisory lock. **En curso** (accionable,
-  patrón de lock ya existe en el repo para copiar), ver
-  `cierre-backlog-todos-plan.md` §3A-4.
-- **Migración `08_migracion_equipos_jugadores.sql`, Parte E, sin rastro de
-  auditoría.** Cuando una fila vieja de `JUGADOR_EQUIPO` tiene más de una
-  `INSCRIPCIONES_TORNEO` candidata, el script elige la más antigua y solo
-  deja un `RAISE WARNING` — no los IDs de las filas ambiguas — antes de
-  dropear `JUGADOR_ID`/`EQUIPO_ID`. **En curso** (accionable, mismo
-  criterio de blindaje que el resto de la deuda técnica de este archivo,
-  no hace falta esperar a que se re-corra), ver
-  `cierre-backlog-todos-plan.md` §3A-11.
+- ~~Cupo de modalidad (EC-6) sin lock~~ — **hecho.**
+  `InscripcionTorneoRepository.lock_cupo_inscripcion` (mismo patrón
+  `pg_advisory_xact_lock` que `lock_exclusividad_torneo`), verificado con
+  un test de concurrencia REAL (dos conexiones/transacciones
+  independientes, no la sesión compartida del harness de tests) — 3A-4,
+  `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-01.
+- ~~Migración `08_migracion_equipos_jugadores.sql`, Parte E, sin rastro de
+  auditoría~~ — **hecho.** Las filas ambiguas se vuelcan a
+  `migracion_08_jugador_equipo_ambiguos` antes del `DROP COLUMN` que se
+  llevaba la única evidencia (`Jugador_ID`/`Equipo_ID` originales) — 3A-11,
+  `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-01.
 
 ## Deferido desde el plan de Catálogo Maestro de Disciplinas (`docs/plans/ediciones-catalogo-disciplinas-plan.md`)
 
@@ -207,10 +204,12 @@ propuestas. Lo que quedó afuera:
   pendientes. **En curso, pero con ciclo propio** (cambio de contrato de
   API — rompe cualquier cliente que asuma offset, no es un fix acotado),
   ver `cierre-backlog-todos-plan.md` §3B-9.
-- **Filtro por Estado del torneo en la barra de disciplinas.** **En
-  curso**, ver `cierre-backlog-todos-plan.md` §3A-9.
-- **Persistir el filtro elegido en la URL** en `TorneosAdminPage`. **En
-  curso**, ver `cierre-backlog-todos-plan.md` §3A-10.
+- ~~Filtro por Estado del torneo en la barra de disciplinas~~ — **hecho**
+  (3A-9, `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-01).
+- ~~Persistir el filtro elegido en la URL~~ en `TorneosAdminPage` —
+  **hecho.** Los tres filtros (disciplina, modalidad, estado) se leen Y
+  se escriben en la URL — "Ver todos" limpia los tres a la vez (3A-10,
+  `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-01).
 - **`UNIQUE (Nombre, Disciplina_ID)` en `EQUIPOS`** (EC-43) — **aparcado**.
   Rompería datos existentes sin que nadie lo haya pedido.
 - **Las inscripciones cruzadas PREEXISTENTES no se cancelan solas** — es
@@ -239,27 +238,24 @@ propuestas. Lo que quedó afuera:
 - El techo de 200 filas estaba hardcodeado en `useResourceCrud` y repetido
   a mano en `EquiposAdmin`. Ahora el hook exporta `LIMITE_LISTA` y
   devuelve `truncado` ya calculado; cualquier página que liste puede
-  mostrar el aviso sin repetir el número. **Las demás grillas todavía no
-  lo muestran** — en curso, ver `cierre-backlog-todos-plan.md` §3A-5.
+  mostrar el aviso sin repetir el número. El resto de las grillas
+  (Jugadores, Usuarios, los 5 listados del dashboard de torneo) ya lo
+  muestran también (3A-5, `docs/plans/cierre-backlog-todos-plan.md`,
+  hecho el 2026-09-01).
+- Los tipos de fila del frontend se declaraban a mano en cada componente
+  (`EquipoRow` en 8 archivos, `ModalidadRow` en 4). Ahora
+  `frontend/src/api/types.ts` centraliza `Equipo`/`Modalidad` como alias
+  de `components["schemas"]` (el contrato generado del backend) — las 12
+  declaraciones ad-hoc quedaron reemplazadas por un import (3A-6,
+  `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-01).
+- La demo `10_demo_torneos_admin.sql` ya no usa el patrón viejo para Copa
+  Raíces (Tenis Individual) — dejó de crear un `EQUIPOS` fantasma llamado
+  "Micky Fernández" e inscribe directo por `Jugador_Perfil_ID` (Decisión
+  B1), como cualquier inscripción individual real (3A-7,
+  `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-01).
 
-## Ideas para cuando se retome (no bloquean nada)
-
-- **Las otras grillas no avisan cuando truncan.** `useResourceCrud` ya
-  expone `truncado`; falta usarlo en Jugadores, Usuarios y los 5
-  listados del dashboard de torneo. **En curso**, ver
-  `cierre-backlog-todos-plan.md` §3A-5.
-- **Los tipos de fila del frontend se declaran a mano en cada componente**
-  (`EquipoRow` existe en 8 archivos, no 3 — creció desde que se escribió
-  esta nota — `ModalidadRow` en 4). `schema.d.ts` ya tiene la forma real
-  generada del backend. **En curso**, ver
-  `cierre-backlog-todos-plan.md` §3A-6.
-- **No hay CI.** `verificar.ps1` corre todo local — **aparcado**, mover a
-  GitHub Actions es infraestructura nueva, no deuda de producto.
-- **La demo `10_*.sql` sigue usando el patrón viejo para Copa Raíces**
-  (Tenis Individual): crea un EQUIPOS fantasma llamado "Micky Fernández" e
-  inscribe por `Equipo_ID`, en vez de inscripción individual por
-  `Jugador_Perfil_ID` (Decisión B1). **En curso**, ver
-  `cierre-backlog-todos-plan.md` §3A-7.
+**No hay CI** — `verificar.ps1` corre todo local. **Aparcado**: mover a
+GitHub Actions es infraestructura nueva, no deuda de producto.
 
 ## Auditoría de accesos (tabla `ACCESOS`) — implementado
 
@@ -297,9 +293,12 @@ Pendiente, si el volumen lo pide:
 - **No se registra el logout** — **aparcado**. El token es JWT sin estado
   del lado del servidor; tenerlo requiere una lista de tokens revocados,
   que es otro diseño de seguridad propio.
-- **Nada alerta sobre N fallos seguidos.** Hoy el dato está y hay que ir a
-  mirarlo. **En curso** (patrón estándar, procede salvo objeción), ver
-  `cierre-backlog-todos-plan.md` §3B-14.
+- ~~Nada alerta sobre N fallos seguidos~~ — **hecho.** 5 fallos de
+  CREDENCIALES (no `inactivo`/`bloqueado`, para no auto-extender el
+  bloqueo) por (usuario, IP) en 15 minutos bloquea el siguiente intento
+  con 429 + `Retry-After` (`login_rate_limit_intentos`/
+  `_ventana_minutos` en `.env`, `0` = apagado) — 3B-14,
+  `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-01.
 
 ## Motor de Formatos + Plantillas + Navegación — implementado
 
@@ -320,10 +319,13 @@ no debería sorprender a nadie:
   candidato a un plan aparte cuando haga falta (ej. si un admin empieza a
   mezclar alta manual con el motor en el MISMO torneo, caso hoy no
   ejercitado por ninguna pantalla).
-- **Desempate en la tabla de posiciones de un grupo (EC-51).** La decisión
-  de producto (enfrentamiento directo y resolución manual del admin) ya
-  está confirmada — solo falta la UI. **En curso**, ver
-  `cierre-backlog-todos-plan.md` §3A-12.
+- ~~Desempate en la tabla de posiciones de un grupo (EC-51)~~ — **hecho.**
+  Botón "Definir manualmente" + columna de override en
+  `EstadisticasDelTorneoPage`, solo para equipos realmente empatados
+  (PTS/DG/GF idénticos) — el desempate manual es el desempate de ÚLTIMA
+  instancia, nunca puede promover a un equipo por encima de otro con más
+  puntos (3A-12, `docs/plans/cierre-backlog-todos-plan.md`, hecho el
+  2026-09-01).
 - **Bracket visual** — **aparcado**. `GET /torneos/{id}/bracket` +
   `MotorFormatosPanel` muestran las rondas en columnas sin las líneas de
   conexión del árbol — es pieza de diseño gráfico (SVG/canvas), no
