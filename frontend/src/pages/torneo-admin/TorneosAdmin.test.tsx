@@ -2,8 +2,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter, useSearchParams } from "react-router-dom";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { server } from "../../test/msw-server";
-import { createWrapper } from "../../test/test-utils";
+import { createTestQueryClient, createWrapper } from "../../test/test-utils";
 import { TorneosAdminPage } from "./TorneosAdmin";
 
 const mockNavigate = vi.fn();
@@ -461,5 +463,100 @@ describe("TorneosAdminPage — redirección tras Nueva edición (pedido C)", () 
     await user.click(screen.getByRole("button", { name: "Crear" }));
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/torneo-admin/torneos/99/equipos"));
+  });
+});
+
+describe("TorneosAdminPage — filtro de Estado + persistencia en URL (3A-9/3A-10)", () => {
+  const GRUPOS_CON_ESTADOS = [
+    {
+      id: 1,
+      nombre: "Liga Relámpago",
+      ediciones: [
+        { id: 10, numero_edicion: 1, disciplina_id: 1, modalidad_id: 1, estado: "Activo", fecha_inicio: "2026-03-01", fecha_fin: "2026-05-15" },
+      ],
+    },
+    {
+      id: 2,
+      nombre: "Copa Fútbol 5",
+      ediciones: [
+        { id: 11, numero_edicion: 1, disciplina_id: 1, modalidad_id: 3, estado: "Finalizado", fecha_inicio: "2025-03-01", fecha_fin: "2025-05-15" },
+      ],
+    },
+  ];
+
+  /** Sibling en el mismo Router que la página — lee el querystring real,
+   * distinto del `createWrapper()` compartido (su `MemoryRouter` no
+   * expone la ubicación afuera). */
+  function UbicacionDebug() {
+    const [params] = useSearchParams();
+    return <div data-testid="querystring">{params.toString()}</div>;
+  }
+
+  function montarConRouter(grupos: unknown[], initialEntry = "/") {
+    mockCatalogos();
+    server.use(http.get("http://127.0.0.1:8000/api/v1/torneo-grupos", () => HttpResponse.json(grupos)));
+    const queryClient = createTestQueryClient();
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <TorneosAdminPage />
+          <UbicacionDebug />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("elegir un chip de estado filtra el listado y escribe ?estado= en la URL", async () => {
+    montarConRouter(GRUPOS_CON_ESTADOS);
+    const user = userEvent.setup();
+
+    await screen.findByText("Liga Relámpago");
+    expect(screen.getByText("Copa Fútbol 5")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Finalizado" }));
+
+    expect(screen.getByText("Copa Fútbol 5")).toBeInTheDocument();
+    expect(screen.queryByText("Liga Relámpago")).not.toBeInTheDocument();
+    expect(screen.getByTestId("querystring")).toHaveTextContent("estado=Finalizado");
+  });
+
+  it("elegir un chip de disciplina escribe ?disciplina_id= en la URL (3A-10)", async () => {
+    montarConRouter(GRUPOS_CON_ESTADOS);
+    const user = userEvent.setup();
+
+    await screen.findByText("Liga Relámpago");
+    await user.click(screen.getByRole("tab", { name: /Fútbol/ }));
+
+    expect(screen.getByTestId("querystring")).toHaveTextContent("disciplina_id=1");
+  });
+
+  it("abrir con ?estado=Finalizado en la URL arranca ya filtrado", async () => {
+    montarConRouter(GRUPOS_CON_ESTADOS, "/?estado=Finalizado");
+
+    await screen.findByText("Copa Fútbol 5");
+    expect(screen.queryByText("Liga Relámpago")).not.toBeInTheDocument();
+  });
+
+  it("'Ver todos' desde el vacío filtrado limpia disciplina, modalidad Y estado a la vez", async () => {
+    montarConRouter(GRUPOS_CON_ESTADOS, "/?disciplina_id=1&estado=Finalizado");
+    const user = userEvent.setup();
+
+    // disciplina=Fútbol (ambos grupos) + estado=Finalizado (solo Copa
+    // Fútbol 5) — combinado no vacía la lista todavía, se agrega
+    // modalidad=3 (la de Copa Fútbol 5) para forzar el vacío real y
+    // ejercitar los tres resets a la vez.
+    await screen.findByText("Copa Fútbol 5");
+    await user.click(screen.getByRole("tab", { name: "Fútbol 5" }));
+    // Fútbol 5 (modalidad_id=3, estado Finalizado) sigue matcheando Copa
+    // Fútbol 5 — el vacío real se fuerza sumando un estado que ningún
+    // grupo de Fútbol 5 tiene.
+    await user.click(screen.getByRole("tab", { name: "Activo" }));
+
+    expect(await screen.findByText(/Ningún torneo de/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Ver todos" }));
+
+    expect(await screen.findByText("Liga Relámpago")).toBeInTheDocument();
+    expect(screen.getByText("Copa Fútbol 5")).toBeInTheDocument();
+    expect(screen.getByTestId("querystring")).toHaveTextContent("");
   });
 });

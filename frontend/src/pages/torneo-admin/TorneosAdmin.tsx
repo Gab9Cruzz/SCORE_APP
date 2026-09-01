@@ -54,6 +54,10 @@ interface TorneoCreatePayload {
 
 const formatearFecha = (iso: string) => new Date(iso).toLocaleDateString("es-AR");
 
+// 3A-9: orden fijo de presentación de los chips de Estado cuando están
+// presentes — "en curso" primero, no alfabético.
+const ORDEN_ESTADOS = ["Activo", "Inactivo", "Finalizado"];
+
 type Modo = { tipo: "lista" } | { tipo: "crear-grupo" } | { tipo: "nueva-edicion"; grupo: TorneoGrupo };
 
 /** La edición que abre "Ver Torneo": la Activa más reciente si hay una, o
@@ -70,17 +74,62 @@ export function TorneosAdminPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [modo, setModo] = useState<Modo>({ tipo: "lista" });
-  // Precargado desde la URL cuando se llega desde la grilla de Equipos
-  // ("agregar plantilla" de un equipo sin inscribir manda su disciplina) —
-  // el admin cae en la barra ya filtrada por lo que estaba mirando. El
-  // filtro NO se persiste de vuelta en la URL: eso es alcance nuevo (ver
-  // "NOT en scope" del plan), esto solo lee un parámetro de entrada.
-  const [searchParams] = useSearchParams();
+  // 3A-10 (docs/plans/cierre-backlog-todos-plan.md): antes esto solo LEÍA
+  // ?disciplina_id= al montar (llegar desde la grilla de Equipos con
+  // "agregar plantilla" de un equipo sin inscribir manda su disciplina) y
+  // nunca lo volvía a escribir — elegir un chip después de eso no tocaba
+  // la URL, así que atrás/adelante del browser no reproducía el filtro ni
+  // el link se podía compartir. Ahora los tres filtros (disciplina,
+  // modalidad, estado) se leen Y se escriben acá.
+  const [searchParams, setSearchParams] = useSearchParams();
   const disciplinaInicial = searchParams.get("disciplina_id");
-  const [disciplinaFiltro, setDisciplinaFiltro] = useState<number | null>(
+  const modalidadInicial = searchParams.get("modalidad_id");
+  const estadoInicial = searchParams.get("estado");
+  const [disciplinaFiltro, setDisciplinaFiltroState] = useState<number | null>(
     disciplinaInicial ? Number(disciplinaInicial) : null,
   );
-  const [modalidadFiltro, setModalidadFiltro] = useState<number | null>(null);
+  const [modalidadFiltro, setModalidadFiltroState] = useState<number | null>(
+    modalidadInicial ? Number(modalidadInicial) : null,
+  );
+  const [estadoFiltro, setEstadoFiltroState] = useState<string | null>(estadoInicial || null);
+
+  /** Escribe los tres filtros en la URL de una sola vez (evita pisar uno
+   * con el valor viejo de otro cuando dos cambian juntos, ej.
+   * seleccionarDisciplina resetea modalidad). `undefined` = sacar el
+   * parámetro, no dejarlo vacío. */
+  function sincronizarUrl(next: {
+    disciplina?: number | null;
+    modalidad?: number | null;
+    estado?: string | null;
+  }) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      const disciplina = next.disciplina !== undefined ? next.disciplina : disciplinaFiltro;
+      const modalidad = next.modalidad !== undefined ? next.modalidad : modalidadFiltro;
+      const estado = next.estado !== undefined ? next.estado : estadoFiltro;
+      if (disciplina !== null) params.set("disciplina_id", String(disciplina));
+      else params.delete("disciplina_id");
+      if (modalidad !== null) params.set("modalidad_id", String(modalidad));
+      else params.delete("modalidad_id");
+      if (estado !== null) params.set("estado", estado);
+      else params.delete("estado");
+      return params;
+    });
+  }
+
+  // No hay un setDisciplinaFiltro de un solo campo: elegir disciplina
+  // SIEMPRE resetea modalidad también (ver seleccionarDisciplina más
+  // abajo) — un wrapper de un solo campo invitaría a alguien a llamarlo
+  // suelto y reintroducir el bug de closures que el comentario de
+  // seleccionarDisciplina explica.
+  function setModalidadFiltro(id: number | null) {
+    setModalidadFiltroState(id);
+    sincronizarUrl({ modalidad: id });
+  }
+  function setEstadoFiltro(valor: string | null) {
+    setEstadoFiltroState(valor);
+    sincronizarUrl({ estado: valor });
+  }
 
   const gruposQuery = useQuery({
     queryKey: ["torneo-grupos"],
@@ -95,11 +144,16 @@ export function TorneosAdminPage() {
 
   const grupos = useMemo(() => gruposQuery.data ?? [], [gruposQuery.data]);
 
-  /** La disciplina/modalidad de un grupo son las de la edición que se
-   * abriría — un grupo no cambia de disciplina entre ediciones (el
-   * backend las hereda, D-Eng-5), así que alcanza con mirar una. */
+  /** La disciplina/modalidad/estado de un grupo son las de la edición que
+   * se abriría — un grupo no cambia de disciplina entre ediciones (el
+   * backend las hereda, D-Eng-5), así que alcanza con mirar una. El
+   * Estado SÍ puede variar entre ediciones del mismo grupo (una Edición 1
+   * Finalizada conviviendo con una Edición 2 Activa) — filtrar por "la que
+   * se abriría" es el mismo criterio que ya usa la tarjeta para MOSTRAR el
+   * estado (3A-9), no un cálculo nuevo. */
   const disciplinaDeGrupo = (g: TorneoGrupo) => edicionParaAbrir(g)?.disciplina_id ?? null;
   const modalidadDeGrupo = (g: TorneoGrupo) => edicionParaAbrir(g)?.modalidad_id ?? null;
+  const estadoDeGrupo = (g: TorneoGrupo) => edicionParaAbrir(g)?.estado ?? null;
 
   // D-Eng-16: los chips salen de los torneos YA cargados, sin endpoint ni
   // llamada extra. Eso garantiza por construcción que ningún chip filtre a
@@ -133,17 +187,26 @@ export function TorneosAdminPage() {
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
   }, [grupos, disciplinaFiltro, modalidadPorId]);
 
+  // 3A-9: mismo criterio D-Eng-16 que disciplina/modalidad — solo los
+  // estados que de verdad aparecen entre los torneos cargados, en el
+  // orden en que un admin espera verlos (en curso primero).
+  const chipsEstado = useMemo(() => {
+    const presentes = new Set(grupos.map(estadoDeGrupo).filter((e): e is string => e != null));
+    return ORDEN_ESTADOS.filter((e) => presentes.has(e)).map((valor) => ({ valor, nombre: valor }));
+  }, [grupos]);
+
   const gruposVisibles = useMemo(
     () =>
       grupos.filter((g) => {
         if (disciplinaFiltro !== null && disciplinaDeGrupo(g) !== disciplinaFiltro) return false;
         if (modalidadFiltro !== null && modalidadDeGrupo(g) !== modalidadFiltro) return false;
+        if (estadoFiltro !== null && estadoDeGrupo(g) !== estadoFiltro) return false;
         return true;
       }),
-    [grupos, disciplinaFiltro, modalidadFiltro],
+    [grupos, disciplinaFiltro, modalidadFiltro, estadoFiltro],
   );
 
-  const hayFiltro = disciplinaFiltro !== null || modalidadFiltro !== null;
+  const hayFiltro = disciplinaFiltro !== null || modalidadFiltro !== null || estadoFiltro !== null;
 
   const crearTorneo = useMutation({
     mutationFn: async (body: TorneoCreatePayload) => {
@@ -158,10 +221,26 @@ export function TorneosAdminPage() {
   }
 
   function seleccionarDisciplina(id: number | null) {
-    setDisciplinaFiltro(id);
+    // Los dos cambian juntos — un sincronizarUrl con ambos a la vez, no
+    // dos llamadas a setDisciplinaFiltro/setModalidadFiltro en secuencia
+    // (cada wrapper lee el filtro DEL OTRO desde el closure de este
+    // render, todavía viejo hasta el próximo render: dos llamadas
+    // pisarían el valor recién puesto por la primera).
+    setDisciplinaFiltroState(id);
     // La modalidad elegida pertenece a la disciplina anterior: dejarla
     // puesta filtraría a vacío por construcción.
-    setModalidadFiltro(null);
+    setModalidadFiltroState(null);
+    sincronizarUrl({ disciplina: id, modalidad: null });
+  }
+
+  /** Saca los tres filtros de una — mismo motivo que seleccionarDisciplina
+   * para hacerlo en una sola llamada a sincronizarUrl en vez de encadenar
+   * setDisciplinaFiltro/setModalidadFiltro/setEstadoFiltro. */
+  function limpiarFiltros() {
+    setDisciplinaFiltroState(null);
+    setModalidadFiltroState(null);
+    setEstadoFiltroState(null);
+    sincronizarUrl({ disciplina: null, modalidad: null, estado: null });
   }
 
   /** Campos del formulario de "Torneo nuevo" (crea un TORNEO_GRUPO):
@@ -294,11 +373,27 @@ export function TorneosAdminPage() {
         // directo en "Agregar Equipo" igual que la rama de Nueva Edición.
         onSuccess: (nuevoTorneo) => {
           queryClient.invalidateQueries({ queryKey: ["torneo-grupos"] });
-          // EC-42: si la barra estaba filtrada por otra disciplina, el
-          // torneo recién creado no aparecería y el admin creería que
-          // falló. Se resetea el filtro en vez de dejarlo escondido.
-          if (disciplinaFiltro !== null && disciplinaFiltro !== disciplinaId) {
-            seleccionarDisciplina(null);
+          // EC-42: si la barra estaba filtrada por otra disciplina — o por
+          // un estado (3A-9) que no sea 'Activo', el default con el que
+          // nace todo torneo (backend/app/models/torneo.py) — el torneo
+          // recién creado no aparecería y el admin creería que falló. Se
+          // resetea el filtro en vez de dejarlo escondido. Una sola
+          // llamada a sincronizarUrl con los dos posibles resets a la vez
+          // (mismo motivo que seleccionarDisciplina/limpiarFiltros: dos
+          // llamadas en secuencia se pisarían por leer el closure viejo).
+          const debeResetearDisciplina = disciplinaFiltro !== null && disciplinaFiltro !== disciplinaId;
+          const debeResetearEstado = estadoFiltro !== null && estadoFiltro !== "Activo";
+          if (debeResetearDisciplina || debeResetearEstado) {
+            if (debeResetearDisciplina) {
+              setDisciplinaFiltroState(null);
+              setModalidadFiltroState(null);
+            }
+            if (debeResetearEstado) setEstadoFiltroState(null);
+            sincronizarUrl({
+              disciplina: debeResetearDisciplina ? null : undefined,
+              modalidad: debeResetearDisciplina ? null : undefined,
+              estado: debeResetearEstado ? null : undefined,
+            });
           }
           setModo({ tipo: "lista" });
           navigate(`/torneo-admin/torneos/${nuevoTorneo.id}/equipos`);
@@ -424,6 +519,9 @@ export function TorneosAdminPage() {
           modalidadSeleccionada={modalidadFiltro}
           onSeleccionarDisciplina={seleccionarDisciplina}
           onSeleccionarModalidad={setModalidadFiltro}
+          estados={chipsEstado}
+          estadoSeleccionado={estadoFiltro}
+          onSeleccionarEstado={setEstadoFiltro}
         />
       )}
 
@@ -437,8 +535,10 @@ export function TorneosAdminPage() {
           estado puede desincronizarse tras crear o dar de baja uno. */}
       {grupos.length > 0 && gruposVisibles.length === 0 && (
         <p className="muted">
-          Ningún torneo de {catalogo.nombreDisciplina(disciplinaFiltro)}.{" "}
-          <button type="button" className="link-button" onClick={() => seleccionarDisciplina(null)}>
+          {estadoFiltro !== null
+            ? `Ningún torneo de ${catalogo.nombreDisciplina(disciplinaFiltro)} en estado "${estadoFiltro}".`
+            : `Ningún torneo de ${catalogo.nombreDisciplina(disciplinaFiltro)}.`}{" "}
+          <button type="button" className="link-button" onClick={limpiarFiltros}>
             Ver todos
           </button>
         </p>

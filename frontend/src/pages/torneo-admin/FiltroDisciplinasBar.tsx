@@ -9,6 +9,10 @@ export interface ChipModalidad {
   id: number;
   nombre: string;
 }
+export interface ChipEstado {
+  valor: string;
+  nombre: string;
+}
 
 interface FiltroDisciplinasBarProps {
   disciplinas: ChipDisciplina[];
@@ -20,6 +24,15 @@ interface FiltroDisciplinasBarProps {
   modalidadSeleccionada: number | null;
   onSeleccionarDisciplina: (id: number | null) => void;
   onSeleccionarModalidad: (id: number | null) => void;
+  /** 3A-9 (docs/plans/cierre-backlog-todos-plan.md): estados presentes
+   * entre los torneos YA cargados (mismo criterio D-Eng-16 que
+   * disciplinas/modalidades — nunca un chip que filtre a vacío). Opcional:
+   * el componente sin esta prop se comporta exactamente igual que antes
+   * (sin fila de Estado) — no todo consumidor de esta barra tiene un
+   * concepto de "estado" que filtrar. */
+  estados?: ChipEstado[];
+  estadoSeleccionado?: string | null;
+  onSeleccionarEstado?: (valor: string | null) => void;
 }
 
 /** Barra de navegación horizontal tipo SofaScore para la Pestaña Torneos
@@ -52,10 +65,14 @@ export function FiltroDisciplinasBar(props: FiltroDisciplinasBarProps) {
     modalidadSeleccionada,
     onSeleccionarDisciplina,
     onSeleccionarModalidad,
+    estados = [],
+    estadoSeleccionado = null,
+    onSeleccionarEstado,
   } = props;
 
   const filaDisciplinas = useRef<HTMLDivElement>(null);
   const filaModalidades = useRef<HTMLDivElement>(null);
+  const filaEstados = useRef<HTMLDivElement>(null);
 
   /** Flechas ←→ mueven el foco entre los chips de la misma fila, que es lo
    * que un `role="tablist"` promete. Sin esto el `role` es una mentira
@@ -147,6 +164,46 @@ export function FiltroDisciplinasBar(props: FiltroDisciplinasBarProps) {
                 onClick={() => onSeleccionarModalidad(activo ? null : m.id)}
               >
                 {m.nombre}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 3A-9: fila de Estado, mismo criterio "2+ o no se muestra" que la
+          de Modalidad — siempre disponible (no depende de haber elegido
+          Disciplina), es un eje de filtro independiente. */}
+      {onSeleccionarEstado && estados.length > 1 && (
+        <div
+          className="filtro-disciplinas__fila filtro-disciplinas__fila--estados"
+          role="tablist"
+          aria-label="Filtrar por estado"
+          ref={filaEstados}
+          onKeyDown={(e) => moverFoco(e, filaEstados.current)}
+        >
+          <button
+            type="button"
+            role="tab"
+            className={`chip-modalidad${estadoSeleccionado === null ? " chip-modalidad--activo" : ""}`}
+            aria-pressed={estadoSeleccionado === null}
+            aria-selected={estadoSeleccionado === null}
+            onClick={() => onSeleccionarEstado(null)}
+          >
+            Todos los estados
+          </button>
+          {estados.map((e) => {
+            const activo = estadoSeleccionado === e.valor;
+            return (
+              <button
+                key={e.valor}
+                type="button"
+                role="tab"
+                className={`chip-modalidad${activo ? " chip-modalidad--activo" : ""}`}
+                aria-pressed={activo}
+                aria-selected={activo}
+                onClick={() => onSeleccionarEstado(activo ? null : e.valor)}
+              >
+                {e.nombre}
               </button>
             );
           })}
