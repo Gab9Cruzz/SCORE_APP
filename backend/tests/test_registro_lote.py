@@ -1,8 +1,21 @@
+import asyncio
+from datetime import date
+
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.models.disciplina import Disciplina
 from app.models.modalidad import Modalidad
+from app.repositories.jugador_equipo import JugadorEquipoRepository
+from app.schemas.equipo import EquipoCreate
+from app.schemas.inscripcion_torneo import InscripcionTorneoCreate
+from app.schemas.registro_lote import RegistroLoteFila
+from app.schemas.torneo import TorneoCreate
+from app.services.equipo import EquipoService
+from app.services.inscripcion_torneo import InscripcionTorneoService
+from app.services.registro_lote import RegistroLoteService
+from app.services.torneo import TorneoService
 
 # 05_seed.sql: torneo 1 = Copa Ecotec 2026 (Fútbol, disciplina_id=1).
 # inscripcion 1 = Tiburones FC (Carlos Pérez dorsal10, Luis Andrade dorsal7,
@@ -386,3 +399,133 @@ async def test_cedula_con_espacios_se_normaliza(client: AsyncClient, admin_gener
     # no colarse como jugador "nuevo" con cédula con espacio.
     assert body["validos"] == []
     assert "Ya juega en" in body["invalidos"][0]["motivo"]
+
+
+async def test_ec6_confirmar_concurrente_no_supera_el_cupo(engine: AsyncEngine):
+    """Concurrencia REAL contra la base, no simulada (3A-4 del plan de
+    cierre de backlog). El resto de este archivo comparte una única
+    conexión/transacción con savepoints vía el fixture `client`/`db_session`
+    (conftest.py) — dos tasks "concurrentes" sobre esa misma conexión no
+    detectarían nada, porque comparten sesión y por lo tanto se serializan
+    solas sin necesidad del lock. Este test abre conexiones propias
+    (`engine.connect()`), cada una con su propia transacción real, y lanza
+    dos RegistroLoteService.confirmar() de verdad en paralelo
+    (asyncio.gather) contra la MISMA inscripción de una modalidad con un
+    solo cupo (tamano_equipo=1 — mismo tamaño que usa
+    test_ec6_capacidad_de_la_modalidad, cuyo comentario explica por qué
+    este método sigue calculando tope para tamano_equipo=1 aunque
+    Individual normalmente no pase por Registro por Lote) — exactamente el
+    escenario que EC-6 describe: sin el lock, las dos transacciones pueden
+    leer "0 activos, 1 cupo libre" antes de que cualquiera haga INSERT, y
+    las dos ganan la carrera por el mismo cupo.
+
+    Como esta base no corre dentro de la transacción de test que se
+    revierte sola (a propósito — necesita conexiones independientes para
+    que la concurrencia sea real), el setup y la limpieza son manuales.
+    """
+
+    async def _sesion_real() -> tuple[AsyncSession, object]:
+        connection = await engine.connect()
+        return AsyncSession(bind=connection, expire_on_commit=False), connection
+
+    setup, setup_conn = await _sesion_real()
+    torneo_grupo_id: int | None = None
+    equipo_id: int | None = None
+    disciplina_id: int | None = None
+    inscripcion_id: int | None = None
+    try:
+        disciplina = Disciplina(nombre="Pádel Concurrencia EC6")
+        setup.add(disciplina)
+        await setup.flush()
+        modalidad = Modalidad(disciplina_id=disciplina.id, nombre="Dobles Concurrencia EC6", tamano_equipo=1)
+        setup.add(modalidad)
+        await setup.flush()
+        disciplina_id, modalidad_id = disciplina.id, modalidad.id
+
+        torneo = await TorneoService(setup).create(
+            TorneoCreate(
+                nombre="Abierto Concurrencia EC6",
+                disciplina_id=disciplina_id,
+                modalidad_id=modalidad_id,
+                torneo_grupo_nombre="Abierto Concurrencia EC6",
+                fecha_inicio=date(2026, 5, 1),
+                fecha_fin=date(2026, 5, 10),
+            )
+        )
+        equipo = await EquipoService(setup).create(
+            EquipoCreate(nombre="Pareja Concurrencia EC6", disciplina_id=disciplina_id, modalidad_id=modalidad_id)
+        )
+        equipo_id = equipo.id
+        inscripcion = await InscripcionTorneoService(setup).create(
+            InscripcionTorneoCreate(torneo_id=torneo.id, equipo_id=equipo.id)
+        )
+        inscripcion_id = inscripcion.id
+        torneo_grupo_id = torneo.torneo_grupo_id
+        await setup.commit()
+
+        async def _confirmar(cedula: str, nombre: str) -> tuple[list, list]:
+            connection = await engine.connect()
+            session = AsyncSession(bind=connection, expire_on_commit=False)
+            try:
+                fila = RegistroLoteFila(
+                    cedula=cedula, nombre=nombre, correo_electronico=f"{cedula}@example.com", dorsal=None
+                )
+                return await RegistroLoteService(session).confirmar(inscripcion_id, date(2026, 5, 1), [fila])
+            finally:
+                await session.close()
+                await connection.close()
+
+        (insertados_a, rechazados_a), (insertados_b, rechazados_b) = await asyncio.gather(
+            _confirmar("0977100001", "Concurrente A"),
+            _confirmar("0977100002", "Concurrente B"),
+        )
+
+        total_insertados = len(insertados_a) + len(insertados_b)
+        total_rechazados = len(rechazados_a) + len(rechazados_b)
+        assert total_insertados == 1, f"el lock de EC-6 debía dejar pasar exactamente 1 alta, pasaron {total_insertados}"
+        assert total_rechazados == 1
+        # El rechazo puede venir del re-chequeo en _validar_lote (si la
+        # segunda transacción esperó el lock ahí, antes de este punto) o
+        # del re-chequeo dentro de confirmar() (si llegó a pasar la
+        # primera validación pero perdió la carrera real del INSERT) — los
+        # dos casos son un cierre correcto de EC-6, el mensaje difiere
+        # solo en cuál de los dos lo atrapó.
+        motivo = (rechazados_a + rechazados_b)[0].motivo.lower()
+        assert "máximo 1 jugadores" in motivo or "cupo" in motivo
+
+        # La verdad de la base, no solo lo que devolvió el service.
+        verificacion, verificacion_conn = await _sesion_real()
+        try:
+            total_en_roster = await JugadorEquipoRepository(verificacion).contar_activos_en_inscripcion(
+                inscripcion_id
+            )
+            assert total_en_roster == 1  # cupo=1: nunca 2, aunque las dos hayan corrido a la vez
+        finally:
+            await verificacion.close()
+            await verificacion_conn.close()
+    finally:
+        # DELETE FROM torneo_grupo / disciplina cascada TORNEO, FASE,
+        # INSCRIPCIONES_TORNEO, JUGADOR_EQUIPO, CONFIGURACION_TIEMPO_TORNEO
+        # y MODALIDAD respectivamente (ver 02_constraints.sql) — solo
+        # EQUIPOS y JUGADORES quedan fuera de esas cascadas y se borran
+        # aparte.
+        limpieza, limpieza_conn = await _sesion_real()
+        try:
+            if torneo_grupo_id is not None:
+                await limpieza.execute(text("DELETE FROM torneo_grupo WHERE id = :id"), {"id": torneo_grupo_id})
+            if equipo_id is not None:
+                await limpieza.execute(text("DELETE FROM equipos WHERE id = :id"), {"id": equipo_id})
+            # JUGADORES antes que DISCIPLINA: fk_perfil_disciplina_jugador
+            # SÍ cascada (borra el perfil de los jugadores creados por esta
+            # carrera), pero fk_perfil_disciplina_disciplina NO — si
+            # DISCIPLINA se borrara primero con el perfil todavía
+            # apuntándole, Postgres rechaza el DELETE con FK violation.
+            await limpieza.execute(text("DELETE FROM jugadores WHERE cedula LIKE '0977100%'"))
+            if disciplina_id is not None:
+                await limpieza.execute(text("DELETE FROM disciplina WHERE id = :id"), {"id": disciplina_id})
+            await limpieza.commit()
+        finally:
+            await limpieza.close()
+            await limpieza_conn.close()
+        await setup.close()
+        await setup_conn.close()

@@ -58,6 +58,16 @@ class RegistroLoteService:
         if torneo.modalidad_id is not None:
             modalidad = await self.modalidad_repo.get_or_404(torneo.modalidad_id)
             if modalidad.tamano_equipo <= 2:
+                # EC-6: serializa la LECTURA del conteo contra cualquier otro
+                # /validar o /confirmar concurrente sobre la MISMA
+                # inscripción — sin este lock, dos requests pueden contar el
+                # mismo N de activos y ambos "ver" el último cupo libre (ver
+                # InscripcionTorneoRepository.lock_cupo_inscripcion). No se
+                # toma para modalidades de equipo grande (tamano_equipo > 2,
+                # EC-A): ahí este método no calcula tope, así que no hay nada
+                # que proteger — ni falta tomar un advisory lock en el camino
+                # más frecuente del sistema.
+                await self.inscripcion_repo.lock_cupo_inscripcion(inscripcion_torneo_id)
                 ya_activos = await self.jugador_equipo_repo.contar_activos_en_inscripcion(inscripcion_torneo_id)
                 cupo_restante = modalidad.tamano_equipo - ya_activos
 
@@ -216,6 +226,20 @@ class RegistroLoteService:
         inscripcion = await self.inscripcion_repo.get_or_404(inscripcion_torneo_id)
         torneo = await self.torneo_repo.get_or_404(inscripcion.torneo_id)
 
+        # EC-6: el `cupo_restante` que ya calculó _validar_lote arriba (bajo
+        # el lock de esta misma llamada) deja de valer acá — cada
+        # `self.session.commit()` del loop de abajo cierra la transacción y
+        # con ella libera pg_advisory_xact_lock, así que el lock tomado en
+        # _validar_lote ya no protege nada para la segunda fila en adelante.
+        # Se vuelve a tomar y a re-leer el conteo real fila por fila, dentro
+        # de la MISMA transacción que hace el INSERT (mismo criterio que
+        # lock_exclusividad_torneo un poco más abajo).
+        modalidad_con_cupo = None
+        if torneo.modalidad_id is not None:
+            modalidad_candidata = await self.modalidad_repo.get_or_404(torneo.modalidad_id)
+            if modalidad_candidata.tamano_equipo <= 2:
+                modalidad_con_cupo = modalidad_candidata
+
         insertados: list[JugadorEquipo] = []
         rechazados: list[FilaInvalida] = list(invalidos)
 
@@ -249,6 +273,29 @@ class RegistroLoteService:
                 # mismo perfil en el mismo torneo — fn_validar_exclusividad_torneo
                 # por sí sola no alcanza (ver docstring del método).
                 await self.jugador_equipo_repo.lock_exclusividad_torneo(perfil.id, torneo.id)
+
+                if modalidad_con_cupo is not None:
+                    # EC-6, re-chequeo dentro del lock (ver comentario arriba
+                    # de este loop) — otro /confirmar pudo haber tomado el
+                    # último cupo entre que _validar_lote contó y acá.
+                    await self.inscripcion_repo.lock_cupo_inscripcion(inscripcion_torneo_id)
+                    ya_activos = await self.jugador_equipo_repo.contar_activos_en_inscripcion(
+                        inscripcion_torneo_id
+                    )
+                    if ya_activos >= modalidad_con_cupo.tamano_equipo:
+                        await self.session.rollback()
+                        rechazados.append(
+                            FilaInvalida(
+                                fila_index=fila.fila_index,
+                                cedula=fila.cedula,
+                                nombre=fila.nombre,
+                                motivo=(
+                                    f"Esta modalidad admite máximo {modalidad_con_cupo.tamano_equipo} "
+                                    "jugadores por equipo — otro registro tomó el cupo justo antes."
+                                ),
+                            )
+                        )
+                        continue
 
                 vinculo = JugadorEquipo(
                     jugador_perfil_id=perfil.id,

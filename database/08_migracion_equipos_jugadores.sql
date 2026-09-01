@@ -276,6 +276,30 @@ ALTER TABLE JUGADOR_EQUIPO ADD COLUMN IF NOT EXISTS Inscripcion_Torneo_ID INT;
 -- visible dentro de un JOIN anidado en la cláusula FROM, solo en el
 -- WHERE de nivel superior — por eso jugador_id_orig viaja en la CTE en
 -- vez de resolverse contra je ahí adentro.)
+-- 3A-11 (docs/plans/cierre-backlog-todos-plan.md): antes, la única pista
+-- de una fila ambigua (más de una INSCRIPCIONES_TORNEO candidata) era el
+-- RAISE WARNING de abajo — y dos sentencias más adelante el
+-- `DROP COLUMN Jugador_ID/Equipo_ID` (Parte E, más abajo) se llevaba el
+-- único dato (los IDs originales) que permitiría a alguien revisar a mano
+-- cuál torneo "quiso decir" el dato viejo. Esta tabla vuelca esas filas
+-- ANTES del DROP COLUMN — no cambia el comportamiento (sigue sin abortar,
+-- el default "torneo más antiguo" sigue aplicándose), solo deja de perder
+-- la evidencia. Es forense, no operativa: ninguna ruta de la app la lee.
+CREATE TABLE IF NOT EXISTS migracion_08_jugador_equipo_ambiguos (
+    Jugador_Equipo_ID INT PRIMARY KEY,
+    Jugador_ID_Original INT NOT NULL,
+    Equipo_ID_Original INT NOT NULL,
+    Inscripcion_Torneo_ID_Elegida INT NOT NULL,
+    Cantidad_Candidatas INT NOT NULL,
+    Creado_En TIMESTAMP NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE migracion_08_jugador_equipo_ambiguos IS
+    'Filas de JUGADOR_EQUIPO donde 08_migracion_equipos_jugadores.sql (Parte E) '
+    'encontró más de una INSCRIPCIONES_TORNEO candidata y tomó el torneo más '
+    'antiguo por default — revisar manualmente si corresponde reasignar a otro '
+    'torneo. Único rastro de Jugador_ID/Equipo_ID original para esas filas, '
+    'que el resto de esta migración dropea.';
+
 DO $$
 DECLARE
     v_ambiguos INT;
@@ -312,21 +336,33 @@ BEGIN
         $sql$;
 
         -- Filas donde había más de una inscripción candidata (se tomó la
-        -- más antigua por default) — advertencia, no aborta.
+        -- más antigua por default) — advertencia, no aborta, pero ahora
+        -- vuelca la evidencia a migracion_08_jugador_equipo_ambiguos ANTES
+        -- del DROP COLUMN de más abajo (ver comentario de la tabla).
+        -- ON CONFLICT DO NOTHING: mismo criterio de re-ejecutable que el
+        -- resto del script — una segunda corrida no duplica filas.
         EXECUTE $sql$
-            SELECT COUNT(*) FROM (
-                SELECT je.ID
-                  FROM JUGADOR_EQUIPO je
-                  JOIN INSCRIPCIONES_TORNEO it ON it.Equipo_ID = je.EQUIPO_ID
-                  JOIN TORNEO t ON t.ID = it.Torneo_ID
-                 WHERE (t.Fecha_Fin IS NULL OR t.Fecha_Fin >= je.Fecha_Inicio)
-                 GROUP BY je.ID
-                HAVING COUNT(*) > 1
-            ) ambiguos
-        $sql$ INTO v_ambiguos;
+            INSERT INTO migracion_08_jugador_equipo_ambiguos
+                (Jugador_Equipo_ID, Jugador_ID_Original, Equipo_ID_Original,
+                 Inscripcion_Torneo_ID_Elegida, Cantidad_Candidatas)
+            SELECT je.ID, je.JUGADOR_ID, je.EQUIPO_ID, je.Inscripcion_Torneo_ID, amb.cantidad_candidatas
+              FROM JUGADOR_EQUIPO je
+              JOIN (
+                  SELECT je2.ID AS jugador_equipo_id, COUNT(*) AS cantidad_candidatas
+                    FROM JUGADOR_EQUIPO je2
+                    JOIN INSCRIPCIONES_TORNEO it ON it.Equipo_ID = je2.EQUIPO_ID
+                    JOIN TORNEO t ON t.ID = it.Torneo_ID
+                   WHERE (t.Fecha_Fin IS NULL OR t.Fecha_Fin >= je2.Fecha_Inicio)
+                   GROUP BY je2.ID
+                  HAVING COUNT(*) > 1
+              ) amb ON amb.jugador_equipo_id = je.ID
+             ON CONFLICT (Jugador_Equipo_ID) DO NOTHING
+        $sql$;
+
+        SELECT COUNT(*) INTO v_ambiguos FROM migracion_08_jugador_equipo_ambiguos;
 
         IF v_ambiguos > 0 THEN
-            RAISE WARNING '% fila(s) de JUGADOR_EQUIPO tenían más de una INSCRIPCIONES_TORNEO candidata (equipo en varios torneos solapados) — se tomó el torneo más antiguo por default, revisar manualmente.', v_ambiguos;
+            RAISE WARNING '% fila(s) de JUGADOR_EQUIPO tenían más de una INSCRIPCIONES_TORNEO candidata (equipo en varios torneos solapados) — se tomó el torneo más antiguo por default, ver migracion_08_jugador_equipo_ambiguos para revisar manualmente.', v_ambiguos;
         END IF;
     END IF;
 END $$;

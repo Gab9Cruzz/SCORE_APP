@@ -1,11 +1,35 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.exceptions.errors import DomainRuleError
 from app.models.evento_partido import EventoPartido
+from app.models.partido import Partido
 from app.models.usuario import Usuario
 from app.repositories.evento_partido import EventoPartidoRepository
 from app.repositories.partido import PartidoRepository
 from app.schemas.evento_partido import EventoPartidoCreate, EventoPartidoUpdate
 from app.services.permisos import verificar_arbitro_asignado
+
+
+def _verificar_partido_en_curso(partido: Partido) -> None:
+    """3A-8 (docs/plans/cierre-backlog-todos-plan.md), hallazgo de la
+    revisión cruzada de roles-3-modulos-plan.md (decisión D6, aceptada como
+    riesgo en su momento): la única protección contra cargar un evento en
+    un partido que no arrancó vivía en el FILTRO de la lista de
+    ControlDeMesaPage (`p.estado === "Programado" || "En curso"`, y ahí
+    "Empezar Partido" siempre corre antes) — pero `MesaPanel` también se
+    embebe directo en `MisPartidos.tsx` (Árbitro), un segundo camino de
+    entrada que no pasa por ese filtro y podía cargar un evento en un
+    partido todavía 'Programado' (o ya 'Cancelado').
+
+    Solo 'En curso' habilita carga NUEVA sin restricciones (EC-C): un
+    'Finalizado' sigue permitiendo CORREGIR minuto/anular un evento ya
+    cargado a propósito (EC-15, ver EventoPartidoService.corregir_minuto),
+    así que este guard es exclusivo de alta de evento nuevo — no se
+    reusa en corregir_minuto/anular."""
+    if partido.estado != "En curso":
+        raise DomainRuleError(
+            f"No se pueden cargar eventos: el partido está '{partido.estado}', no 'En curso'."
+        )
 
 
 class EventoPartidoService:
@@ -37,6 +61,7 @@ class EventoPartidoService:
         # reusar acá — es una consulta nueva, distinta del insert que sigue.
         partido = await self.partido_repo.get_or_404(data.partidos_id)
         verificar_arbitro_asignado(partido, usuario_actual)
+        _verificar_partido_en_curso(partido)
         return await self.repo.create(**data.model_dump())
 
     async def corregir_minuto(self, id_: int, minuto: int, usuario_actual: Usuario) -> EventoPartido:

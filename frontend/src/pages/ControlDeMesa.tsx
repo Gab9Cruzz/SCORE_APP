@@ -364,21 +364,40 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
         nombreVisitante={nombreVisitante}
       />
 
-      <CargaEvento
-        partidoId={partidoId}
-        equipoLocalId={partido.equipos_id_local}
-        equipoVisitanteId={partido.equipos_id_visitante}
-        nombreLocal={nombreLocal}
-        nombreVisitante={nombreVisitante}
-        plantillaLocal={plantillaLocalQuery.data ?? []}
-        plantillaVisitante={plantillaVisitanteQuery.data ?? []}
-        eventosRegistrados={eventosRegistrados}
-        eventoIdPorNombre={eventoIdPorNombre}
-        eventoNombrePorId={eventoNombrePorId}
-        onSubmit={(body) => mutation.mutate(body)}
-        submitting={mutation.isPending}
-        submitError={mutation.isError ? apiErrorMessage(mutation.error) : null}
-      />
+      {/* 3A-8 (docs/plans/cierre-backlog-todos-plan.md, EC-C): antes, la
+          única protección contra cargar un evento en un partido que no
+          arrancó vivía en el filtro de la lista de ControlDeMesaPage — acá
+          en MesaPanel, embebido también en MisPartidos.tsx (Árbitro), no
+          había nada. El backend ya rechaza el POST (EventoPartidoService),
+          esto es la versión visible: mismo criterio que el guard del
+          service — solo 'En curso' habilita carga nueva. 'Finalizado'
+          sigue mostrando la timeline con corrección de minuto habilitada
+          más abajo (EC-15), no se toca acá. */}
+      {partido.estado === "En curso" ? (
+        <CargaEvento
+          partidoId={partidoId}
+          equipoLocalId={partido.equipos_id_local}
+          equipoVisitanteId={partido.equipos_id_visitante}
+          nombreLocal={nombreLocal}
+          nombreVisitante={nombreVisitante}
+          plantillaLocal={plantillaLocalQuery.data ?? []}
+          plantillaVisitante={plantillaVisitanteQuery.data ?? []}
+          eventosRegistrados={eventosRegistrados}
+          eventoIdPorNombre={eventoIdPorNombre}
+          eventoNombrePorId={eventoNombrePorId}
+          onSubmit={(body) => mutation.mutate(body)}
+          submitting={mutation.isPending}
+          submitError={mutation.isError ? apiErrorMessage(mutation.error) : null}
+        />
+      ) : (
+        <section className="card">
+          <p className="muted">
+            {partido.estado === "Programado"
+              ? "El partido todavía no arrancó — usá \"Empezar Partido\" antes de cargar eventos."
+              : `No se pueden cargar eventos nuevos: el partido está "${partido.estado}".`}
+          </p>
+        </section>
+      )}
 
       <section className="card">
         <h2>Eventos cargados</h2>

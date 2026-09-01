@@ -393,6 +393,13 @@ async def test_finalizar_corrido_sin_ganador_es_rechazado(
 
 
 async def test_patch_eventos_partido_corrige_minuto(client: AsyncClient, arbitro_headers: dict[str, str]):
+    # 3A-8: registrar el evento exige el partido 'En curso' — "Empezar
+    # Partido" primero, mismo paso que el flujo real (botón del dashboard).
+    resp = await client.post(
+        "/api/v1/partidos/3/hitos", json={"tipo_hito": "Inicio_Partido"}, headers=arbitro_headers
+    )
+    assert resp.status_code == 201, resp.text
+
     resp = await client.post(
         "/api/v1/eventos-partido",
         json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 23},
@@ -411,6 +418,11 @@ async def test_patch_eventos_partido_corrige_minuto(client: AsyncClient, arbitro
 async def test_patch_eventos_partido_arbitro_no_asignado_rechazado(
     client: AsyncClient, arbitro_headers: dict[str, str], arbitro_no_asignado_headers: dict[str, str]
 ):
+    resp = await client.post(
+        "/api/v1/partidos/3/hitos", json={"tipo_hito": "Inicio_Partido"}, headers=arbitro_headers
+    )
+    assert resp.status_code == 201, resp.text
+
     resp = await client.post(
         "/api/v1/eventos-partido",
         json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 23},

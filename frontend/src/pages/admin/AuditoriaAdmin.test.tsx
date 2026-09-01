@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { components } from "../../api/schema";
 import { server } from "../../test/msw-server";
 import { createWrapper } from "../../test/test-utils";
@@ -55,9 +55,13 @@ function handlerAuditoria(filas: Auditoria[]) {
     const q = new URL(request.url).searchParams;
     const tabla = q.get("tabla");
     const accion = q.get("accion");
+    const registroId = q.get("registro_id");
     return HttpResponse.json(
       filas.filter(
-        (f) => (tabla === null || f.tabla === tabla) && (accion === null || f.accion === accion),
+        (f) =>
+          (tabla === null || f.tabla === tabla) &&
+          (accion === null || f.accion === accion) &&
+          (registroId === null || f.registro_id === Number(registroId)),
       ),
     );
   });
@@ -118,12 +122,25 @@ describe("AuditoriaAdminPage", () => {
     expect(screen.getByText("equipos #5")).toBeInTheDocument();
   });
 
-  it("busca por tabla contra el servidor", async () => {
+  it("filtra por tabla (autocomplete de nombres reales) contra el servidor", async () => {
     montar([ALTA_TORNEO, MODIFICACION_EQUIPO]);
     const user = userEvent.setup();
 
     await screen.findByText("torneo #42");
-    await user.type(screen.getByLabelText("Buscar entidad"), "equipos");
+    // 3A-1: ya no es un <input> de texto libre, es un <select> con las
+    // __tablename__ reales — value=label, "equipos" matchea tal cual.
+    await user.selectOptions(screen.getByLabelText("Tabla"), "equipos");
+
+    await waitFor(() => expect(screen.queryByText("torneo #42")).not.toBeInTheDocument());
+    expect(screen.getByText("equipos #5")).toBeInTheDocument();
+  });
+
+  it("filtra por registro_id contra el servidor (3A-2)", async () => {
+    montar([ALTA_TORNEO, MODIFICACION_EQUIPO]);
+    const user = userEvent.setup();
+
+    await screen.findByText("torneo #42");
+    await user.type(screen.getByLabelText("ID de registro"), "5");
 
     await waitFor(() => expect(screen.queryByText("torneo #42")).not.toBeInTheDocument());
     expect(screen.getByText("equipos #5")).toBeInTheDocument();
@@ -143,7 +160,36 @@ describe("AuditoriaAdminPage", () => {
 
     expect(await screen.findByText("Todavía no hay cambios registrados.")).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText("Buscar entidad"), "torneo");
+    await user.selectOptions(screen.getByLabelText("Tabla"), "torneo");
     expect(await screen.findByText(/Ningún cambio coincide con estos filtros/)).toBeInTheDocument();
+  });
+
+  it("el botón de exportar CSV está deshabilitado sin filas cargadas", async () => {
+    montar([]);
+
+    await screen.findByText("Todavía no hay cambios registrados.");
+    expect(screen.getByRole("button", { name: /Descargar CSV/ })).toBeDisabled();
+  });
+
+  it("exporta un CSV con las filas visibles al hacer clic (3A-3)", async () => {
+    montar([ALTA_TORNEO, MODIFICACION_EQUIPO]);
+    const user = userEvent.setup();
+    await screen.findByText("torneo #42");
+
+    const boton = screen.getByRole("button", { name: /Descargar CSV/ });
+    expect(boton).not.toBeDisabled();
+
+    // jsdom no implementa la descarga real — createObjectURL/click no
+    // deben tirar, que es lo único que este entorno puede verificar sin
+    // un navegador real.
+    const creado = vi.fn(() => "blob:mock");
+    const revocado = vi.fn();
+    URL.createObjectURL = creado;
+    URL.revokeObjectURL = revocado;
+
+    await user.click(boton);
+
+    expect(creado).toHaveBeenCalledTimes(1);
+    expect(revocado).toHaveBeenCalledTimes(1);
   });
 });
