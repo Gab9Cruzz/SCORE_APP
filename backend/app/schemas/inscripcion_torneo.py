@@ -6,6 +6,28 @@ from pydantic import BaseModel, ConfigDict, model_validator
 EstadoInscripcion = Literal["Inscrito", "Cancelado", "Confirmado"]
 
 
+class ConflictoPlantillaBase(BaseModel):
+    """Un candidato de la Plantilla Base que NO entró al roster real por
+    conflicto de exclusividad de torneo (Requerimiento 3 del plan,
+    Flujo 3) — el mensaje es el texto literal pedido, se repite una vez
+    por jugador excluido."""
+
+    jugador_perfil_id: int
+    jugador_nombre: str
+    mensaje: str
+
+
+class PlantillaBaseCopiaResumen(BaseModel):
+    """Resultado de copiar la Plantilla Base al roster real al inscribir
+    un equipo — ver InscripcionTorneoService.copiar_plantilla_base_al_roster."""
+
+    insertados: int
+    # Insertados PERO sin dorsal porque el sugerido ya estaba tomado en
+    # este roster (EC-6) — el admin lo completa a mano después.
+    sin_dorsal: int
+    conflictos: list[ConflictoPlantillaBase] = []
+
+
 class InscripcionTorneoCreate(BaseModel):
     """Exactamente uno de los dos caminos (ediciones-catalogo-disciplinas-plan.md,
     Decisión B1):
@@ -61,3 +83,8 @@ class InscripcionTorneoOut(BaseModel):
     fecha: datetime
     fecha_registro: datetime
     fecha_modificacion: datetime
+    # Solo presente cuando la creación fue por equipo Y ese equipo tenía
+    # Plantilla Base cargada (gestion-avanzada-equipos-control-mesa-plan.md,
+    # Requerimiento 3) — None en cualquier otro camino (individual, o
+    # equipo sin plantilla base).
+    plantilla_base: PlantillaBaseCopiaResumen | None = None

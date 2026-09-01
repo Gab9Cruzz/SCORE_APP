@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { api, apiErrorMessage } from "../api/client";
 import { useAuth } from "../auth/useAuth";
+import { Cronometro } from "./Cronometro";
 
 const LIVE_POLL_MS = 5000;
 
@@ -17,6 +18,7 @@ const TIPO_ICONO: Record<TipoEvento, string> = {
 
 export function ControlDeMesaPage() {
   const [partidoId, setPartidoId] = useState<number | null>(null);
+  const queryClient = useQueryClient();
 
   const partidosQuery = useQuery({
     queryKey: ["partidos-mesa"],
@@ -24,6 +26,52 @@ export function ControlDeMesaPage() {
       const { data, error } = await api.GET("/api/v1/partidos", { params: { query: { limit: 100 } } });
       if (error) throw error;
       return data;
+    },
+  });
+
+  const equiposQuery = useQuery({
+    queryKey: ["equipos-catalogo"],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/equipos", { params: { query: { limit: 200 } } });
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const nombreEquipo = useMemo(
+    () => new Map((equiposQuery.data ?? []).map((e) => [e.id, e.nombre])),
+    [equiposQuery.data],
+  );
+
+  const editarFecha = useMutation({
+    mutationFn: async ({ id, fecha }: { id: number; fecha: string }) => {
+      const { data, error } = await api.PATCH("/api/v1/partidos/{partido_id}", {
+        params: { path: { partido_id: id } },
+        body: { fecha_partido: fecha },
+      } as never);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["partidos-mesa"] }),
+  });
+
+  // "Empezar Partido" dispara el Hito Inicio_Partido (no el PATCH directo
+  // de estado) — así el partido siempre queda con un Inicio_Partido
+  // auditable con hora real, necesario para vw_duracion_partido (Flujo 4
+  // del plan). El botón del dashboard y el Cronómetro convergen al mismo
+  // endpoint.
+  const empezarPartido = useMutation({
+    mutationFn: async (id: number) => {
+      const { data, error } = await api.POST("/api/v1/partidos/{partido_id}/hitos", {
+        params: { path: { partido_id: id } },
+        body: { tipo_hito: "Inicio_Partido" },
+      } as never);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["partidos-mesa"] });
+      setPartidoId(id);
     },
   });
 
@@ -43,17 +91,86 @@ export function ControlDeMesaPage() {
       {!partidosQuery.isLoading && seleccionables.length === 0 && (
         <p>No hay partidos programados ni en curso ahora mismo.</p>
       )}
-      <ul className="partidos-list partidos-list--tappable">
+      {empezarPartido.isError && <p className="error-text">{apiErrorMessage(empezarPartido.error)}</p>}
+      <ul className="partidos-list">
         {seleccionables.map((p) => (
-          <li key={p.id}>
-            <button type="button" onClick={() => setPartidoId(p.id)}>
-              <span className="badge">{p.estado}</span>
-              Partido #{p.id} · {new Date(p.fecha_partido).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}
-            </button>
+          <li key={p.id} className="partido-mesa-fila">
+            <span className="badge">{p.estado}</span>
+            <span className="partido-mesa-fila__equipos">
+              {p.equipos_id_local != null ? nombreEquipo.get(p.equipos_id_local) ?? `#${p.equipos_id_local}` : "?"}
+              {" vs "}
+              {p.equipos_id_visitante != null ? nombreEquipo.get(p.equipos_id_visitante) ?? `#${p.equipos_id_visitante}` : "?"}
+            </span>
+            <EditorFechaPartido
+              partidoId={p.id}
+              fechaActual={p.fecha_partido}
+              onGuardar={(fecha) => editarFecha.mutate({ id: p.id, fecha })}
+              guardando={editarFecha.isPending}
+            />
+            {/* "Empezar Partido" solo si Programado; una vez en curso el
+                botón cambia a "Ir al partido en vivo" — mismo lugar,
+                mismo peso visual, para no reflowar la fila (Flujo 4). */}
+            {p.estado === "Programado" ? (
+              <button type="button" disabled={empezarPartido.isPending} onClick={() => empezarPartido.mutate(p.id)}>
+                {empezarPartido.isPending ? "Iniciando..." : "▶ Empezar Partido"}
+              </button>
+            ) : (
+              <button type="button" onClick={() => setPartidoId(p.id)}>
+                Ir al partido en vivo
+              </button>
+            )}
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+/** Campo de fecha/hora inline (Flujo 4 del plan: "desde esta misma
+ * vista", sin navegar a otra pantalla). Clic en la fecha abre un
+ * `datetime-local`, PATCH al confirmar, refetch inmediato — si falla, el
+ * campo vuelve al valor anterior + mensaje inline (no pierde el resto de
+ * la fila). */
+function EditorFechaPartido(props: {
+  partidoId: number;
+  fechaActual: string;
+  onGuardar: (fechaIso: string) => void;
+  guardando: boolean;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState(() => props.fechaActual.slice(0, 16));
+
+  if (!editando) {
+    return (
+      <button type="button" className="link-button" onClick={() => setEditando(true)}>
+        📅 {new Date(props.fechaActual).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })} ▾
+      </button>
+    );
+  }
+
+  return (
+    <span className="editor-fecha-partido">
+      <input
+        type="datetime-local"
+        aria-label="Fecha y hora del partido"
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        autoFocus
+      />
+      <button
+        type="button"
+        disabled={props.guardando}
+        onClick={() => {
+          props.onGuardar(valor);
+          setEditando(false);
+        }}
+      >
+        ✓
+      </button>
+      <button type="button" className="link-button" onClick={() => setEditando(false)}>
+        ✕
+      </button>
+    </span>
   );
 }
 
@@ -182,6 +299,23 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
     },
   });
 
+  // Corrección de minuto de un evento ya cargado (gestion-avanzada-
+  // equipos-control-mesa-plan.md, Entregable 3 — "cargué un gol en el
+  // minuto 23 pero fue en el 32"). Caso DISTINTO de corregir un Hito de
+  // tiempo (eso vive en Cronometro.tsx): esto es la timeline de eventos
+  // que ya existía en este panel.
+  const corregirMinutoEvento = useMutation({
+    mutationFn: async ({ id, minuto }: { id: number; minuto: number }) => {
+      const { data, error } = await api.PATCH("/api/v1/eventos-partido/{evento_partido_id}", {
+        params: { path: { evento_partido_id: id } },
+        body: { minuto },
+      } as never);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["eventos-partido", partidoId] }),
+  });
+
   if (partidoQuery.isLoading) return <div className="page"><p>Cargando partido...</p></div>;
   if (partidoQuery.isError || !partidoQuery.data) {
     return (
@@ -222,6 +356,14 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
         <span className="muted">operando como {session?.username} ({session?.rol})</span>
       </div>
 
+      <Cronometro
+        partidoId={partidoId}
+        equipoLocalId={partido.equipos_id_local}
+        equipoVisitanteId={partido.equipos_id_visitante}
+        nombreLocal={nombreLocal}
+        nombreVisitante={nombreVisitante}
+      />
+
       <CargaEvento
         partidoId={partidoId}
         equipoLocalId={partido.equipos_id_local}
@@ -241,19 +383,80 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
       <section className="card">
         <h2>Eventos cargados</h2>
         {eventosRegistrados.length === 0 && <p>Todavía no hay eventos.</p>}
+        {corregirMinutoEvento.isError && <p className="error-text">{apiErrorMessage(corregirMinutoEvento.error)}</p>}
         {eventosRegistrados.length > 0 && (
           <ul className="eventos-timeline">
             {[...eventosRegistrados].sort((a, b) => b.minuto - a.minuto).map((e) => (
-              <li key={e.id}>
-                <span className="eventos-timeline__minuto">{e.minuto}'</span>
-                <span>{TIPO_ICONO[eventoNombrePorId.get(e.eventos_id) as TipoEvento] ?? eventoNombrePorId.get(e.eventos_id)}</span>
-                <span>{[...plantillaLocalQuery.data ?? [], ...plantillaVisitanteQuery.data ?? []].find((j) => j.jugador_id === e.jugador_id)?.jugador ?? `#${e.jugador_id}`}</span>
-              </li>
+              <EventoTimelineFila
+                key={e.id}
+                evento={e}
+                tipoIcono={TIPO_ICONO[eventoNombrePorId.get(e.eventos_id) as TipoEvento] ?? eventoNombrePorId.get(e.eventos_id) ?? ""}
+                jugadorNombre={[...plantillaLocalQuery.data ?? [], ...plantillaVisitanteQuery.data ?? []].find((j) => j.jugador_id === e.jugador_id)?.jugador ?? `#${e.jugador_id}`}
+                onCorregir={(minuto) => corregirMinutoEvento.mutate({ id: e.id, minuto })}
+                corrigiendo={corregirMinutoEvento.isPending}
+              />
             ))}
           </ul>
         )}
       </section>
     </div>
+  );
+}
+
+/** Fila de la timeline de eventos con corrección de minuto inline —
+ * mismo patrón de ícono de lápiz que Cronometro.tsx usa para sus Hitos,
+ * pero es un control DISTINTO (PATCH /eventos-partido/{id}, no
+ * /partidos/{id}/hitos/{id}): son dos problemas distintos según el plan
+ * ("cargué un gol en el minuto 23 pero fue en el 32" vs. "presioné Fin
+ * del 1er Tiempo tarde"). */
+function EventoTimelineFila(props: {
+  evento: EventoPartidoRow;
+  tipoIcono: string;
+  jugadorNombre: string;
+  onCorregir: (minuto: number) => void;
+  corrigiendo: boolean;
+}) {
+  const { evento, tipoIcono, jugadorNombre, onCorregir, corrigiendo } = props;
+  const [editando, setEditando] = useState(false);
+  const [minuto, setMinuto] = useState(String(evento.minuto));
+
+  return (
+    <li>
+      {editando ? (
+        <>
+          <input
+            type="number"
+            aria-label="Corregir minuto del evento"
+            value={minuto}
+            onChange={(e) => setMinuto(e.target.value)}
+            style={{ width: "3.5rem" }}
+            autoFocus
+          />
+          <button
+            type="button"
+            disabled={corrigiendo}
+            onClick={() => {
+              if (minuto !== "") onCorregir(Number(minuto));
+              setEditando(false);
+            }}
+          >
+            Guardar
+          </button>
+          <button type="button" className="link-button" onClick={() => setEditando(false)}>
+            Cancelar
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="eventos-timeline__minuto">{evento.minuto}'</span>
+          <span>{tipoIcono}</span>
+          <span>{jugadorNombre}</span>
+          <button type="button" className="link-button" aria-label="Corregir minuto" onClick={() => setEditando(true)}>
+            ✏️
+          </button>
+        </>
+      )}
+    </li>
   );
 }
 
@@ -272,6 +475,7 @@ interface EventoPartidoRow {
   equipo_id: number;
   eventos_id: number;
   estado: string;
+  minuto: number;
 }
 
 function CargaEvento(props: {

@@ -386,6 +386,66 @@ export interface paths {
         patch: operations["actualizar_equipo_api_v1_equipos__equipo_id__patch"];
         trace?: never;
     };
+    "/api/v1/equipos/{equipo_id}/plantilla-base": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Plantilla Base */
+        get: operations["listar_plantilla_base_api_v1_equipos__equipo_id__plantilla_base_get"];
+        put?: never;
+        /** Agregar A Plantilla Base */
+        post: operations["agregar_a_plantilla_base_api_v1_equipos__equipo_id__plantilla_base_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/equipos/{equipo_id}/plantilla-base/verificar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verificar Multimilitancia
+         * @description Chequeo de multimilitancia (Flujo 2 del plan) — solo lectura, nunca
+         *     bloquea; la UI decide si muestra el modal de advertencia antes de
+         *     confirmar el POST de abajo.
+         */
+        get: operations["verificar_multimilitancia_api_v1_equipos__equipo_id__plantilla_base_verificar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/equipos/{equipo_id}/plantilla-base/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Quitar De Plantilla Base
+         * @description Baja lógica (EC-3 del plan) — no toca el roster real de ningún torneo.
+         */
+        delete: operations["quitar_de_plantilla_base_api_v1_equipos__equipo_id__plantilla_base__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jugadores": {
         parameters: {
             query?: never;
@@ -584,6 +644,98 @@ export interface paths {
          *     en PartidoService.update(), no acá (D5).
          */
         patch: operations["actualizar_partido_api_v1_partidos__partido_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/partidos/{partido_id}/duracion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Duracion Partido
+         * @description Público, sin auth (mismo criterio que el resto de /partidos y
+         *     /estadisticas — los resultados ya son públicos). Expone
+         *     vw_duracion_partido; todos los campos None significa "sin dato
+         *     todavía" (partido sin Fin_Partido), no un error.
+         */
+        get: operations["obtener_duracion_partido_api_v1_partidos__partido_id__duracion_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partidos/{partido_id}/cronometro": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Estado Cronometro
+         * @description Estado calculado del cronómetro + qué hitos son válidos a
+         *     continuación — el frontend no reimplementa la máquina de estados
+         *     (Fase 3 del plan).
+         */
+        get: operations["obtener_estado_cronometro_api_v1_partidos__partido_id__cronometro_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partidos/{partido_id}/hitos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar Hito Partido
+         * @description Crea un Hito (Inicio/Fin de partido o período, Pausa/Reanudación).
+         *     trg_hito_sincroniza_estado (06_triggers.sql) sincroniza PARTIDOS.Estado
+         *     automáticamente con Inicio_Partido/Fin_Partido — se recomienda que el
+         *     botón "Empezar Partido" del dashboard dispare este endpoint (con
+         *     tipo_hito='Inicio_Partido') en vez del PATCH directo, para que el
+         *     partido siempre tenga un Inicio_Partido auditable (necesario para
+         *     vw_duracion_partido).
+         */
+        post: operations["registrar_hito_partido_api_v1_partidos__partido_id__hitos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partidos/{partido_id}/hitos/{hito_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Corregir Hito Partido
+         * @description Corrección de Minuto_Reloj/Timestamp_Real de un hito ya cargado
+         *     (Flujo 5 del plan).
+         */
+        patch: operations["corregir_hito_partido_api_v1_partidos__partido_id__hitos__hito_id__patch"];
         trace?: never;
     };
     "/api/v1/inscripciones": {
@@ -846,7 +998,15 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Corregir Minuto Evento Partido
+         * @description Corrección de minuto (gestion-avanzada-equipos-control-mesa-plan.md)
+         *     — gap preexistente: no había forma de arreglar un gol/tarjeta cargado
+         *     con el minuto equivocado. Se permite en cualquier estado del partido
+         *     (EC-15). Árbitro: mismo chequeo de "¿es tu partido?" que el resto de
+         *     este router.
+         */
+        patch: operations["corregir_minuto_evento_partido_api_v1_eventos_partido__evento_partido_id__patch"];
         trace?: never;
     };
     "/api/v1/eventos-partido/{evento_partido_id}/anular": {
@@ -1153,12 +1313,97 @@ export interface components {
              */
             client_secret?: string | null;
         };
+        /**
+         * ConfiguracionTiempoTorneoCreate
+         * @description Viaja anidado en TorneoCreate/TorneoUpdate como `config_tiempo`
+         *     (gestion-avanzada-equipos-control-mesa-plan.md) — se crea/actualiza en
+         *     la misma transacción que el torneo, nunca por separado. Espejo de
+         *     chk_config_tiempo_periodos (02_constraints.sql): cantidad_periodos y
+         *     duracion_periodo_minutos son obligatorios si tipo_cronometro='Periodos',
+         *     prohibidos si 'Corrido' — Python se anticipa para dar un 400 legible en
+         *     vez del 409 genérico de un CHECK de Postgres violado (mismo criterio
+         *     que TorneoService._validar_parametros_formato).
+         */
+        ConfiguracionTiempoTorneoCreate: {
+            /**
+             * Tipo Cronometro
+             * @enum {string}
+             */
+            tipo_cronometro: "Periodos" | "Corrido";
+            /** Cantidad Periodos */
+            cantidad_periodos?: number | null;
+            /** Duracion Periodo Minutos */
+            duracion_periodo_minutos?: number | null;
+            /** Duracion Descanso Minutos */
+            duracion_descanso_minutos?: number | null;
+        };
+        /** ConfiguracionTiempoTorneoOut */
+        ConfiguracionTiempoTorneoOut: {
+            /** Id */
+            id: number;
+            /** Torneo Id */
+            torneo_id: number;
+            /**
+             * Tipo Cronometro
+             * @enum {string}
+             */
+            tipo_cronometro: "Periodos" | "Corrido";
+            /** Cantidad Periodos */
+            cantidad_periodos: number | null;
+            /** Duracion Periodo Minutos */
+            duracion_periodo_minutos: number | null;
+            /** Duracion Descanso Minutos */
+            duracion_descanso_minutos: number | null;
+            /**
+             * Fecha Registro
+             * Format: date-time
+             */
+            fecha_registro: string;
+            /**
+             * Fecha Modificacion
+             * Format: date-time
+             */
+            fecha_modificacion: string;
+        };
         /** ConfirmarLoteResponse */
         ConfirmarLoteResponse: {
             /** Insertados */
             insertados: components["schemas"]["JugadorEquipoOut"][];
             /** Rechazados */
             rechazados: components["schemas"]["FilaInvalida"][];
+        };
+        /**
+         * ConflictoMultimilitancia
+         * @description Resultado de GET /equipos/{id}/plantilla-base/verificar — Nivel 1
+         *     del Algoritmo de Multimilitancia del plan: global, nunca bloqueante.
+         *     El mensaje es el texto literal pedido por el usuario (Flujo 2 del
+         *     plan) — no se resume ni se genera de otra forma.
+         */
+        ConflictoMultimilitancia: {
+            /** Conflicto */
+            conflicto: boolean;
+            /**
+             * Equipos
+             * @default []
+             */
+            equipos: string[];
+            /** Mensaje */
+            mensaje?: string | null;
+        };
+        /**
+         * ConflictoPlantillaBase
+         * @description Un candidato de la Plantilla Base que NO entró al roster real por
+         *     conflicto de exclusividad de torneo (Requerimiento 3 del plan,
+         *     Flujo 3) — el mensaje es el texto literal pedido, se repite una vez
+         *     por jugador excluido.
+         */
+        ConflictoPlantillaBase: {
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number;
+            /** Jugador Nombre */
+            jugador_nombre: string;
+            /** Mensaje */
+            mensaje: string;
         };
         /**
          * DisciplinaConModalidadesOut
@@ -1212,6 +1457,22 @@ export interface components {
              * @enum {string}
              */
             estado: "Activo" | "Inactivo";
+        };
+        /**
+         * DuracionPartidoOut
+         * @description GET /partidos/{id}/duracion — expone vw_duracion_partido. Todos
+         *     los campos None significa "todavía sin dato" (partido sin Fin_Partido
+         *     registrado), no un error.
+         */
+        DuracionPartidoOut: {
+            /** Partido Id */
+            partido_id: number;
+            /** Inicio */
+            inicio?: string | null;
+            /** Fin */
+            fin?: string | null;
+            /** Duracion Segundos */
+            duracion_segundos?: number | null;
         };
         /**
          * EdicionResumen
@@ -1278,6 +1539,53 @@ export interface components {
             /** Modalidad Id */
             modalidad_id: number;
         };
+        /**
+         * EquipoJugadorBaseCreate
+         * @description Agrega un candidato a la Plantilla Base de un equipo
+         *     (gestion-avanzada-equipos-control-mesa-plan.md, D1-C). `jugador_id`
+         *     (no `jugador_perfil_id`): el buscador de la UI trabaja con Jugador
+         *     (nombre/cédula), el service resuelve-o-crea el
+         *     JugadorPerfilDisciplina para la disciplina DEL EQUIPO — mismo patrón
+         *     que InscripcionTorneoService._crear_individual.
+         */
+        EquipoJugadorBaseCreate: {
+            /** Jugador Id */
+            jugador_id: number;
+            /** Dorsal Sugerido */
+            dorsal_sugerido?: number | null;
+        };
+        /** EquipoJugadorBaseOut */
+        EquipoJugadorBaseOut: {
+            /** Id */
+            id: number;
+            /** Equipo Id */
+            equipo_id: number;
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number;
+            /** Jugador Id */
+            jugador_id: number;
+            /** Jugador Nombre */
+            jugador_nombre: string;
+            /** Jugador Cedula */
+            jugador_cedula: string;
+            /** Dorsal Sugerido */
+            dorsal_sugerido: number | null;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Activo" | "Inactivo";
+            /**
+             * Fecha Registro
+             * Format: date-time
+             */
+            fecha_registro: string;
+            /**
+             * Fecha Modificacion
+             * Format: date-time
+             */
+            fecha_modificacion: string;
+        };
         /** EquipoOut */
         EquipoOut: {
             /** Nombre */
@@ -1326,6 +1634,43 @@ export interface components {
             /** Estado */
             estado?: ("Activo" | "Inactivo") | null;
         };
+        /**
+         * EstadoCronometroOut
+         * @description GET /partidos/{id}/cronometro — la máquina de estados calculada,
+         *     para que el frontend no la reimplemente (Fase 3 del plan: "expuesto en
+         *     un endpoint dedicado para que el frontend no reimplemente la máquina
+         *     de estados"). `acciones_permitidas` es la lista de tipo_hito válidos
+         *     para el PRÓXIMO POST — la UI habilita/deshabilita botones con esto,
+         *     nunca decidiendo la secuencia por su cuenta (Flujo 5: "Botón
+         *     deshabilitado, no un error post-submit").
+         */
+        EstadoCronometroOut: {
+            /**
+             * Tipo Cronometro
+             * @enum {string}
+             */
+            tipo_cronometro: "Periodos" | "Corrido";
+            /** Cantidad Periodos */
+            cantidad_periodos: number | null;
+            /** Duracion Periodo Minutos */
+            duracion_periodo_minutos: number | null;
+            /** Duracion Descanso Minutos */
+            duracion_descanso_minutos: number | null;
+            /** Partido Iniciado */
+            partido_iniciado: boolean;
+            /** Partido Finalizado */
+            partido_finalizado: boolean;
+            /** Periodo Abierto */
+            periodo_abierto: number | null;
+            /** Ultimo Periodo Cerrado */
+            ultimo_periodo_cerrado: number;
+            /** En Pausa */
+            en_pausa: boolean;
+            /** Acciones Permitidas */
+            acciones_permitidas: ("Inicio_Partido" | "Inicio_Periodo" | "Fin_Periodo" | "Pausa" | "Reanudacion" | "Fin_Partido")[];
+            /** Hitos */
+            hitos: components["schemas"]["HitoPartidoOut"][];
+        };
         /** EventoCreate */
         EventoCreate: {
             /** Nombre */
@@ -1369,6 +1714,15 @@ export interface components {
             eventos_id: number;
             /** Jugador Id Entra */
             jugador_id_entra?: number | null;
+            /** Minuto */
+            minuto: number;
+        };
+        /**
+         * EventoPartidoMinutoUpdate
+         * @description PATCH /eventos-partido/{id} — corrección de minuto (gestion-
+         *     avanzada-equipos-control-mesa-plan.md), distinta de anular().
+         */
+        EventoPartidoMinutoUpdate: {
             /** Minuto */
             minuto: number;
         };
@@ -1504,6 +1858,61 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HitoPartidoCreate */
+        HitoPartidoCreate: {
+            /**
+             * Tipo Hito
+             * @enum {string}
+             */
+            tipo_hito: "Inicio_Partido" | "Inicio_Periodo" | "Fin_Periodo" | "Pausa" | "Reanudacion" | "Fin_Partido";
+            /** Numero Periodo */
+            numero_periodo?: number | null;
+            /** Minuto Reloj */
+            minuto_reloj?: number | null;
+            /** Ganador Corrido Id */
+            ganador_corrido_id?: number | null;
+        };
+        /** HitoPartidoOut */
+        HitoPartidoOut: {
+            /** Id */
+            id: number;
+            /** Partido Id */
+            partido_id: number;
+            /**
+             * Tipo Hito
+             * @enum {string}
+             */
+            tipo_hito: "Inicio_Partido" | "Inicio_Periodo" | "Fin_Periodo" | "Pausa" | "Reanudacion" | "Fin_Partido";
+            /** Numero Periodo */
+            numero_periodo: number | null;
+            /**
+             * Timestamp Real
+             * Format: date-time
+             */
+            timestamp_real: string;
+            /** Minuto Reloj */
+            minuto_reloj: number | null;
+            /** Registrado Por */
+            registrado_por: number;
+            /**
+             * Fecha Registro
+             * Format: date-time
+             */
+            fecha_registro: string;
+        };
+        /**
+         * HitoPartidoUpdate
+         * @description Corrección de un hito ya cargado (Flujo 5 del plan: "presioné Fin
+         *     del 1er Tiempo tarde/temprano"). Solo Minuto_Reloj/Timestamp_Real son
+         *     editables — no se puede recategorizar un hito (Tipo_Hito/Numero_Periodo
+         *     fijos): eso sería otro hito, no una corrección del mismo.
+         */
+        HitoPartidoUpdate: {
+            /** Minuto Reloj */
+            minuto_reloj?: number | null;
+            /** Timestamp Real */
+            timestamp_real?: string | null;
+        };
         /**
          * InscripcionTorneoCreate
          * @description Exactamente uno de los dos caminos (ediciones-catalogo-disciplinas-plan.md,
@@ -1557,6 +1966,7 @@ export interface components {
              * Format: date-time
              */
             fecha_modificacion: string;
+            plantilla_base?: components["schemas"]["PlantillaBaseCopiaResumen"] | null;
         };
         /** InscripcionTorneoUpdate */
         InscripcionTorneoUpdate: {
@@ -1833,6 +2243,8 @@ export interface components {
             slot_perdedor_siguiente?: ("Local" | "Visitante") | null;
             /** Ganador Desempate Id */
             ganador_desempate_id?: number | null;
+            /** Ganador Corrido Id */
+            ganador_corrido_id?: number | null;
             /**
              * Fecha Registro
              * Format: date-time
@@ -1860,6 +2272,8 @@ export interface components {
             arbitro_id?: number | null;
             /** Ganador Desempate Id */
             ganador_desempate_id?: number | null;
+            /** Ganador Corrido Id */
+            ganador_corrido_id?: number | null;
         };
         /** PerfilDisciplinaOut */
         PerfilDisciplinaOut: {
@@ -1912,6 +2326,22 @@ export interface components {
             foto_url?: string | null;
             /** Disciplinas */
             disciplinas: components["schemas"]["PerfilDisciplinaOut"][];
+        };
+        /**
+         * PlantillaBaseCopiaResumen
+         * @description Resultado de copiar la Plantilla Base al roster real al inscribir
+         *     un equipo — ver InscripcionTorneoService.copiar_plantilla_base_al_roster.
+         */
+        PlantillaBaseCopiaResumen: {
+            /** Insertados */
+            insertados: number;
+            /** Sin Dorsal */
+            sin_dorsal: number;
+            /**
+             * Conflictos
+             * @default []
+             */
+            conflictos: components["schemas"]["ConflictoPlantillaBase"][];
         };
         /** PlantillaJugadorOut */
         PlantillaJugadorOut: {
@@ -2127,6 +2557,7 @@ export interface components {
              * @default true
              */
             incluye_tercer_lugar: boolean;
+            config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoCreate"] | null;
             /** Torneo Grupo Id */
             torneo_grupo_id?: number | null;
             /** Torneo Grupo Nombre */
@@ -2221,6 +2652,7 @@ export interface components {
              * @default true
              */
             incluye_tercer_lugar: boolean;
+            config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoOut"] | null;
             /** Id */
             id: number;
             /** Torneo Grupo Id */
@@ -2267,6 +2699,7 @@ export interface components {
             clasificados_por_grupo?: number | null;
             /** Incluye Tercer Lugar */
             incluye_tercer_lugar?: boolean | null;
+            config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoCreate"] | null;
         };
         /** TraspasoCreate */
         TraspasoCreate: {
@@ -3270,12 +3703,144 @@ export interface operations {
             };
         };
     };
+    listar_plantilla_base_api_v1_equipos__equipo_id__plantilla_base_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                equipo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipoJugadorBaseOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agregar_a_plantilla_base_api_v1_equipos__equipo_id__plantilla_base_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                equipo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EquipoJugadorBaseCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipoJugadorBaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verificar_multimilitancia_api_v1_equipos__equipo_id__plantilla_base_verificar_get: {
+        parameters: {
+            query: {
+                jugador_id: number;
+            };
+            header?: never;
+            path: {
+                equipo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictoMultimilitancia"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quitar_de_plantilla_base_api_v1_equipos__equipo_id__plantilla_base__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                equipo_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipoJugadorBaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listar_jugadores_api_v1_jugadores_get: {
         parameters: {
             query?: {
                 skip?: number;
                 limit?: number;
                 estado?: ("Activo" | "Inactivo") | null;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -3925,6 +4490,139 @@ export interface operations {
             };
         };
     };
+    obtener_duracion_partido_api_v1_partidos__partido_id__duracion_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuracionPartidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_estado_cronometro_api_v1_partidos__partido_id__cronometro_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstadoCronometroOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registrar_hito_partido_api_v1_partidos__partido_id__hitos_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HitoPartidoCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HitoPartidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    corregir_hito_partido_api_v1_partidos__partido_id__hitos__hito_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+                hito_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HitoPartidoUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HitoPartidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listar_inscripciones_api_v1_inscripciones_get: {
         parameters: {
             query?: {
@@ -4488,6 +5186,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventoPartidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    corregir_minuto_evento_partido_api_v1_eventos_partido__evento_partido_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evento_partido_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventoPartidoMinutoUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

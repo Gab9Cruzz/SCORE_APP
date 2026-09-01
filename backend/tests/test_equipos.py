@@ -116,18 +116,48 @@ async def test_listar_equipos_filtra_por_disciplina_y_modalidad(
     assert "Torre Negra" not in [e["nombre"] for e in resp.json()]
 
 
-# T4 — plantilla_total: perfiles distintos entre TODAS las inscripciones
-# del equipo (Decisión #1 = A1, D-Eng-10).
-async def test_plantilla_total_cuenta_perfiles_distintos(client: AsyncClient):
-    # 05_seed.sql: el equipo 1 tiene 2 jugadores en el torneo 1.
+# T4 — plantilla_total: gestion-avanzada-equipos-control-mesa-plan.md
+# (Flujo 1) cambia la fuente de esta columna de JugadorEquipo (roster
+# torneo-scoped) a EQUIPO_JUGADOR_BASE (Plantilla Base) — responde "¿este
+# equipo tiene jugadores cargados?" incluso antes de que exista ningún
+# torneo. 05_seed.sql no carga Plantilla Base (solo roster real de
+# torneo), así que un equipo del seed arranca en 0 aunque ya tenga
+# jugadores en JUGADOR_EQUIPO.
+async def test_plantilla_total_ya_no_cuenta_el_roster_de_torneo(client: AsyncClient):
     resp = await client.get("/api/v1/equipos/1")
     assert resp.status_code == 200
-    assert resp.json()["plantilla_total"] == 2
+    assert resp.json()["plantilla_total"] == 0
+
+
+async def test_plantilla_total_cuenta_la_plantilla_base(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    resp = await client.post(
+        "/api/v1/equipos", json={"nombre": "Equipo Plantilla Base T4", **FUTBOL}, headers=admin_general_headers
+    )
+    equipo_id = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/jugadores",
+        json={"nombre": "Jugador Base T4", "cedula": "T4-0001", "correo_electronico": "t4@example.com"},
+        headers=admin_general_headers,
+    )
+    jugador_id = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/equipos/{equipo_id}/plantilla-base",
+        json={"jugador_id": jugador_id},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+    resp = await client.get(f"/api/v1/equipos/{equipo_id}")
+    assert resp.json()["plantilla_total"] == 1
 
     # Y en el listado llega el mismo número (mismo GROUP BY, un solo viaje).
     resp = await client.get("/api/v1/equipos")
     por_id = {e["id"]: e for e in resp.json()}
-    assert por_id[1]["plantilla_total"] == 2
+    assert por_id[equipo_id]["plantilla_total"] == 1
 
 
 async def test_equipo_recien_creado_tiene_plantilla_cero(

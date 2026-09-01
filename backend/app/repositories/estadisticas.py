@@ -77,6 +77,17 @@ class EstadisticasRepository:
         )
         return filas[0]["estado"] if filas else None
 
+    async def duracion_partido(self, partido_id: int) -> dict[str, Any] | None:
+        """vw_duracion_partido (gestion-avanzada-equipos-control-mesa-
+        plan.md, Requerimiento 5) — sin fila si el partido todavía no
+        tiene Fin_Partido registrado (partido en curso o ni siquiera
+        empezado); el caller lo trata como "sin dato todavía", no como
+        error (ver DuracionPartidoOut)."""
+        filas = await self._fetch(
+            "SELECT * FROM vw_duracion_partido WHERE partido_id = :id", id=partido_id
+        )
+        return filas[0] if filas else None
+
     async def goles_totales_perfil(self, jugador_perfil_id: int) -> int:
         filas = await self._fetch(
             "SELECT goles_totales FROM vw_goleadores_por_disciplina WHERE jugador_perfil_id = :id",

@@ -35,6 +35,20 @@ class EventoPartidoUpdate(BaseModel):
     estado: EstadoEventoPartido | None = None
 
 
+class EventoPartidoMinutoUpdate(BaseModel):
+    """PATCH /eventos-partido/{id} — corrección de minuto (gestion-
+    avanzada-equipos-control-mesa-plan.md), distinta de anular()."""
+
+    minuto: int
+
+    @field_validator("minuto")
+    @classmethod
+    def minuto_en_rango(cls, v: int) -> int:
+        if not (0 <= v <= 130):
+            raise ValueError("minuto debe estar entre 0 y 130.")
+        return v
+
+
 class EventoPartidoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

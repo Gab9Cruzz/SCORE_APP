@@ -2,14 +2,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import DomainRuleError
+from app.models.configuracion_tiempo_torneo import ConfiguracionTiempoTorneo
 from app.models.fase import Fase
 from app.models.partido import Partido
 from app.models.torneo import Torneo
 from app.models.torneo_grupo import TorneoGrupo
+from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoRepository
 from app.repositories.fase import FaseRepository
+from app.repositories.modalidad import ModalidadRepository
 from app.repositories.torneo import TorneoRepository
 from app.repositories.torneo_grupo import TorneoGrupoRepository
-from app.schemas.torneo import TorneoCreate, TorneoUpdate
+from app.schemas.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoCreate, ConfiguracionTiempoTorneoOut
+from app.schemas.torneo import TorneoCreate, TorneoOut, TorneoUpdate
 
 # Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md,
 # requerimiento #4) — Decisión G1: Liga/Eliminación son 1 sola FASE;
@@ -18,6 +22,24 @@ from app.schemas.torneo import TorneoCreate, TorneoUpdate
 _TIPO_FASE_INICIAL = {"Liga": "Liga", "Eliminacion": "Eliminacion", "Grupos_Playoffs": "Grupos"}
 _NOMBRE_FASE_INICIAL = {"Liga": "Liga Regular", "Eliminacion": "Eliminatoria", "Grupos_Playoffs": "Fase de Grupos"}
 
+# Motor de Tiempos (gestion-avanzada-equipos-control-mesa-plan.md) — default
+# cuando el cliente no manda config_tiempo al crear un torneo. El propio
+# requerimiento dice que el mismo deporte puede jugarse con duraciones
+# distintas según el nivel, así que esto es solo un punto de partida
+# editable, no una regla rígida ligada a la disciplina.
+_DEFAULT_PERIODOS = {
+    "tipo_cronometro": "Periodos",
+    "cantidad_periodos": 2,
+    "duracion_periodo_minutos": 45,
+    "duracion_descanso_minutos": 15,
+}
+_DEFAULT_CORRIDO = {
+    "tipo_cronometro": "Corrido",
+    "cantidad_periodos": None,
+    "duracion_periodo_minutos": None,
+    "duracion_descanso_minutos": None,
+}
+
 
 class TorneoService:
     def __init__(self, session: AsyncSession):
@@ -25,9 +47,11 @@ class TorneoService:
         self.repo = TorneoRepository(session)
         self.grupo_repo = TorneoGrupoRepository(session)
         self.fase_repo = FaseRepository(session)
+        self.modalidad_repo = ModalidadRepository(session)
+        self.config_tiempo_repo = ConfiguracionTiempoTorneoRepository(session)
 
-    async def get(self, id_: int) -> Torneo:
-        return await self.repo.get_or_404(id_)
+    async def get(self, id_: int) -> TorneoOut:
+        return await self._con_config_tiempo(await self.repo.get_or_404(id_))
 
     async def list(
         self,
@@ -35,10 +59,12 @@ class TorneoService:
         limit: int = 100,
         estado: str | None = None,
         torneo_grupo_id: int | None = None,
-    ) -> list[Torneo]:
-        return await self.repo.list(skip=skip, limit=limit, estado=estado, torneo_grupo_id=torneo_grupo_id)
+    ) -> list[TorneoOut]:
+        torneos = await self.repo.list(skip=skip, limit=limit, estado=estado, torneo_grupo_id=torneo_grupo_id)
+        configs = await self._configs_por_torneo([t.id for t in torneos])
+        return [self._a_salida(t, configs.get(t.id)) for t in torneos]
 
-    async def create(self, data: TorneoCreate) -> Torneo:
+    async def create(self, data: TorneoCreate) -> TorneoOut:
         """Resuelve el grupo ANTES de crear la edición
         (torneos-admin-plan.md, Fase 1/3 — TorneoCreate.exactamente_un_origen_de_grupo
         ya garantiza que vino uno solo de los dos):
@@ -69,11 +95,17 @@ class TorneoService:
         tanto si el admin usa el motor nuevo como si sigue de alta manual
         (POST /partidos, ver comentario grande en 01_schema.sql sobre esa
         convivencia).
+
+        Motor de Tiempos (gestion-avanzada-equipos-control-mesa-plan.md):
+        todo torneo nace también con una CONFIGURACION_TIEMPO_TORNEO —
+        la que mande el cliente (`config_tiempo`) o, si no manda nada, un
+        default derivado de Modalidad.tamano_equipo (mismo patrón que la
+        FASE inicial: se crea sola, no hay que pedirla aparte).
         """
         self._validar_parametros_formato(
             data.formato, data.ida_vuelta, data.equipos_por_grupo, data.clasificados_por_grupo
         )
-        datos = data.model_dump(exclude={"torneo_grupo_nombre"})
+        datos = data.model_dump(exclude={"torneo_grupo_nombre", "config_tiempo"})
 
         if data.torneo_grupo_nombre:
             grupo = TorneoGrupo(nombre=data.torneo_grupo_nombre.strip())
@@ -101,7 +133,8 @@ class TorneoService:
 
         torneo = await self.repo.create(**datos)
         await self._crear_fase_inicial(torneo)
-        return torneo
+        config = await self._crear_config_tiempo_inicial(torneo, data.config_tiempo)
+        return self._a_salida(torneo, config)
 
     def _validar_parametros_formato(
         self,
@@ -133,8 +166,19 @@ class TorneoService:
         self.session.add(fase)
         await self.session.commit()
 
-    async def update(self, id_: int, data: TorneoUpdate) -> Torneo:
-        payload = data.model_dump(exclude_unset=True)
+    async def _crear_config_tiempo_inicial(
+        self, torneo: Torneo, config_tiempo: ConfiguracionTiempoTorneoCreate | None
+    ) -> ConfiguracionTiempoTorneo:
+        if config_tiempo is not None:
+            datos = config_tiempo.model_dump()
+        else:
+            modalidad = await self.modalidad_repo.get_or_404(torneo.modalidad_id)
+            datos = dict(_DEFAULT_CORRIDO if modalidad.tamano_equipo == 1 else _DEFAULT_PERIODOS)
+        config = await self.config_tiempo_repo.create(torneo_id=torneo.id, **datos)
+        return config
+
+    async def update(self, id_: int, data: TorneoUpdate) -> TorneoOut:
+        payload = data.model_dump(exclude_unset=True, exclude={"config_tiempo"})
         torneo_actual = await self.repo.get_or_404(id_)
 
         if "formato" in payload and payload["formato"] != torneo_actual.formato:
@@ -153,7 +197,39 @@ class TorneoService:
                 payload.get("clasificados_por_grupo", torneo_actual.clasificados_por_grupo),
             )
 
-        return await self.repo.save_changes(torneo_actual, **payload)
+        torneo = await self.repo.save_changes(torneo_actual, **payload)
 
-    async def soft_delete(self, id_: int) -> Torneo:
-        return await self.repo.soft_delete(id_, estado_inactivo="Inactivo")
+        config = await self.config_tiempo_repo.get_by_torneo(id_)
+        if data.config_tiempo is not None:
+            # EC-13 del plan: se permite el PATCH en cualquier momento, no
+            # hay trigger que lo impida — los hitos ya guardados no se
+            # re-validan retroactivamente (limitación conocida, documentada
+            # en el plan, no defendida por trigger).
+            datos_config = data.config_tiempo.model_dump()
+            if config is None:
+                config = await self.config_tiempo_repo.create(torneo_id=id_, **datos_config)
+            else:
+                config = await self.config_tiempo_repo.reemplazar(config, **datos_config)
+
+        return self._a_salida(torneo, config)
+
+    async def soft_delete(self, id_: int) -> TorneoOut:
+        torneo = await self.repo.soft_delete(id_, estado_inactivo="Inactivo")
+        return await self._con_config_tiempo(torneo)
+
+    async def _con_config_tiempo(self, torneo: Torneo) -> TorneoOut:
+        config = await self.config_tiempo_repo.get_by_torneo(torneo.id)
+        return self._a_salida(torneo, config)
+
+    async def _configs_por_torneo(self, torneo_ids: list[int]) -> dict[int, ConfiguracionTiempoTorneo]:
+        if not torneo_ids:
+            return {}
+        stmt = select(ConfiguracionTiempoTorneo).where(ConfiguracionTiempoTorneo.torneo_id.in_(torneo_ids))
+        result = await self.session.execute(stmt)
+        return {c.torneo_id: c for c in result.scalars().all()}
+
+    @staticmethod
+    def _a_salida(torneo: Torneo, config: ConfiguracionTiempoTorneo | None) -> TorneoOut:
+        salida = TorneoOut.model_validate(torneo)
+        salida.config_tiempo = ConfiguracionTiempoTorneoOut.model_validate(config) if config else None
+        return salida

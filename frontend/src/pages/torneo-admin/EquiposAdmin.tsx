@@ -82,14 +82,13 @@ export function EquiposAdminPage() {
     setModo({ tipo: "lista" });
   }
 
-  /** Camino 2 del plan (Fase 2 parte B): desde el catálogo global NO hay
-   * torneo, así que no hay dónde colgar una plantilla (Decisión #1 = A1).
-   * En vez de pedir jugadores que no se podrían guardar, el equipo se
-   * crea y el admin sale derecho al listado de torneos —ya filtrado por
-   * su disciplina— para inscribirlo y cargar la plantilla ahí, que es
-   * donde ese flujo ya está construido. */
-  function irAInscribir(disciplinaId: number) {
-    navigate(`/torneo-admin/torneos?disciplina_id=${disciplinaId}`);
+  /** gestion-avanzada-equipos-control-mesa-plan.md (Flujo 1): ya no
+   * navega directo al listado de torneos — la Plantilla Base (D1-C)
+   * habilita cargar jugadores ANTES de que exista un torneo, así que el
+   * destino es el Detalle del Equipo, que ofrece "Inscribir a un torneo"
+   * como acción secundaria dentro de esa misma vista. */
+  function irAlDetalle(equipoId: number) {
+    navigate(`/torneo-admin/equipos/${equipoId}`);
   }
 
   const camposEquipo = (values: Record<string, ResourceFieldValue>): ResourceFormField[] => {
@@ -135,12 +134,12 @@ export function EquiposAdminPage() {
       key: "plantilla",
       label: "Plantilla",
       // EC-39: 0 jugadores es un estado VÁLIDO, no un error — pero el
-      // vacío tiene que ofrecer la salida, no solo informarla. Con 0, el
-      // conteo es el link a inscribir el equipo (que es donde se carga la
-      // plantilla); con más, es texto plano.
+      // vacío tiene que ofrecer la salida, no solo informarla. Fuente:
+      // Plantilla Base (D1-C), no el roster de un torneo — ver
+      // EquipoRepository.plantilla_total_por_equipo del lado del backend.
       render: (r) =>
         r.plantilla_total === 0 ? (
-          <button type="button" className="link-button" onClick={() => irAInscribir(r.disciplina_id)}>
+          <button type="button" className="link-button" onClick={() => irAlDetalle(r.id)}>
             0 jug. — agregar
           </button>
         ) : (
@@ -177,24 +176,19 @@ export function EquiposAdminPage() {
           onSubmit={(values) =>
             editando
               ? crud.update.mutate({ id: modo.fila.id, body: values as never }, { onSuccess: volver })
-              : crud.create.mutate(values as never, { onSuccess: volver })
+              : // Flujo 1 del plan: redirección post-creación al Detalle
+                // del Equipo — la carga de jugadores (Plantilla Base,
+                // D1-C) queda habilitada de inmediato, sin depender de un
+                // torneo.
+                crud.create.mutate(values as never, {
+                  onSuccess: (equipo) => irAlDetalle((equipo as { id: number }).id),
+                })
           }
           submitting={mutation.isPending}
           submitError={mutation.isError ? apiErrorMessage(mutation.error) : null}
           submitLabel={editando ? "Guardar cambios" : "Crear"}
           onCancel={volver}
         />
-        {!editando && (
-          // El pedido dice "inmediatamente después, solicitar los
-          // jugadores". Desde acá no se puede (no hay torneo al que
-          // colgar la plantilla), así que se dice POR QUÉ y se ofrece el
-          // camino, en vez de dejar al admin con un equipo vacío sin
-          // saber cómo llenarlo.
-          <p className="muted nota-plantilla">
-            ℹ La plantilla se carga al inscribir el equipo a un torneo — los jugadores se registran por
-            torneo. Después de crearlo vas a poder inscribirlo desde la columna "Plantilla" de la grilla.
-          </p>
-        )}
       </div>
     );
   }
@@ -280,6 +274,13 @@ export function EquiposAdminPage() {
         onSelect={(fila) => setModo({ tipo: "editar", fila })}
         onSoftDelete={(fila) => crud.softDelete.mutate(fila.id)}
         softDeletePending={crud.softDelete.isPending}
+        // Flujo 1 del plan: acción rápida en la grilla — sin pasar por
+        // editar — al mismo Detalle del Equipo que abre la creación.
+        extraActions={(fila) => (
+          <button type="button" className="link-button" onClick={() => irAlDetalle(fila.id)}>
+            Registrar Jugadores
+          </button>
+        )}
       />
     </div>
   );

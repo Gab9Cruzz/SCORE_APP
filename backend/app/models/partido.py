@@ -45,6 +45,10 @@ class Partido(TimestampMixin, Base):
     # partido de Eliminación empatado en goles — el sistema registra QUIÉN
     # ganó, no CÓMO (mismo nivel de detalle que TRASPASOS.Motivo).
     ganador_desempate_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id"))
+    # Ganador de un partido "Corrido" (Tenis/Pádel — sin marcador de goles).
+    # Distinta de ganador_desempate_id: ver el comentario grande en
+    # 01_schema.sql sobre por qué no se reusa esa columna.
+    ganador_corrido_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id"))
     # Árbitro asignado a este partido (nullable — puede no tener uno
     # todavía). Un solo árbitro por partido a propósito, ver D6 en
     # roles-3-modulos-plan.md. Usado por el ownership-check de

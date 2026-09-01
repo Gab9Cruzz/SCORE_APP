@@ -79,6 +79,20 @@ SELECT
       WHERE Torneo_Grupo_ID = (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Liga Relámpago') AND Numero_Edicion = 2
  );
 
+-- Configuración de tiempos (gestion-avanzada-equipos-control-mesa-plan.md)
+-- — Fútbol 11 -> Periodos, 2x45', igual que Copa Ecotec en 05_seed.sql.
+INSERT INTO CONFIGURACION_TIEMPO_TORNEO (Torneo_ID, Tipo_Cronometro, Cantidad_Periodos, Duracion_Periodo_Minutos, Duracion_Descanso_Minutos)
+SELECT t.ID, 'Periodos', 2, 45, 15
+  FROM TORNEO t JOIN TORNEO_GRUPO g ON g.ID = t.Torneo_Grupo_ID
+ WHERE g.Nombre = 'Liga Relámpago' AND t.Numero_Edicion = 1
+   AND NOT EXISTS (SELECT 1 FROM CONFIGURACION_TIEMPO_TORNEO c WHERE c.Torneo_ID = t.ID);
+
+INSERT INTO CONFIGURACION_TIEMPO_TORNEO (Torneo_ID, Tipo_Cronometro, Cantidad_Periodos, Duracion_Periodo_Minutos, Duracion_Descanso_Minutos)
+SELECT t.ID, 'Periodos', 2, 45, 15
+  FROM TORNEO t JOIN TORNEO_GRUPO g ON g.ID = t.Torneo_Grupo_ID
+ WHERE g.Nombre = 'Liga Relámpago' AND t.Numero_Edicion = 2
+   AND NOT EXISTS (SELECT 1 FROM CONFIGURACION_TIEMPO_TORNEO c WHERE c.Torneo_ID = t.ID);
+
 -- Equipos. "Tiburones FC" puede ya existir (dato histórico del seed base)
 -- — se reusa tal cual, es exactamente el punto del catálogo global de
 -- EQUIPOS (equipos-jugadores-plan.md, P5): un equipo puede jugar varios
@@ -136,6 +150,13 @@ SELECT
      SELECT 1 FROM TORNEO
       WHERE Torneo_Grupo_ID = (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Copa Raíces') AND Numero_Edicion = 1
  );
+
+-- Configuración de tiempos — Tenis es individual (Tamano_Equipo=1) -> Corrido.
+INSERT INTO CONFIGURACION_TIEMPO_TORNEO (Torneo_ID, Tipo_Cronometro)
+SELECT t.ID, 'Corrido'
+  FROM TORNEO t JOIN TORNEO_GRUPO g ON g.ID = t.Torneo_Grupo_ID
+ WHERE g.Nombre = 'Copa Raíces' AND t.Numero_Edicion = 1
+   AND NOT EXISTS (SELECT 1 FROM CONFIGURACION_TIEMPO_TORNEO c WHERE c.Torneo_ID = t.ID);
 
 -- D-Eng-4 del plan: en una disciplina de Tamano_Equipo=1, el "equipo" es
 -- el jugador mismo — se nombra igual que él, no se le inventa un nombre

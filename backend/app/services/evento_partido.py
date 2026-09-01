@@ -39,6 +39,21 @@ class EventoPartidoService:
         verificar_arbitro_asignado(partido, usuario_actual)
         return await self.repo.create(**data.model_dump())
 
+    async def corregir_minuto(self, id_: int, minuto: int, usuario_actual: Usuario) -> EventoPartido:
+        """PATCH /eventos-partido/{id} (gestion-avanzada-equipos-control-
+        mesa-plan.md) — corrección de minuto de un gol/tarjeta/cambio ya
+        cargado, gap preexistente que responde directamente al Entregable
+        3 del plan ("¿cómo editás minutos si el árbitro se equivoca?") para
+        el caso de eventos de partido, distinto del de Hitos de tiempo (ver
+        HitoPartidoService.corregir). Se permite en cualquier estado del
+        partido, incluido 'Finalizado' (EC-15) — un error se puede
+        descubrir después de cerrado. El UPDATE vuelve a pasar por
+        fn_validar_jugador_partido (revalidación en UPDATE, 06_triggers.sql)."""
+        evento = await self.repo.get_or_404(id_)
+        partido = await self.partido_repo.get_or_404(evento.partidos_id)
+        verificar_arbitro_asignado(partido, usuario_actual)
+        return await self.repo.save_changes(evento, minuto=minuto)
+
     async def anular(self, id_: int, usuario_actual: Usuario) -> EventoPartido:
         """Anula un evento cargado por error (ej: gol mal registrado).
 

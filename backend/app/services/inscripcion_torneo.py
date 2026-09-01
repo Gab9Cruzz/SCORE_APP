@@ -1,5 +1,6 @@
 from datetime import date
 
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import DomainRuleError
@@ -9,12 +10,25 @@ from app.models.jugador_equipo import JugadorEquipo
 from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
 from app.repositories.disciplina import DisciplinaRepository
 from app.repositories.equipo import EquipoRepository
+from app.repositories.equipo_jugador_base import EquipoJugadorBaseRepository
 from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.repositories.jugador import JugadorRepository
 from app.repositories.jugador_equipo import JugadorEquipoRepository
 from app.repositories.jugador_perfil_disciplina import JugadorPerfilDisciplinaRepository
 from app.repositories.torneo import TorneoRepository
-from app.schemas.inscripcion_torneo import InscripcionTorneoCreate, InscripcionTorneoUpdate
+from app.schemas.inscripcion_torneo import (
+    ConflictoPlantillaBase,
+    InscripcionTorneoCreate,
+    InscripcionTorneoOut,
+    InscripcionTorneoUpdate,
+    PlantillaBaseCopiaResumen,
+)
+
+_MENSAJE_CONFLICTO_TORNEO = (
+    "El jugador {nombre} ya pertenece a otro equipo en este torneo. Para que "
+    "pueda jugar en este club, andá a la pestaña 'Traspasos' y hacé la "
+    "transferencia formal."
+)
 
 
 class InscripcionTorneoService:
@@ -27,6 +41,7 @@ class InscripcionTorneoService:
         self.jugador_equipo_repo = JugadorEquipoRepository(session)
         self.equipo_repo = EquipoRepository(session)
         self.disciplina_repo = DisciplinaRepository(session)
+        self.plantilla_base_repo = EquipoJugadorBaseRepository(session)
 
     async def get(self, id_: int) -> InscripcionTorneo:
         return await self.repo.get_or_404(id_)
@@ -36,34 +51,29 @@ class InscripcionTorneoService:
     ) -> list[InscripcionTorneo]:
         return await self.repo.list(skip=skip, limit=limit, torneo_id=torneo_id, equipo_id=equipo_id)
 
-    async def create(self, data: InscripcionTorneoCreate) -> InscripcionTorneo:
+    async def create(self, data: InscripcionTorneoCreate) -> InscripcionTorneoOut:
         if data.equipo_id is not None:
             return await self._crear_por_equipo(data)
-        return await self._crear_individual(data)
+        inscripcion = await self._crear_individual(data)
+        return InscripcionTorneoOut.model_validate(inscripcion)
 
-    async def _crear_por_equipo(self, data: InscripcionTorneoCreate) -> InscripcionTorneo:
+    async def _crear_por_equipo(self, data: InscripcionTorneoCreate) -> InscripcionTorneoOut:
         """Pareja/Conjunto. unique_inscripcion (02_constraints.sql) sigue
         evitando el mismo equipo dos veces en el mismo torneo (el 409 lo
         arma exceptions/handlers.py); lo nuevo acá es el filtro estricto
         por disciplina de equipos-disciplina-navegacion-plan.md (pedido B,
         D-Eng-9, EC-33).
 
-        La validación vive en el SERVICE y no en el router ni en un
-        trigger: es el único punto por el que ya pasan los dos caminos de
-        inscripción, ya tiene torneo_repo inyectado, y DomainRuleError ya
-        se traduce a 400 en exceptions/handlers.py. Un trigger daría un
-        mensaje crudo de Postgres; el router dejaría fuera a cualquier
-        llamador interno futuro.
+        gestion-avanzada-equipos-control-mesa-plan.md (Requerimiento 3):
+        tras crear la inscripción, copia la Plantilla Base del equipo al
+        roster real — SIN revertir la inscripción del equipo si algún
+        candidato entra en conflicto (ver copiar_plantilla_base_al_roster).
 
-        Solo se compara la DISCIPLINA, no la modalidad (EC-44): un equipo
-        de Fútbol 11 inscribiéndose a un torneo de Fútbol 5 es legítimo, y
-        el pedido dice "exactamente la misma Disciplina".
+        La validación de disciplina vive en el SERVICE y no en el router
+        ni en un trigger: es el único punto por el que ya pasan los dos
+        caminos de inscripción, ya tiene torneo_repo inyectado, y
+        DomainRuleError ya se traduce a 400 en exceptions/handlers.py.
         """
-        # D-Eng-17: hasta acá este camino no validaba ni que el torneo
-        # existiera — se creaba la inscripción y reventaba después contra
-        # la FK, con un 409 que no explicaba nada. El get_or_404 hace
-        # falta igual para leer torneo.disciplina_id, así que el gap se
-        # cierra solo.
         torneo = await self.torneo_repo.get_or_404(data.torneo_id)
         equipo = await self.equipo_repo.get_or_404(data.equipo_id)
 
@@ -76,7 +86,119 @@ class InscripcionTorneoService:
                 f"este torneo es de {disciplina_torneo.nombre if disciplina_torneo else 'otra disciplina'}."
             )
 
-        return await self.repo.create(torneo_id=data.torneo_id, equipo_id=data.equipo_id)
+        inscripcion = await self.repo.create(torneo_id=data.torneo_id, equipo_id=data.equipo_id)
+        resumen = await self.copiar_plantilla_base_al_roster(inscripcion, data.equipo_id)
+
+        salida = InscripcionTorneoOut.model_validate(inscripcion)
+        salida.plantilla_base = resumen
+        return salida
+
+    async def copiar_plantilla_base_al_roster(
+        self, inscripcion: InscripcionTorneo, equipo_id: int
+    ) -> PlantillaBaseCopiaResumen | None:
+        """Requerimiento 3 / Algoritmo de Multimilitancia Nivel 2 del plan:
+        cada candidato de la Plantilla Base se inserta en un SAVEPOINT
+        propio, así un conflicto de exclusividad en UN candidato no
+        aborta el resto (sin savepoints, la excepción del trigger
+        abortaría TODA la transacción de Postgres). Un dorsal sugerido ya
+        tomado en este roster (EC-6) NO excluye al candidato: se reintenta
+        sin dorsal, el admin lo completa a mano después.
+
+        Devuelve None si el equipo no tenía Plantilla Base cargada (0
+        candidatos) — no None-vs-vacío ambiguo para el caller: se
+        distingue "no había nada que copiar" (equipo sin plantilla base
+        todavía) de "se copiaron 0 porque todos entraron en conflicto"
+        devolviendo igual un resumen con insertados=0 en ese segundo caso.
+        """
+        candidatos = await self.plantilla_base_repo.listar_por_equipo(equipo_id)
+        if not candidatos:
+            return None
+
+        candidatos_con_datos = {
+            fila["jugador_perfil_id"]: fila
+            for fila in await self.plantilla_base_repo.con_datos_jugador(candidatos)
+        }
+
+        insertados = 0
+        sin_dorsal = 0
+        conflictos: list[ConflictoPlantillaBase] = []
+
+        for candidato in candidatos:
+            datos = candidatos_con_datos[candidato.jugador_perfil_id]
+            resultado = await self._copiar_un_candidato(
+                candidato.jugador_perfil_id, inscripcion.id, candidato.dorsal_sugerido
+            )
+            if resultado == "conflicto":
+                conflictos.append(
+                    ConflictoPlantillaBase(
+                        jugador_perfil_id=candidato.jugador_perfil_id,
+                        jugador_nombre=datos["jugador_nombre"],
+                        mensaje=_MENSAJE_CONFLICTO_TORNEO.format(nombre=datos["jugador_nombre"]),
+                    )
+                )
+            else:
+                insertados += 1
+                if resultado == "sin_dorsal":
+                    sin_dorsal += 1
+
+        # Los candidatos insertados con éxito solo llegaron a FLUSH dentro
+        # de su propio savepoint (que ya se liberó) — falta el COMMIT que
+        # los persiste de verdad. Los que fallaron ya se revirtieron a su
+        # savepoint individualmente, así que este commit no arrastra nada
+        # de ellos.
+        await self.session.commit()
+
+        return PlantillaBaseCopiaResumen(insertados=insertados, sin_dorsal=sin_dorsal, conflictos=conflictos)
+
+    async def _copiar_un_candidato(
+        self, jugador_perfil_id: int, inscripcion_torneo_id: int, dorsal_sugerido: int | None
+    ) -> str:
+        """Intenta insertar con el dorsal sugerido dentro de un SAVEPOINT.
+        Devuelve 'insertado' | 'sin_dorsal' | 'conflicto'.
+
+        Orden de fallo posible: el trigger de exclusividad
+        (fn_validar_exclusividad_torneo, BEFORE INSERT) corre antes que la
+        base llegue a chequear el índice único de dorsal — así que un
+        conflicto de exclusividad se detecta ANTES que uno de dorsal, y si
+        el trigger no dispara pero el dorsal sí choca, ahí recién se
+        reintenta sin dorsal."""
+        try:
+            async with self.session.begin_nested():
+                self.session.add(
+                    JugadorEquipo(
+                        jugador_perfil_id=jugador_perfil_id,
+                        inscripcion_torneo_id=inscripcion_torneo_id,
+                        dorsal=dorsal_sugerido,
+                        fecha_inicio=date.today(),
+                    )
+                )
+                await self.session.flush()
+        except DBAPIError as exc:
+            mensaje = str(exc.orig) if exc.orig else str(exc)
+            if "jugador_ya_activo_en_este_torneo" in mensaje:
+                return "conflicto"
+            if not isinstance(exc, IntegrityError) or dorsal_sugerido is None:
+                # No es el caso de dorsal duplicado esperado (EC-6) — no
+                # hay nada más que reintentar, se cuenta como conflicto en
+                # vez de tumbar toda la inscripción del equipo.
+                return "conflicto"
+            # Dorsal ya tomado en este roster (uq_dorsal_por_roster_vigente)
+            # — el jugador SÍ pertenece al roster, solo falta el número.
+            try:
+                async with self.session.begin_nested():
+                    self.session.add(
+                        JugadorEquipo(
+                            jugador_perfil_id=jugador_perfil_id,
+                            inscripcion_torneo_id=inscripcion_torneo_id,
+                            dorsal=None,
+                            fecha_inicio=date.today(),
+                        )
+                    )
+                    await self.session.flush()
+            except DBAPIError:
+                return "conflicto"
+            return "sin_dorsal"
+        return "insertado"
 
     async def _crear_individual(self, data: InscripcionTorneoCreate) -> InscripcionTorneo:
         """Individual (Decisión B1, D-Eng-6): resuelve-o-crea Jugador +

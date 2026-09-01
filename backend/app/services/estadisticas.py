@@ -8,6 +8,7 @@ from app.schemas.estadisticas import (
     ProximoPartidoOut,
     ResultadoPartidoOut,
 )
+from app.schemas.hito_partido import DuracionPartidoOut
 
 
 class EstadisticasService:
@@ -33,3 +34,9 @@ class EstadisticasService:
     async def plantilla_equipo(self, equipo_id: int) -> list[PlantillaJugadorOut]:
         filas = await self.repo.plantilla_equipo(equipo_id)
         return [PlantillaJugadorOut.model_validate(f) for f in filas]
+
+    async def duracion_partido(self, partido_id: int) -> DuracionPartidoOut:
+        fila = await self.repo.duracion_partido(partido_id)
+        if fila is None:
+            return DuracionPartidoOut(partido_id=partido_id)
+        return DuracionPartidoOut.model_validate(fila)

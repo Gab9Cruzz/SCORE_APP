@@ -257,3 +257,43 @@ JOIN DISCIPLINA d ON d.ID = jpd.Disciplina_ID
 LEFT JOIN vw_goles_acreditados ga ON ga.JUGADOR_ID = jpd.Jugador_ID AND ga.Tipo_Gol = 'Gol'
 LEFT JOIN TORNEO t ON t.ID = ga.TORNEO_ID AND t.Disciplina_ID = jpd.Disciplina_ID
 GROUP BY jpd.ID, j.Nombre, d.Nombre;
+
+-- ------------------------------------------------------------
+-- Duración real de un partido (gestion-avanzada-equipos-control-mesa-plan.md,
+-- Requerimiento 5) — se DERIVA de los Hitos, nunca se guarda como columna
+-- que alguien tendría que recordar actualizar (mismo criterio que
+-- vw_estado_perfil_disciplina/vw_goleadores_por_disciplina). Resta el
+-- tiempo total pausado: cada Pausa se empareja con la PRIMERA Reanudacion
+-- posterior a ella. Funciona igual para partidos de Períodos (da la
+-- duración total incluyendo entretiempo) aunque el requerimiento solo la
+-- pide para Corrido. Sin Fin_Partido todavía, no produce fila (partido en
+-- curso) — GET /partidos/{id}/duracion lo maneja como "todavía sin dato".
+-- ------------------------------------------------------------
+CREATE OR REPLACE VIEW vw_duracion_partido AS
+WITH pausas AS (
+    SELECT
+        pausa.Partido_ID,
+        SUM(
+            EXTRACT(EPOCH FROM (reanuda.Timestamp_Real - pausa.Timestamp_Real))
+        ) AS Segundos_Pausado
+    FROM HITOS_PARTIDO pausa
+    JOIN HITOS_PARTIDO reanuda
+      ON reanuda.Partido_ID = pausa.Partido_ID
+     AND reanuda.Tipo_Hito = 'Reanudacion'
+     AND reanuda.Timestamp_Real = (
+         SELECT MIN(r2.Timestamp_Real) FROM HITOS_PARTIDO r2
+          WHERE r2.Partido_ID = pausa.Partido_ID AND r2.Tipo_Hito = 'Reanudacion'
+            AND r2.Timestamp_Real > pausa.Timestamp_Real
+     )
+    WHERE pausa.Tipo_Hito = 'Pausa'
+    GROUP BY pausa.Partido_ID
+)
+SELECT
+    ini.Partido_ID,
+    ini.Timestamp_Real AS Inicio,
+    fin.Timestamp_Real AS Fin,
+    (EXTRACT(EPOCH FROM (fin.Timestamp_Real - ini.Timestamp_Real)) - COALESCE(p.Segundos_Pausado, 0))::INT AS Duracion_Segundos
+FROM HITOS_PARTIDO ini
+JOIN HITOS_PARTIDO fin ON fin.Partido_ID = ini.Partido_ID AND fin.Tipo_Hito = 'Fin_Partido'
+LEFT JOIN pausas p ON p.Partido_ID = ini.Partido_ID
+WHERE ini.Tipo_Hito = 'Inicio_Partido';

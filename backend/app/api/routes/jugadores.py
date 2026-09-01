@@ -41,10 +41,15 @@ async def listar_jugadores(
     skip: int = 0,
     limit: int = Query(default=100, le=200),
     estado: EstadoJugador | None = None,
+    # Búsqueda server-side por nombre/cédula (gestion-avanzada-equipos-
+    # control-mesa-plan.md, Requerimiento 2) — la usa el buscador de la
+    # Plantilla Base, el registro por lote y (opcional) el buscador de
+    # Control de Mesa.
+    q: str | None = None,
     session: AsyncSession = Depends(get_db),
     usuario_actual: Usuario | None = Depends(get_current_user_optional),
 ) -> list[JugadorOut] | list[JugadorPublicOut]:
-    jugadores = await JugadorService(session).list(skip=skip, limit=limit, estado=estado)
+    jugadores = await JugadorService(session).list(skip=skip, limit=limit, estado=estado, q=q)
     if usuario_actual is None:
         return [JugadorPublicOut.model_validate(j) for j in jugadores]
     return [JugadorOut.model_validate(j) for j in jugadores]

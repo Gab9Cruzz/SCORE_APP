@@ -3,8 +3,8 @@ from collections.abc import Sequence
 from sqlalchemy import func, select
 
 from app.models.equipo import Equipo
+from app.models.equipo_jugador_base import EquipoJugadorBase
 from app.models.inscripcion_torneo import InscripcionTorneo
-from app.models.jugador_equipo import JugadorEquipo
 from app.repositories.base import BaseRepository
 
 
@@ -13,35 +13,25 @@ class EquipoRepository(BaseRepository[Equipo]):
     nombre_recurso = "Equipo"
 
     async def plantilla_total_por_equipo(self, equipo_ids: Sequence[int]) -> dict[int, int]:
-        """Cuántos jugadores distintos tiene cada equipo, para toda la
-        lista de una (D-Eng-10: UN GROUP BY, no una consulta por fila —
-        /torneo-grupos ya arrastraba un N+1 aceptado conscientemente y
-        esta lista es más larga que aquella).
+        """Cuántos candidatos tiene la Plantilla Base de cada equipo, para
+        toda la lista de una (D-Eng-10: UN GROUP BY, no una consulta por
+        fila).
 
-        "Plantilla del equipo" es un dato DERIVADO (Decisión #1 = A1): no
-        existe un roster permanente, existen N rosters (uno por
-        inscripción a un torneo). Se cuentan perfiles DISTINTOS entre
-        todas las inscripciones del equipo — un jugador que estuvo en tres
-        ediciones cuenta una vez, que es lo que el admin espera leer en
-        una columna que dice "14 jug.".
-
-        Solo membresías Activo: un jugador dado de baja o traspasado ya no
-        es parte de la plantilla, y contarlo inflaría el número sin que
-        nada en pantalla explique por qué.
+        gestion-avanzada-equipos-control-mesa-plan.md (Flujo 1) cambia la
+        FUENTE de esta columna: antes contaba JugadorEquipo (roster
+        torneo-scoped, Decisión #1 = A1 del plan anterior — "no existe
+        roster permanente, existen N rosters"); ahora cuenta
+        EQUIPO_JUGADOR_BASE activa, que es la que responde "¿este equipo
+        tiene jugadores cargados?" incluso ANTES de que exista ningún
+        torneo — la pregunta que esta columna necesita responder desde que
+        la Plantilla Base existe. Ya no depende de InscripcionTorneo.
         """
         if not equipo_ids:
             return {}
         stmt = (
-            select(
-                InscripcionTorneo.equipo_id,
-                func.count(func.distinct(JugadorEquipo.jugador_perfil_id)),
-            )
-            .join(JugadorEquipo, JugadorEquipo.inscripcion_torneo_id == InscripcionTorneo.id)
-            .where(
-                InscripcionTorneo.equipo_id.in_(equipo_ids),
-                JugadorEquipo.estado == "Activo",
-            )
-            .group_by(InscripcionTorneo.equipo_id)
+            select(EquipoJugadorBase.equipo_id, func.count())
+            .where(EquipoJugadorBase.equipo_id.in_(equipo_ids), EquipoJugadorBase.estado == "Activo")
+            .group_by(EquipoJugadorBase.equipo_id)
         )
         result = await self.session.execute(stmt)
         return {equipo_id: total for equipo_id, total in result.all()}

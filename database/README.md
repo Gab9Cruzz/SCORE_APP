@@ -41,6 +41,7 @@ Cada una aplica un plan concreto sobre una base **ya provisionada**
 | `14_migracion_auditoria_accesos.sql` | Bitácora de inicios de sesión (tabla `ACCESOS`) |
 | `15_migracion_popularidad_disciplinas.sql`, `16_migracion_foto_jugadores.sql`, `17_migracion_motor_formatos.sql` | `motor-formatos-plantillas-navegacion-plan.md` (en curso al momento de escribir esto) |
 | `18_migracion_auditoria_cambios.sql` | Auditoría de cambios: alta/modificación/baja de cualquier entidad (tabla `AUDITORIA`) — numerada 18 y no 15 porque 15-17 ya estaban tomados por el plan de arriba |
+| `19_migracion_plantilla_base_equipo.sql`, `20_migracion_control_mesa_tiempos.sql` | `gestion-avanzada-equipos-control-mesa-plan.md` — Plantilla Base de equipo (`EQUIPO_JUGADOR_BASE`) y Motor de Tiempos + Control de Mesa (`CONFIGURACION_TIEMPO_TORNEO`, `HITOS_PARTIDO`, `PARTIDOS.Ganador_Corrido_ID`) |
 
 **Una migración vieja no tiene por qué correr sobre el esquema de hoy, y
 eso no es un bug.** `08` referencia `DISCIPLINA.Tipo`, una columna que `12`

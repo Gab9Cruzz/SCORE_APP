@@ -470,6 +470,120 @@ td:first-child {
   cursor: default;
 }
 
+/* Dashboard pre-partido de Control de Mesa (gestion-avanzada-equipos-
+ * control-mesa-plan.md, Flujo 4) */
+.partido-mesa-fila {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+}
+
+.partido-mesa-fila__equipos {
+  flex: 1;
+  font-weight: 600;
+}
+
+.editor-fecha-partido {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.editor-fecha-partido input {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.4rem;
+  border-radius: var(--radius);
+}
+
+/* Cronómetro (Flujo 5 del plan) */
+.cronometro {
+  text-align: center;
+}
+
+.cronometro__label {
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 0.25rem;
+}
+
+.cronometro__tiempo {
+  font-size: 2.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.75rem;
+}
+
+/* Pausado: visualmente inconfundible del estado corriendo (Flujo 5 — un
+ * árbitro mirando de reojo el celular necesita distinguirlo sin leer). */
+.cronometro__tiempo--pausado {
+  color: var(--warning);
+}
+
+.cronometro__acciones {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.cronometro__acciones button,
+.cronometro__boton-iniciar {
+  background: var(--accent);
+  border: none;
+  color: #05201d;
+  font-weight: 600;
+  padding: 0.7rem 1.2rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.cronometro__acciones button:disabled,
+.cronometro__boton-iniciar:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cronometro__pausar {
+  background: var(--warning) !important;
+}
+
+.cronometro__radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+  padding: 0.4rem 0;
+}
+
+.hito-historial {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  text-align: left;
+}
+
+.hito-historial li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+
 @media (max-width: 480px) {
   .nav-bar__links {
     order: 3;
@@ -478,6 +592,10 @@ td:first-child {
 
   .marcador__score {
     font-size: 1.5rem;
+  }
+
+  .cronometro__tiempo {
+    font-size: 2rem;
   }
 }
 

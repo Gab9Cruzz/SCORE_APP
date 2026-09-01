@@ -111,13 +111,16 @@ describe("EquiposAdminPage", () => {
   });
 
   // EC-39 — 0 jugadores es válido, pero el vacío ofrece la salida.
+  // gestion-avanzada-equipos-control-mesa-plan.md (Flujo 1): el destino ya
+  // no es el listado de torneos — es el Detalle del Equipo, que habilita
+  // la Plantilla Base (D1-C) sin depender de ningún torneo.
   it("un equipo sin jugadores ofrece el camino para cargarlos", async () => {
     montar([VACIO]);
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "0 jug. — agregar" }));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/torneo-admin/torneos?disciplina_id=1");
+    expect(mockNavigate).toHaveBeenCalledWith("/torneo-admin/equipos/3");
   });
 
   // T12 — el filtro pega contra el servidor y el empty-state filtrado NO
@@ -181,12 +184,23 @@ describe("EquiposAdminPage", () => {
     );
   });
 
-  it("explica por qué no pide la plantilla al crear desde el catálogo global", async () => {
+  // gestion-avanzada-equipos-control-mesa-plan.md (Flujo 1): la creación
+  // redirige derecho al Detalle del Equipo, que es donde ahora se carga
+  // la Plantilla Base de inmediato — reemplaza la nota "se carga al
+  // inscribir a un torneo", que dejó de ser cierta con D1-C.
+  it("redirige al Detalle del Equipo tras crear uno nuevo", async () => {
     montar([]);
     const user = userEvent.setup();
+    server.use(
+      http.post(EQUIPOS, async () => HttpResponse.json({ ...TIGRES, id: 9 }, { status: 201 })),
+    );
 
     await user.click(await screen.findByRole("button", { name: "+ Nuevo equipo" }));
+    await user.type(screen.getByLabelText("Nombre"), "Equipo Nuevo");
+    await user.selectOptions(screen.getByLabelText("Disciplina"), "1");
+    await user.selectOptions(screen.getByLabelText("Categoría (modalidad)"), "1");
+    await user.click(screen.getByRole("button", { name: "Crear" }));
 
-    expect(screen.getByText(/La plantilla se carga al inscribir el equipo a un torneo/)).toBeInTheDocument();
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/torneo-admin/equipos/9"));
   });
 });

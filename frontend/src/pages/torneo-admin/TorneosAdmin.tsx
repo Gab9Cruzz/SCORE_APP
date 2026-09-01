@@ -39,6 +39,17 @@ interface TorneoCreatePayload {
   incluye_tercer_lugar?: boolean;
   equipos_por_grupo?: number;
   clasificados_por_grupo?: number;
+  // Motor de Tiempos (gestion-avanzada-equipos-control-mesa-plan.md) —
+  // igual que Formato: solo se manda al crear un grupo nuevo (una "Nueva
+  // edición" no la pide, TorneoService la conserva de la edición
+  // anterior si no viene). Si se omite, el backend aplica un default
+  // derivado de Modalidad.tamano_equipo.
+  config_tiempo?: {
+    tipo_cronometro: "Periodos" | "Corrido";
+    cantidad_periodos?: number;
+    duracion_periodo_minutos?: number;
+    duracion_descanso_minutos?: number;
+  };
 }
 
 const formatearFecha = (iso: string) => new Date(iso).toLocaleDateString("es-AR");
@@ -173,6 +184,15 @@ export function TorneosAdminPage() {
     // backend (TorneoService._validar_parametros_formato) rechaza igual
     // cualquiera que llegara de otra forma.
     const formato = (values.formato as string | null) ?? "Liga";
+    // Motor de Tiempos (gestion-avanzada-equipos-control-mesa-plan.md,
+    // sección "Configuración de tiempos"): Tipo_Cronometro es explícito
+    // por torneo, no derivado rígido de la disciplina (el mismo deporte
+    // puede jugarse 2x45' o 2x20' según el nivel) — pero el default que
+    // preselecciona el formulario SÍ sigue a Modalidad.tamano_equipo, acá
+    // vía initialValues (ver más abajo) porque ResourceForm no soporta
+    // recalcular un default a mitad de edición sin pisar lo que el admin
+    // ya haya tocado.
+    const tipoCronometro = (values.tipo_cronometro as string | null) ?? "Periodos";
     return [
       { name: "torneo_grupo_nombre", label: "Nombre del torneo", type: "text", required: true },
       {
@@ -212,6 +232,20 @@ export function TorneosAdminPage() {
         : []),
       { name: "fecha_inicio", label: "Fecha de inicio", type: "date", required: true },
       { name: "fecha_fin", label: "Fecha de fin", type: "date", required: true },
+      {
+        name: "tipo_cronometro",
+        label: "Cronómetro",
+        type: "select",
+        required: true,
+        choices: ["Periodos", "Corrido"],
+      },
+      ...(tipoCronometro === "Periodos"
+        ? ([
+            { name: "cantidad_periodos", label: "Cantidad de períodos", type: "number", required: true },
+            { name: "duracion_periodo_minutos", label: "Duración de cada período (min)", type: "number", required: true },
+            { name: "duracion_descanso_minutos", label: "Duración del descanso (min, opcional)", type: "number" },
+          ] as ResourceFormField[])
+        : []),
     ];
   }
 
@@ -223,6 +257,7 @@ export function TorneosAdminPage() {
   function submitCrearGrupo(values: Record<string, ResourceFieldValue>) {
     const disciplinaId = values.disciplina_id as number;
     const formato = (values.formato as "Liga" | "Eliminacion" | "Grupos_Playoffs" | null) ?? "Liga";
+    const tipoCronometro = (values.tipo_cronometro as "Periodos" | "Corrido" | null) ?? "Periodos";
     crearTorneo.mutate(
       {
         torneo_grupo_nombre: String(values.torneo_grupo_nombre ?? ""),
@@ -239,6 +274,17 @@ export function TorneosAdminPage() {
           formato === "Grupos_Playoffs" && values.clasificados_por_grupo
             ? Number(values.clasificados_por_grupo)
             : undefined,
+        config_tiempo:
+          tipoCronometro === "Periodos"
+            ? {
+                tipo_cronometro: "Periodos",
+                cantidad_periodos: Number(values.cantidad_periodos ?? 2),
+                duracion_periodo_minutos: Number(values.duracion_periodo_minutos ?? 45),
+                duracion_descanso_minutos: values.duracion_descanso_minutos
+                  ? Number(values.duracion_descanso_minutos)
+                  : undefined,
+              }
+            : { tipo_cronometro: "Corrido" },
       },
       {
         // EC-46 (motor-formatos-plantillas-navegacion-plan.md): mismo
@@ -293,7 +339,20 @@ export function TorneosAdminPage() {
         <h1>Torneo nuevo</h1>
         <ResourceForm
           fields={camposTorneoNuevo}
-          initialValues={{ formato: "Liga", incluye_tercer_lugar: true }}
+          initialValues={{
+            formato: "Liga",
+            incluye_tercer_lugar: true,
+            // Default razonable (deporte de equipo, fútbol 2x45') — el
+            // admin lo cambia si eligió una disciplina individual o un
+            // formato distinto. Un default que siguiera la Modalidad
+            // elegida en vivo no es posible acá: ResourceForm fija
+            // initialValues una sola vez al montar (no puede pisar lo que
+            // el admin ya tocó cada vez que cambia de disciplina).
+            tipo_cronometro: "Periodos",
+            cantidad_periodos: 2,
+            duracion_periodo_minutos: 45,
+            duracion_descanso_minutos: 15,
+          }}
           onSubmit={submitCrearGrupo}
           submitting={crearTorneo.isPending}
           submitError={crearTorneo.isError ? apiErrorMessage(crearTorneo.error) : null}

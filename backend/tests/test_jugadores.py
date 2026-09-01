@@ -29,6 +29,30 @@ async def test_obtener_jugador_anonimo_no_ve_pii(client: AsyncClient):
     assert "correo_electronico" not in body
 
 
+# Búsqueda server-side por nombre/cédula (gestion-avanzada-equipos-control-
+# mesa-plan.md, Requerimiento 2) — 05_seed.sql: Carlos Pérez / 0900000001.
+async def test_buscar_jugador_por_nombre_parcial(client: AsyncClient):
+    resp = await client.get("/api/v1/jugadores", params={"q": "Pérez"})
+    assert resp.status_code == 200
+    nombres = [j["nombre"] for j in resp.json()]
+    assert "Carlos Pérez" in nombres
+
+
+async def test_buscar_jugador_por_cedula_parcial(client: AsyncClient, admin_general_headers: dict[str, str]):
+    resp = await client.get(
+        "/api/v1/jugadores", params={"q": "0900000001"}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200
+    cedulas = [j["cedula"] for j in resp.json()]
+    assert "0900000001" in cedulas
+
+
+async def test_buscar_jugador_sin_resultados(client: AsyncClient):
+    resp = await client.get("/api/v1/jugadores", params={"q": "nadie-con-este-nombre-existe"})
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 async def test_listar_jugadores_autenticado_si_ve_pii(
     client: AsyncClient, admin_general_headers: dict[str, str]
 ):

@@ -78,6 +78,18 @@ CREATE TRIGGER trg_perfil_disciplina_upd_fecha
 BEFORE UPDATE ON JUGADOR_PERFIL_DISCIPLINA
 FOR EACH ROW EXECUTE FUNCTION fn_actualizar_fecha_modificacion();
 
+-- EQUIPO_JUGADOR_BASE y CONFIGURACION_TIEMPO_TORNEO también tienen
+-- Fecha_Modificacion (gestion-avanzada-equipos-control-mesa-plan.md).
+-- HITOS_PARTIDO NO la tiene a propósito (ver el comentario en
+-- 01_schema.sql) — no lleva este trigger.
+CREATE TRIGGER trg_equipo_jugador_base_upd_fecha
+BEFORE UPDATE ON EQUIPO_JUGADOR_BASE
+FOR EACH ROW EXECUTE FUNCTION fn_actualizar_fecha_modificacion();
+
+CREATE TRIGGER trg_config_tiempo_torneo_upd_fecha
+BEFORE UPDATE ON CONFIGURACION_TIEMPO_TORNEO
+FOR EACH ROW EXECUTE FUNCTION fn_actualizar_fecha_modificacion();
+
 -- ------------------------------------------------------------
 -- Función y trigger: coherencia de un evento de partido
 --   1. el EQUIPO_ID del evento es uno de los dos que disputan el partido
@@ -479,6 +491,118 @@ AFTER UPDATE ON PARTIDOS
 FOR EACH ROW EXECUTE FUNCTION fn_propagar_ganador_bracket();
 -- No dispara para partidos de Liga/Grupos (ambas columnas de "siguiente"
 -- son NULL ahí): la propagación es exclusiva de partidos de bracket.
+
+-- ------------------------------------------------------------
+-- Motor de Tiempos + Control de Mesa en vivo
+-- (gestion-avanzada-equipos-control-mesa-plan.md, Fase 3). Tres triggers
+-- nuevos, mismos patrones ya establecidos en este archivo (validación
+-- cruzada, propagación de estado, validación condicionada a config).
+-- ------------------------------------------------------------
+
+-- Valida secuencia y coherencia de un Hito: un torneo Corrido no admite
+-- hitos de período, Numero_Periodo solo aplica (y en rango) a hitos de
+-- período, y un mismo hito (tipo+período) no se repite en el mismo
+-- partido — salvo Pausa/Reanudacion, que sí pueden pasar varias veces.
+-- La secuencia ESTRICTA ("no Fin sin Inicio previo") queda del lado de
+-- HitoPartidoService: requiere consultar qué hitos previos existen y es
+-- la misma regla que decide qué botones habilita la UI — server-side
+-- como defensa en profundidad, pero la fuente de la regla es una sola
+-- función de servicio, no duplicada en SQL y en Python.
+CREATE OR REPLACE FUNCTION fn_validar_hito_partido()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_tipo_cronometro VARCHAR(20);
+    v_cantidad_periodos INT;
+    v_ya_existe INT;
+BEGIN
+    SELECT c.Tipo_Cronometro, c.Cantidad_Periodos
+      INTO v_tipo_cronometro, v_cantidad_periodos
+      FROM PARTIDOS p
+      JOIN CONFIGURACION_TIEMPO_TORNEO c ON c.Torneo_ID = p.Torneo_ID
+     WHERE p.ID = NEW.Partido_ID;
+
+    IF v_tipo_cronometro IS NULL THEN
+        RAISE EXCEPTION 'Este torneo todavia no tiene configuracion de tiempos.';
+    END IF;
+
+    IF v_tipo_cronometro = 'Corrido' AND NEW.Tipo_Hito IN ('Inicio_Periodo', 'Fin_Periodo') THEN
+        RAISE EXCEPTION 'Este torneo usa cronometro corrido, no admite hitos de periodo.';
+    END IF;
+
+    IF NEW.Tipo_Hito IN ('Inicio_Periodo', 'Fin_Periodo') THEN
+        IF NEW.Numero_Periodo IS NULL OR NEW.Numero_Periodo < 1 OR NEW.Numero_Periodo > v_cantidad_periodos THEN
+            RAISE EXCEPTION 'Numero de periodo invalido para este torneo.';
+        END IF;
+    ELSIF NEW.Numero_Periodo IS NOT NULL THEN
+        RAISE EXCEPTION 'Numero_Periodo solo aplica a hitos de periodo.';
+    END IF;
+
+    IF NEW.Tipo_Hito NOT IN ('Pausa', 'Reanudacion') THEN
+        SELECT COUNT(*) INTO v_ya_existe
+          FROM HITOS_PARTIDO
+         WHERE Partido_ID = NEW.Partido_ID
+           AND Tipo_Hito = NEW.Tipo_Hito
+           AND Numero_Periodo IS NOT DISTINCT FROM NEW.Numero_Periodo
+           AND ID <> COALESCE(NEW.ID, -1);
+        IF v_ya_existe > 0 THEN
+            RAISE EXCEPTION 'hito_ya_registrado';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_hito_partido_validar
+BEFORE INSERT OR UPDATE ON HITOS_PARTIDO
+FOR EACH ROW EXECUTE FUNCTION fn_validar_hito_partido();
+
+-- Sincroniza PARTIDOS.Estado con los hitos de inicio/fin de partido —
+-- mismo patrón que fn_cerrar_torneo_libera_jugadores (un hito de dominio
+-- dispara un efecto colateral en otra tabla). El PATCH /partidos/{id}
+-- directo (estado='En curso'/'Finalizado') sigue funcionando sin cambios;
+-- se recomienda que el dashboard dispare el Hito en su lugar para que
+-- vw_duracion_partido tenga siempre un Inicio_Partido auditable.
+CREATE OR REPLACE FUNCTION fn_hito_sincroniza_estado_partido()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.Tipo_Hito = 'Inicio_Partido' THEN
+        UPDATE PARTIDOS SET Estado = 'En curso' WHERE ID = NEW.Partido_ID AND Estado = 'Programado';
+    ELSIF NEW.Tipo_Hito = 'Fin_Partido' THEN
+        UPDATE PARTIDOS SET Estado = 'Finalizado' WHERE ID = NEW.Partido_ID AND Estado = 'En curso';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_hito_sincroniza_estado
+AFTER INSERT ON HITOS_PARTIDO
+FOR EACH ROW EXECUTE FUNCTION fn_hito_sincroniza_estado_partido();
+
+-- Exige Ganador_Corrido_ID al finalizar un partido de un torneo 'Corrido'
+-- — mismo patrón exacto que fn_validar_partido_eliminacion_desempate, con
+-- la disciplina de origen distinta (Tipo_Cronometro en vez de FASE.Tipo).
+-- No colisiona con ese otro trigger: cada uno mira su propia columna de
+-- configuración, y un partido Corrido normalmente no tiene FASE.Tipo='Eliminacion'.
+CREATE OR REPLACE FUNCTION fn_validar_ganador_corrido()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_tipo_cronometro VARCHAR(20);
+BEGIN
+    IF NEW.Estado = 'Finalizado' AND OLD.Estado <> 'Finalizado' THEN
+        SELECT Tipo_Cronometro INTO v_tipo_cronometro
+          FROM CONFIGURACION_TIEMPO_TORNEO WHERE Torneo_ID = NEW.Torneo_ID;
+        IF v_tipo_cronometro = 'Corrido' AND NEW.Ganador_Corrido_ID IS NULL THEN
+            RAISE EXCEPTION 'partido_corrido_sin_ganador';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_partido_validar_ganador_corrido
+BEFORE UPDATE ON PARTIDOS
+FOR EACH ROW EXECUTE FUNCTION fn_validar_ganador_corrido();
 
 -- ------------------------------------------------------------
 -- Verificación final

@@ -96,6 +96,16 @@ CREATE INDEX idx_eventos_partido_partido ON EVENTOS_PARTIDO(PARTIDOS_ID);
 CREATE INDEX idx_eventos_partido_jugador ON EVENTOS_PARTIDO(JUGADOR_ID);
 CREATE INDEX idx_eventos_partido_evento ON EVENTOS_PARTIDO(EVENTOS_ID);
 
+-- EQUIPO_JUGADOR_BASE (Plantilla Base)
+CREATE INDEX idx_equipo_jugador_base_equipo ON EQUIPO_JUGADOR_BASE(Equipo_ID);
+CREATE INDEX idx_equipo_jugador_base_perfil ON EQUIPO_JUGADOR_BASE(Jugador_Perfil_ID);
+
+-- CONFIGURACION_TIEMPO_TORNEO / HITOS_PARTIDO (Motor de Tiempos + Control de Mesa)
+CREATE INDEX idx_config_tiempo_torneo ON CONFIGURACION_TIEMPO_TORNEO(Torneo_ID);
+CREATE INDEX idx_hitos_partido_partido ON HITOS_PARTIDO(Partido_ID);
+CREATE INDEX idx_hitos_partido_usuario ON HITOS_PARTIDO(Registrado_Por);
+CREATE INDEX idx_partidos_ganador_corrido ON PARTIDOS(Ganador_Corrido_ID);
+
 -- AUDITORIA (bitacora de cambios)
 -- Misma logica que ACCESOS: la pantalla lista siempre por fecha
 -- descendente, y los otros dos son los filtros que ofrece GET /auditoria

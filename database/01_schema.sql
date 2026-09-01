@@ -209,6 +209,84 @@ CREATE TABLE TRASPASOS (
 );
 
 -- ------------------------------------------------------------
+-- Plantilla Base de un equipo (gestion-avanzada-equipos-control-mesa-plan.md,
+-- Decisión D1-C). Banco de candidatos de un equipo ANTES/independiente de
+-- cualquier torneo — explícitamente NO autoritativo: no participa de
+-- ninguna regla de elegibilidad (esa sigue siendo exclusivamente
+-- JUGADOR_EQUIPO, torneo-scoped). Se copia a JUGADOR_EQUIPO recién al
+-- inscribir el equipo a un torneo (InscripcionTorneoService), momento en
+-- el que sí pasa por fn_validar_exclusividad_torneo como cualquier otra
+-- fila. Evita reabrir la Alternativa A de D1 (roster permanente
+-- autoritativo, ya rechazada en TODOS.md): acá no hay vigencia propia que
+-- conciliar con la de JUGADOR_EQUIPO, solo candidatos.
+CREATE TABLE EQUIPO_JUGADOR_BASE (
+    ID SERIAL PRIMARY KEY,
+    Equipo_ID INT NOT NULL,
+    Jugador_Perfil_ID INT NOT NULL,
+    -- No autoritativo: valor por defecto al copiar a JUGADOR_EQUIPO. La
+    -- unicidad real de dorsal sigue viviendo en uq_dorsal_por_roster_vigente
+    -- (torneo-scoped) — acá no se valida unicidad, sería una regla
+    -- fantasma que no protege nada real.
+    Dorsal_Sugerido INT,
+    Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Baja lógica ("Quitar" en la UI) — nunca DELETE, mismo criterio que
+    -- el resto del esquema.
+    Estado VARCHAR(20) DEFAULT 'Activo'
+);
+
+-- ------------------------------------------------------------
+-- Motor de Tiempos + Control de Mesa en vivo
+-- (gestion-avanzada-equipos-control-mesa-plan.md, Fase 3).
+-- ------------------------------------------------------------
+
+-- Configuración del cronómetro de un torneo — 1:1 con TORNEO. Tabla
+-- propia en vez de columnas en TORNEO (que ya tiene 6 columnas nullable
+-- condicionadas a Formato — ver Decision Audit Trail #2 del plan): este
+-- es un eje de configuración sin relación con el formato de competición.
+CREATE TABLE CONFIGURACION_TIEMPO_TORNEO (
+    ID SERIAL PRIMARY KEY,
+    Torneo_ID INT NOT NULL,
+    Tipo_Cronometro VARCHAR(20) NOT NULL,
+    -- Requeridos si Tipo_Cronometro='Periodos', NULL si 'Corrido' — ver
+    -- chk_config_tiempo_periodos en 02_constraints.sql.
+    Cantidad_Periodos INT,
+    Duracion_Periodo_Minutos INT,
+    -- Informativo únicamente, incluso en 'Periodos': el cronómetro no lo
+    -- cuenta activamente, el entretiempo termina cuando el árbitro
+    -- presiona "Iniciar 2do Tiempo".
+    Duracion_Descanso_Minutos INT,
+    Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Hito auditable de un partido (inicio/fin de período, pausa/reanudación,
+-- fin de partido) — vocabulario único para ambos tipos de cronómetro. A
+-- diferencia de TRASPASOS (append-only), SÍ se permite UPDATE directo
+-- sobre Minuto_Reloj/Timestamp_Real (corrección de un hito mal cargado):
+-- queda capturado por el listener genérico de AUDITORIA
+-- (backend/app/core/auditoria.py), no hace falta duplicar ese mecanismo
+-- con un Fecha_Modificacion + trigger dedicado.
+CREATE TABLE HITOS_PARTIDO (
+    ID SERIAL PRIMARY KEY,
+    Partido_ID INT NOT NULL,
+    Tipo_Hito VARCHAR(20) NOT NULL,
+    -- Solo para Inicio_Periodo/Fin_Periodo (1, 2, 3...). NULL en
+    -- cualquier otro tipo — validado por fn_validar_hito_partido.
+    Numero_Periodo INT,
+    -- Momento real de reloj en que se presionó el botón — fuente de
+    -- verdad para vw_duracion_partido.
+    Timestamp_Real TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- El minuto "de juego" que mostraba el cronómetro en ese instante —
+    -- redundante respecto a Timestamp_Real a propósito (tiempo agregado,
+    -- pausas): es el número que un árbitro reconoce y quiere corregir sin
+    -- razonar sobre timestamps.
+    Minuto_Reloj INT,
+    Registrado_Por INT NOT NULL,
+    Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ------------------------------------------------------------
 -- Motor de Formatos de Competición (motor-formatos-plantillas-navegacion-
 -- plan.md, requerimiento #4). FASE formaliza lo que antes era
 -- PARTIDOS.Fase/Grupo (texto libre). Liga/Eliminación → 1 FASE. Grupos +
@@ -302,6 +380,14 @@ CREATE TABLE PARTIDOS (
     -- (penales/tiempo extra/decisión arbitral) — el sistema registra
     -- QUIÉN ganó, no CÓMO, mismo nivel de detalle que TRASPASOS.Motivo.
     Ganador_Desempate_ID INT,
+    -- Ganador de un partido "Corrido" (Tenis/Pádel — sin marcador de
+    -- goles en absoluto). Deliberadamente DISTINTA de Ganador_Desempate_ID:
+    -- esa columna resuelve un empate de goles dentro de un bracket de
+    -- Eliminación (fn_validar_partido_eliminacion_desempate, atado a
+    -- FASE.Tipo); esta se valida contra CONFIGURACION_TIEMPO_TORNEO.Tipo_Cronometro
+    -- (fn_validar_ganador_corrido, 06_triggers.sql) — significan cosas
+    -- distintas, reusar la misma columna sería más corto pero engañoso.
+    Ganador_Corrido_ID INT,
     -- Árbitro asignado a este partido. Nullable: un partido puede no tener
     -- árbitro asignado todavía. Sin esto, "el árbitro solo ve/carga SUS
     -- partidos asignados" (roles-3-modulos-plan.md, Fase 1) no es

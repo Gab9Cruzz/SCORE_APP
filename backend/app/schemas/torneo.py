@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
+from app.schemas.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoCreate, ConfiguracionTiempoTorneoOut
+
 EstadoTorneo = Literal["Activo", "Inactivo", "Finalizado"]
 # Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md,
 # requerimiento #4) — F1: CHECK enum, no tabla catálogo.
@@ -38,6 +40,11 @@ class TorneoBase(BaseModel):
     equipos_por_grupo: int | None = None
     clasificados_por_grupo: int | None = None
     incluye_tercer_lugar: bool = True
+    # Motor de Tiempos (gestion-avanzada-equipos-control-mesa-plan.md) — si
+    # no se manda, TorneoService la crea con un default derivado de
+    # Modalidad.tamano_equipo (Corrido si es individual, Periodos 2x45' si
+    # es de equipo). Nunca None una vez creado el torneo — ver TorneoOut.
+    config_tiempo: ConfiguracionTiempoTorneoCreate | None = None
 
     @field_validator("fecha_fin")
     @classmethod
@@ -101,6 +108,11 @@ class TorneoUpdate(BaseModel):
     equipos_por_grupo: int | None = None
     clasificados_por_grupo: int | None = None
     incluye_tercer_lugar: bool | None = None
+    # Si viene, TorneoService.update la crea (si no existía) o la
+    # actualiza (si ya existía) — se puede corregir en cualquier momento
+    # (EC-13 del plan: no hay trigger que lo impida, es responsabilidad
+    # del admin no cambiarla a mitad de un torneo en curso).
+    config_tiempo: ConfiguracionTiempoTorneoCreate | None = None
 
 
 class TorneoOut(TorneoBase):
@@ -120,3 +132,8 @@ class TorneoOut(TorneoBase):
     estado: EstadoTorneo
     fecha_registro: datetime
     fecha_modificacion: datetime
+    # Override: TorneoBase la tipa como *Create (lo que se manda); acá es
+    # lo que se devuelve (con id/timestamps). TorneoService la puebla
+    # explícitamente — Torneo (el modelo ORM) no tiene este atributo
+    # directo, no es una relationship de SQLAlchemy.
+    config_tiempo: ConfiguracionTiempoTorneoOut | None = None

@@ -53,6 +53,12 @@ class PartidoUpdate(BaseModel):
     # estado="Finalizado"; fn_validar_partido_eliminacion_desempate
     # rechaza el cierre si hace falta y no vino.
     ganador_desempate_id: int | None = None
+    # Motor de Tiempos (gestion-avanzada-equipos-control-mesa-plan.md):
+    # ganador de un partido "Corrido" (sin marcador de goles). Normalmente
+    # se setea desde HitoPartidoService.registrar (Fin_Partido con
+    # ganador_corrido_id) — este campo directo queda para el caso de un
+    # PATCH manual de corrección.
+    ganador_corrido_id: int | None = None
 
 
 class PartidoOut(PartidoBase):
@@ -75,5 +81,6 @@ class PartidoOut(PartidoBase):
     partido_perdedor_siguiente_id: int | None = None
     slot_perdedor_siguiente: SlotBracket | None = None
     ganador_desempate_id: int | None = None
+    ganador_corrido_id: int | None = None
     fecha_registro: datetime
     fecha_modificacion: datetime

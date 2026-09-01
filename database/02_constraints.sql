@@ -122,6 +122,41 @@ ALTER TABLE TRASPASOS
     ADD CONSTRAINT fk_traspasos_usuario FOREIGN KEY (Realizado_Por) REFERENCES USUARIOS(ID),
     ADD CONSTRAINT chk_traspasos_estado CHECK (Estado IN ('Completado', 'Anulado'));
 
+-- EQUIPO_JUGADOR_BASE (Plantilla Base — gestion-avanzada-equipos-control-mesa-plan.md, D1-C)
+-- ON DELETE CASCADE en ambas FK: a diferencia de JUGADOR_EQUIPO (rastro de
+-- roster real), esta es solo un banco de candidatos — si el equipo o el
+-- perfil desaparecen (borrado físico excepcional), no tiene sentido que
+-- el candidato sobreviva huérfano.
+ALTER TABLE EQUIPO_JUGADOR_BASE
+    ADD CONSTRAINT fk_equipo_jugador_base_equipo FOREIGN KEY (Equipo_ID) REFERENCES EQUIPOS(ID) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_equipo_jugador_base_perfil FOREIGN KEY (Jugador_Perfil_ID) REFERENCES JUGADOR_PERFIL_DISCIPLINA(ID) ON DELETE CASCADE,
+    ADD CONSTRAINT chk_equipo_jugador_base_estado CHECK (Estado IN ('Activo', 'Inactivo')),
+    ADD CONSTRAINT unique_equipo_jugador_base UNIQUE (Equipo_ID, Jugador_Perfil_ID);
+
+-- CONFIGURACION_TIEMPO_TORNEO
+-- Un solo CHECK de tabla alcanza (a diferencia de fn_validar_torneo_modalidad):
+-- todas las columnas relevantes viven en la misma fila, no hace falta
+-- cruzar tablas con un trigger.
+ALTER TABLE CONFIGURACION_TIEMPO_TORNEO
+    ADD CONSTRAINT fk_config_tiempo_torneo FOREIGN KEY (Torneo_ID) REFERENCES TORNEO(ID) ON DELETE CASCADE,
+    ADD CONSTRAINT unique_config_tiempo_torneo UNIQUE (Torneo_ID),
+    ADD CONSTRAINT chk_config_tiempo_tipo CHECK (Tipo_Cronometro IN ('Periodos', 'Corrido')),
+    ADD CONSTRAINT chk_config_tiempo_periodos CHECK (
+        (Tipo_Cronometro = 'Periodos' AND Cantidad_Periodos IS NOT NULL AND Duracion_Periodo_Minutos IS NOT NULL)
+        OR
+        (Tipo_Cronometro = 'Corrido' AND Cantidad_Periodos IS NULL AND Duracion_Periodo_Minutos IS NULL)
+    );
+
+-- HITOS_PARTIDO
+-- Registrado_Por sin ON DELETE (NO ACTION): rastro de auditoría de quién
+-- presionó el botón, mismo criterio que TRASPASOS.Realizado_Por.
+ALTER TABLE HITOS_PARTIDO
+    ADD CONSTRAINT fk_hitos_partido_partido FOREIGN KEY (Partido_ID) REFERENCES PARTIDOS(ID) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_hitos_partido_usuario FOREIGN KEY (Registrado_Por) REFERENCES USUARIOS(ID),
+    ADD CONSTRAINT chk_hitos_partido_tipo CHECK (Tipo_Hito IN (
+        'Inicio_Partido', 'Inicio_Periodo', 'Fin_Periodo', 'Pausa', 'Reanudacion', 'Fin_Partido'
+    ));
+
 -- FASE / GRUPO / GRUPO_EQUIPO / SORTEOS (Motor de Formatos, requerimiento #4)
 ALTER TABLE FASE
     ADD CONSTRAINT fk_fase_torneo FOREIGN KEY (Torneo_ID) REFERENCES TORNEO(ID) ON DELETE CASCADE,
@@ -173,6 +208,7 @@ ALTER TABLE PARTIDOS
     ADD CONSTRAINT fk_partidos_siguiente FOREIGN KEY (Partido_Siguiente_ID) REFERENCES PARTIDOS(ID) ON DELETE SET NULL,
     ADD CONSTRAINT fk_partidos_perdedor_siguiente FOREIGN KEY (Partido_Perdedor_Siguiente_ID) REFERENCES PARTIDOS(ID) ON DELETE SET NULL,
     ADD CONSTRAINT fk_partidos_ganador_desempate FOREIGN KEY (Ganador_Desempate_ID) REFERENCES EQUIPOS(ID),
+    ADD CONSTRAINT fk_partidos_ganador_corrido FOREIGN KEY (Ganador_Corrido_ID) REFERENCES EQUIPOS(ID),
     ADD CONSTRAINT chk_partidos_equipos_distintos CHECK (EQUIPOS_ID_LOCAL IS NULL OR EQUIPOS_ID_VISITANTE IS NULL OR EQUIPOS_ID_LOCAL <> EQUIPOS_ID_VISITANTE),
     ADD CONSTRAINT chk_partidos_estado CHECK (Estado IN ('Programado', 'En curso', 'Finalizado', 'Cancelado')),
     ADD CONSTRAINT chk_partidos_fase CHECK (Fase IN ('Regular', 'Grupos', 'Octavos', 'Cuartos', 'Semifinal', 'Final', 'Tercer puesto')),

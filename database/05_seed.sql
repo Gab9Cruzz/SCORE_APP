@@ -49,6 +49,13 @@ INSERT INTO TORNEO (Nombre, Disciplina_ID, Modalidad_ID, Torneo_Grupo_ID, Numero
      (SELECT ID FROM MODALIDAD WHERE Nombre = 'Fútbol 11' AND Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol')),
      (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Copa Ecotec'), 1, '2026-01-10', '2026-03-30');
 
+-- Configuración de tiempos del torneo (gestion-avanzada-equipos-control-
+-- mesa-plan.md) — todo torneo creado vía TorneoService recibe una fila acá
+-- (mismo criterio que la FASE inicial); el seed no pasa por el service,
+-- se crea a mano. Fútbol 11 -> Periodos, 2x45'.
+INSERT INTO CONFIGURACION_TIEMPO_TORNEO (Torneo_ID, Tipo_Cronometro, Cantidad_Periodos, Duracion_Periodo_Minutos, Duracion_Descanso_Minutos) VALUES
+    (1, 'Periodos', 2, 45, 15);
+
 -- Equipos
 -- Disciplina_ID/Modalidad_ID son NOT NULL desde
 -- equipos-disciplina-navegacion-plan.md: los 3 equipos de prueba juegan la

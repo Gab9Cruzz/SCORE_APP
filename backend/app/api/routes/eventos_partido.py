@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.usuario import Usuario
-from app.schemas.evento_partido import EventoPartidoCreate, EventoPartidoOut
+from app.schemas.evento_partido import EventoPartidoCreate, EventoPartidoMinutoUpdate, EventoPartidoOut
 from app.services.evento_partido import EventoPartidoService
 
 # Goles, tarjetas y cambios dentro de un partido. Distinto de /eventos, que
@@ -44,6 +44,25 @@ async def registrar_evento_partido(
     Árbitro: el chequeo de "¿es tu partido?" vive en
     EventoPartidoService.create() (D5), no acá."""
     return await EventoPartidoService(session).create(data, usuario_actual)
+
+
+@router.patch(
+    "/{evento_partido_id}",
+    response_model=EventoPartidoOut,
+    dependencies=[Depends(require_roles("TorneoAdmin", "Arbitro"))],
+)
+async def corregir_minuto_evento_partido(
+    evento_partido_id: int,
+    data: EventoPartidoMinutoUpdate,
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+) -> EventoPartidoOut:
+    """Corrección de minuto (gestion-avanzada-equipos-control-mesa-plan.md)
+    — gap preexistente: no había forma de arreglar un gol/tarjeta cargado
+    con el minuto equivocado. Se permite en cualquier estado del partido
+    (EC-15). Árbitro: mismo chequeo de "¿es tu partido?" que el resto de
+    este router."""
+    return await EventoPartidoService(session).corregir_minuto(evento_partido_id, data.minuto, usuario_actual)
 
 
 @router.post(

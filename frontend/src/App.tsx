@@ -10,6 +10,7 @@ import { AccesosAdminPage } from "./pages/admin/AccesosAdmin";
 import { AuditoriaAdminPage } from "./pages/admin/AuditoriaAdmin";
 import { UsuariosAdminPage } from "./pages/admin/UsuariosAdmin";
 import { CatalogoDisciplinasPage } from "./pages/torneo-admin/CatalogoDisciplinas";
+import { DetalleEquipoPage } from "./pages/torneo-admin/DetalleEquipo";
 import { EquiposAdminPage } from "./pages/torneo-admin/EquiposAdmin";
 import { JugadoresAdminPage } from "./pages/torneo-admin/JugadoresAdmin";
 import { PerfilJugadorAdminPage } from "./pages/torneo-admin/PerfilJugadorAdmin";
@@ -123,6 +124,12 @@ export function App() {
             </Route>
             <Route path="disciplinas" element={<CatalogoDisciplinasPage />} />
             <Route path="equipos" element={<EquiposAdminPage />} />
+            {/* Detalle del Equipo (gestion-avanzada-equipos-control-mesa-
+                plan.md, Flujo 1) — a donde redirige la creación de un
+                equipo y la acción rápida "Registrar Jugadores" del
+                listado. Alcanzable solo por link, mismo criterio que
+                jugadores/:jugadorId/perfil. */}
+            <Route path="equipos/:equipoId" element={<DetalleEquipoPage />} />
             <Route path="jugadores" element={<JugadoresAdminPage />} />
             <Route path="jugadores/:jugadorId/perfil" element={<PerfilJugadorAdminPage />} />
             {/* Alcanzable solo desde el modal "Agregar Equipo" o el botón

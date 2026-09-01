@@ -266,6 +266,15 @@ function ModalEquipo(props: {
   const [nombreEditadoAMano, setNombreEditadoAMano] = useState(false);
   const [filas, setFilas] = useState<FilaPlantilla[]>(esPareja ? [{ ...FILA_VACIA }, { ...FILA_VACIA }] : [{ ...FILA_VACIA }]);
   const [inscribiendoId, setInscribiendoId] = useState<number | null>(null);
+  // Flujo 3 del plan (Requerimiento 3): resumen de la copia automática de
+  // Plantilla Base al roster real, solo se puebla cuando hubo AL MENOS un
+  // conflicto — sin conflictos, el éxito es silencioso (mismo criterio
+  // que EC-22 del plan anterior, 0 candidatos también es silencioso).
+  const [resumenConflictos, setResumenConflictos] = useState<{
+    equipoNombre: string;
+    insertados: number;
+    conflictos: { jugador_perfil_id: number; jugador_nombre: string; mensaje: string }[];
+  } | null>(null);
 
   const catalogo = useCatalogo();
   const nombreDisciplina = catalogo.nombreDisciplina(torneoDisciplinaId);
@@ -322,17 +331,30 @@ function ModalEquipo(props: {
   }, [buscoSinResultados, otrasDisciplinas.listQuery.data, busqueda, torneoDisciplinaId]);
 
   const inscribirExistente = useMutation({
-    mutationFn: async (equipoId: number) => {
+    mutationFn: async (equipo: { id: number; nombre: string }) => {
       const { data, error } = await api.POST("/api/v1/inscripciones", {
-        body: { torneo_id: torneoId, equipo_id: equipoId },
+        body: { torneo_id: torneoId, equipo_id: equipo.id },
       } as never);
       if (error) throw error;
-      return data;
+      return { data, equipoNombre: equipo.nombre };
     },
-    onMutate: (equipoId) => setInscribiendoId(equipoId),
-    onSuccess: () => {
+    onMutate: (equipo) => setInscribiendoId(equipo.id),
+    onSuccess: ({ data, equipoNombre }) => {
       queryClient.invalidateQueries({ queryKey: ["inscripciones"] });
       setInscribiendoId(null);
+      // Requerimiento 3 / Flujo 3: la inscripción del equipo NUNCA se
+      // revierte por un conflicto de jugador — ya se creó. Si hubo
+      // alguno, se lo muestra en un modal de confirmación explícita
+      // ([Entendido]), no un toast que desaparece solo: puede haber más
+      // de un jugador excluido y el admin necesita poder anotarlos.
+      const plantillaBase = (data as { plantilla_base?: { insertados: number; conflictos: { jugador_perfil_id: number; jugador_nombre: string; mensaje: string }[] } | null }).plantilla_base;
+      if (plantillaBase && plantillaBase.conflictos.length > 0) {
+        setResumenConflictos({ equipoNombre, insertados: plantillaBase.insertados, conflictos: plantillaBase.conflictos });
+      }
+      // Sin conflictos: mismo comportamiento de siempre, el modal de
+      // búsqueda queda abierto (el equipo recién inscrito desaparece solo
+      // de la lista al refetchear `equiposYaInscritosIds`) — así el admin
+      // puede seguir inscribiendo equipos sin reabrir el modal.
     },
     onError: () => setInscribiendoId(null),
   });
@@ -421,7 +443,7 @@ function ModalEquipo(props: {
                 <button
                   type="button"
                   disabled={inscribiendoId === e.id}
-                  onClick={() => inscribirExistente.mutate(e.id)}
+                  onClick={() => inscribirExistente.mutate({ id: e.id, nombre: e.nombre })}
                 >
                   {inscribiendoId === e.id ? "Inscribiendo..." : "Inscribir"}
                 </button>
@@ -539,6 +561,28 @@ function ModalEquipo(props: {
           </>
         )}
       </div>
+
+      {resumenConflictos && (
+        <div className="modal-overlay" role="dialog" aria-label="Conflictos de plantilla base">
+          <div className="modal-panel">
+            <p>
+              Equipo inscrito. {resumenConflictos.insertados} jugador{resumenConflictos.insertados === 1 ? "" : "es"}{" "}
+              agregado{resumenConflictos.insertados === 1 ? "" : "s"}.
+            </p>
+            <p>⚠️ Alerta crítica:</p>
+            {resumenConflictos.conflictos.map((c) => (
+              <p key={c.jugador_perfil_id}>
+                {c.jugador_nombre} — {c.mensaje}
+              </p>
+            ))}
+            <div className="resource-form__actions">
+              <button type="button" onClick={() => setResumenConflictos(null)}>
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
