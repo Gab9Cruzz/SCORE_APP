@@ -23,6 +23,7 @@ class TorneoGrupoService:
         return TorneoGrupoConEdiciones(
             id=grupo.id,
             nombre=grupo.nombre,
+            estado=grupo.estado,
             fecha_registro=grupo.fecha_registro,
             fecha_modificacion=grupo.fecha_modificacion,
             ediciones=[EdicionResumen.model_validate(t) for t in ediciones],
@@ -34,7 +35,7 @@ class TorneoGrupoService:
         todas de una — no hay ninguna fila de TORNEO que tocar."""
         return await self.repo.update(id_, **data.model_dump(exclude_unset=True))
 
-    async def listar_con_ediciones(self) -> list[TorneoGrupoConEdiciones]:
+    async def listar_con_ediciones(self, incluir_archivados: bool = False) -> list[TorneoGrupoConEdiciones]:
         """Lo que consume la Pestaña Torneos (Fase 2, paso 1 del journey):
         tarjeta por grupo con todas sus ediciones.
 
@@ -45,13 +46,19 @@ class TorneoGrupoService:
         navegación por disciplina pasa a ser el punto de entrada del
         módulo y se re-consulta en cada invalidateQueries. Mismo
         response_model y mismo orden que antes: el cambio es invisible
-        desde afuera."""
-        grupos = await self.repo.listar_con_ediciones()
+        desde afuera.
+
+        3B-7: `incluir_archivados=False` (default) es el "oculta el grupo
+        de los selectores" del plan — un grupo Archivado sigue existiendo
+        entero (y sigue siendo consultable por GET /torneo-grupos/{id}
+        directo, sin filtro), solo no aparece acá salvo que se pida."""
+        grupos = await self.repo.listar_con_ediciones(incluir_archivados=incluir_archivados)
         ediciones_por_grupo = await self.torneo_repo.ediciones_por_grupo([g.id for g in grupos])
         return [
             TorneoGrupoConEdiciones(
                 id=grupo.id,
                 nombre=grupo.nombre,
+                estado=grupo.estado,
                 fecha_registro=grupo.fecha_registro,
                 fecha_modificacion=grupo.fecha_modificacion,
                 ediciones=[

@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-MotivoFallo = Literal["credenciales", "inactivo"]
+MotivoFallo = Literal["credenciales", "inactivo", "bloqueado"]
 
 
 class AccesoOut(BaseModel):

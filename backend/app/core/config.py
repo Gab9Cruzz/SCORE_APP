@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     # app/main.py). 0 = no purgar nunca.
     auditoria_retencion_dias: int = 30
 
+    # Rate limiting de login (3B-14, docs/plans/cierre-backlog-todos-plan.md):
+    # 5 fallos de CREDENCIALES (no cuenta 'inactivo' ni 'bloqueado', ver
+    # UsuarioService.login) por (username, IP) en los últimos 15 minutos
+    # bloquea nuevos intentos por otros 15 minutos. 0 en cualquiera de los
+    # dos apaga el rate limiting por completo (mismo criterio "0 = off"
+    # que accesos_retencion_dias).
+    login_rate_limit_intentos: int = 5
+    login_rate_limit_ventana_minutos: int = 15
+
     cors_origins: str = "*"
     api_v1_prefix: str = "/api/v1"
 

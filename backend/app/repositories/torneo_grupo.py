@@ -35,12 +35,18 @@ class TorneoGrupoRepository(BaseRepository[TorneoGrupo]):
             {"torneo_grupo_id": torneo_grupo_id},
         )
 
-    async def listar_con_ediciones(self) -> list[TorneoGrupo]:
+    async def listar_con_ediciones(self, incluir_archivados: bool = False) -> list[TorneoGrupo]:
         """Todos los grupos — el llamador (TorneoGrupoService) arma la
         lista de ediciones de cada uno por separado vía Torneo.list, para
         no depender de que la relación ORM esté declarada (no lo está: los
         modelos de este proyecto no usan `relationship()`, solo FKs
-        planas, mismo criterio que el resto de los modelos)."""
+        planas, mismo criterio que el resto de los modelos).
+
+        3B-7 (docs/plans/cierre-backlog-todos-plan.md): sin
+        `incluir_archivados`, un grupo Estado='Archivado' no entra —
+        "oculta el grupo de los selectores" del plan."""
         stmt = select(TorneoGrupo).order_by(TorneoGrupo.nombre)
+        if not incluir_archivados:
+            stmt = stmt.where(TorneoGrupo.estado == "Activo")
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

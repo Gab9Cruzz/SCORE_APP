@@ -218,3 +218,62 @@ async def test_traspaso_con_destino_inexistente(client: AsyncClient, admin_gener
     # destino antes de intentar el insert — 404 limpio, no un 500/409 crudo
     # de una FK violation.
     assert resp.status_code == 404, resp.text
+
+
+async def test_traspaso_entre_ediciones_distintas_es_rechazado(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    """3B-8 (docs/plans/cierre-backlog-todos-plan.md): TRASPASOS siempre
+    asumió la misma edición en origen y destino (la UI de
+    TraspasosDelTorneo.tsx ya solo ofrece pickers de esta edición), pero
+    nada lo exigía en el backend — un curl directo con una inscripción de
+    OTRO torneo colaba un "traspaso" que en los hechos es un alta nueva en
+    otra edición, no algo que TRASPASOS pueda modelar."""
+    perfil_id = await _perfil_de_carlos(client)
+
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "disciplina_id": 1,
+            "modalidad_id": 1,
+            "torneo_grupo_nombre": "Otra Edicion 3B8",
+            "fecha_inicio": "2026-05-01",
+            "fecha_fin": "2026-06-01",
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    otro_torneo_id = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/equipos",
+        json={"nombre": "Equipo Otra Edicion 3B8", "disciplina_id": 1, "modalidad_id": 1},
+        headers=admin_general_headers,
+    )
+    otro_equipo_id = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/inscripciones",
+        json={"torneo_id": otro_torneo_id, "equipo_id": otro_equipo_id},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    inscripcion_otra_edicion = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/traspasos",
+        json={
+            "jugador_perfil_id": perfil_id,
+            "inscripcion_origen_id": INSCRIPCION_TIBURONES,
+            "inscripcion_destino_id": inscripcion_otra_edicion,
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 400, resp.text
+    assert "misma edición" in resp.json()["detail"].lower()
+
+    # Rechazado ANTES de tocar nada — el origen sigue Activo, no quedó a
+    # medio traspasar.
+    resp = await client.get("/api/v1/plantillas", params={"inscripcion_torneo_id": INSCRIPCION_TIBURONES})
+    fila_origen = next(f for f in resp.json() if f["jugador_perfil_id"] == perfil_id)
+    assert fila_origen["estado"] == "Activo"

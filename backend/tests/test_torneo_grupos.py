@@ -46,6 +46,87 @@ async def test_renombrar_torneo_grupo_sin_auth_falla(client: AsyncClient):
     assert resp.status_code == 401
 
 
+async def test_archivar_torneo_grupo_lo_oculta_del_listado_sin_tocar_ediciones(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    """3B-7 (docs/plans/cierre-backlog-todos-plan.md): baja lógica, sin
+    cascada — el grupo desaparece de GET /torneo-grupos por default, pero
+    su edición sigue existiendo tal cual (consultable directo por ID,
+    Torneo intacto)."""
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "disciplina_id": 1,
+            "modalidad_id": 1,
+            "torneo_grupo_nombre": "Grupo A Archivar",
+            "fecha_inicio": "2026-05-01",
+            "fecha_fin": "2026-06-01",
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    grupo_id = resp.json()["torneo_grupo_id"]
+    torneo_id = resp.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/torneo-grupos/{grupo_id}", json={"estado": "Archivado"}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["estado"] == "Archivado"
+
+    resp = await client.get("/api/v1/torneo-grupos")
+    ids = {g["id"] for g in resp.json()}
+    assert grupo_id not in ids
+
+    # Sigue existiendo entero — GET directo por ID no filtra.
+    resp = await client.get(f"/api/v1/torneo-grupos/{grupo_id}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["estado"] == "Archivado"
+    assert len(resp.json()["ediciones"]) == 1
+
+    # incluir_archivados=true lo trae de vuelta al listado.
+    resp = await client.get("/api/v1/torneo-grupos", params={"incluir_archivados": True})
+    ids = {g["id"] for g in resp.json()}
+    assert grupo_id in ids
+
+    # La edición (TORNEO) no se tocó — sigue consultable/jugable tal cual.
+    resp = await client.get(f"/api/v1/torneos/{torneo_id}")
+    assert resp.status_code == 200, resp.text
+
+
+async def test_reactivar_torneo_grupo_lo_devuelve_al_listado(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "disciplina_id": 1,
+            "modalidad_id": 1,
+            "torneo_grupo_nombre": "Grupo A Reactivar",
+            "fecha_inicio": "2026-05-01",
+            "fecha_fin": "2026-06-01",
+        },
+        headers=admin_general_headers,
+    )
+    grupo_id = resp.json()["torneo_grupo_id"]
+
+    await client.patch(f"/api/v1/torneo-grupos/{grupo_id}", json={"estado": "Archivado"}, headers=admin_general_headers)
+    resp = await client.patch(
+        f"/api/v1/torneo-grupos/{grupo_id}", json={"estado": "Activo"}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["estado"] == "Activo"
+
+    resp = await client.get("/api/v1/torneo-grupos")
+    ids = {g["id"] for g in resp.json()}
+    assert grupo_id in ids
+
+
+async def test_archivar_torneo_grupo_sin_auth_falla(client: AsyncClient):
+    resp = await client.patch("/api/v1/torneo-grupos/1", json={"estado": "Archivado"})
+    assert resp.status_code == 401
+
+
 async def test_torneo_grupo_inexistente_da_404(client: AsyncClient):
     resp = await client.get("/api/v1/torneo-grupos/999999")
     assert resp.status_code == 404

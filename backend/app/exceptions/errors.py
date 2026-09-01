@@ -50,3 +50,17 @@ class ForbiddenError(Exception):
     def __init__(self, detail: str = "No tenés permiso para esta operación."):
         self.detail = detail
         super().__init__(self.detail)
+
+
+class RateLimitError(Exception):
+    """3B-14 (docs/plans/cierre-backlog-todos-plan.md): demasiados intentos
+    de login fallidos en la ventana reciente. Distinta de AuthError (401)
+    a propósito — un cliente que sepa distinguir "contraseña incorrecta"
+    de "bloqueado temporalmente" (429, con Retry-After) no tiene por qué
+    tratarlas igual, aunque ninguna pantalla de este proyecto lo haga
+    todavía."""
+
+    def __init__(self, detail: str, retry_after_seconds: int):
+        self.detail = detail
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(self.detail)

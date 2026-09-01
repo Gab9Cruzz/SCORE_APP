@@ -25,6 +25,10 @@ ALTER TABLE MODALIDAD
     ADD CONSTRAINT chk_modalidad_estado CHECK (Estado IN ('Activo', 'Inactivo')),
     ADD CONSTRAINT unique_modalidad_por_disciplina UNIQUE (Disciplina_ID, Nombre);
 
+-- TORNEO_GRUPO (3B-7, docs/plans/cierre-backlog-todos-plan.md)
+ALTER TABLE TORNEO_GRUPO
+    ADD CONSTRAINT chk_torneo_grupo_estado CHECK (Estado IN ('Activo', 'Archivado'));
+
 -- TORNEO
 -- Disciplina_ID/Modalidad_ID: ON DELETE sin especificar (NO ACTION) a
 -- propósito — son catálogos que se dan de baja lógica (Estado), nunca se
@@ -233,11 +237,17 @@ ALTER TABLE EVENTOS
 -- (Exitoso, Motivo): un acceso exitoso no tiene motivo de fallo, y uno
 -- fallido siempre dice por que — sin eso, "Motivo NULL" seria ambiguo
 -- entre "entro bien" y "fallo y no anotamos por que".
+-- 'bloqueado' (3B-14, docs/plans/cierre-backlog-todos-plan.md): el intento
+-- llegó durante el rate limit — ni siquiera se verificó la contraseña.
+-- Distinto de 'credenciales' a propósito: si contara para el umbral de
+-- fallos, cada intento bloqueado extendería la ventana de bloqueo sola
+-- (UsuarioService.login solo cuenta motivo='credenciales' al decidir si
+-- bloquear).
 ALTER TABLE ACCESOS
     ADD CONSTRAINT fk_accesos_usuario FOREIGN KEY (Usuario_ID) REFERENCES USUARIOS(ID),
     ADD CONSTRAINT chk_accesos_motivo CHECK (
         (Exitoso = TRUE AND Motivo IS NULL)
-     OR (Exitoso = FALSE AND Motivo IN ('credenciales', 'inactivo'))
+     OR (Exitoso = FALSE AND Motivo IN ('credenciales', 'inactivo', 'bloqueado'))
     );
 
 

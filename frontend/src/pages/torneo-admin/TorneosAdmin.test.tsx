@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi } from "vitest";
@@ -558,5 +558,100 @@ describe("TorneosAdminPage — filtro de Estado + persistencia en URL (3A-9/3A-1
     expect(await screen.findByText("Liga Relámpago")).toBeInTheDocument();
     expect(screen.getByText("Copa Fútbol 5")).toBeInTheDocument();
     expect(screen.getByTestId("querystring")).toHaveTextContent("");
+  });
+});
+
+describe("TorneosAdminPage — archivar/reactivar TORNEO_GRUPO (3B-7)", () => {
+  const GRUPO_ACTIVO = {
+    id: 1,
+    nombre: "Liga Activa",
+    estado: "Activo",
+    ediciones: [
+      { id: 10, numero_edicion: 1, disciplina_id: 1, modalidad_id: 1, estado: "Activo", fecha_inicio: "2026-03-01", fecha_fin: "2026-05-15" },
+    ],
+  };
+  const GRUPO_ARCHIVADO = {
+    id: 2,
+    nombre: "Liga Vieja",
+    estado: "Archivado",
+    ediciones: [
+      { id: 11, numero_edicion: 1, disciplina_id: 1, modalidad_id: 1, estado: "Finalizado", fecha_inicio: "2025-03-01", fecha_fin: "2025-05-15" },
+    ],
+  };
+
+  function montarConToggleDeArchivados() {
+    mockCatalogos();
+    server.use(
+      http.get("http://127.0.0.1:8000/api/v1/torneo-grupos", ({ request }) => {
+        const incluirArchivados = new URL(request.url).searchParams.get("incluir_archivados") === "true";
+        return HttpResponse.json(incluirArchivados ? [GRUPO_ACTIVO, GRUPO_ARCHIVADO] : [GRUPO_ACTIVO]);
+      }),
+    );
+    const Wrapper = createWrapper();
+    return render(
+      <Wrapper>
+        <TorneosAdminPage />
+      </Wrapper>,
+    );
+  }
+
+  it("un grupo Archivado no aparece por default, ni con 'Ver archivados' apagado", async () => {
+    montarConToggleDeArchivados();
+
+    await screen.findByText("Liga Activa");
+    expect(screen.queryByText("Liga Vieja")).not.toBeInTheDocument();
+  });
+
+  it("tildar 'Ver archivados' trae también los archivados, con su badge", async () => {
+    montarConToggleDeArchivados();
+    const user = userEvent.setup();
+    await screen.findByText("Liga Activa");
+
+    await user.click(screen.getByRole("checkbox", { name: "Ver archivados" }));
+
+    expect(await screen.findByText("Liga Vieja")).toBeInTheDocument();
+    const filaVieja = screen.getByText("Liga Vieja").closest("h2") as HTMLElement;
+    expect(within(filaVieja).getByText("Archivado")).toBeInTheDocument();
+  });
+
+  it("'Archivar' manda el PATCH correcto y saca la tarjeta de la vista", async () => {
+    montarConToggleDeArchivados();
+    const user = userEvent.setup();
+    await screen.findByText("Liga Activa");
+
+    let cuerpoRecibido: unknown;
+    server.use(
+      http.patch("http://127.0.0.1:8000/api/v1/torneo-grupos/1", async ({ request }) => {
+        cuerpoRecibido = await request.json();
+        return HttpResponse.json({ id: 1, nombre: "Liga Activa", estado: "Archivado", fecha_registro: "2026-01-01T00:00:00", fecha_modificacion: "2026-01-01T00:00:00" });
+      }),
+    );
+
+    const tarjeta = screen.getByText("Liga Activa").closest(".tarjeta-torneo") as HTMLElement;
+    await user.click(within(tarjeta).getByRole("button", { name: "Archivar" }));
+
+    await waitFor(() => expect(cuerpoRecibido).toEqual({ estado: "Archivado" }));
+  });
+
+  it("'Reactivar' aparece en un grupo Archivado y manda estado: Activo", async () => {
+    montarConToggleDeArchivados();
+    const user = userEvent.setup();
+    await screen.findByText("Liga Activa");
+    await user.click(screen.getByRole("checkbox", { name: "Ver archivados" }));
+    await screen.findByText("Liga Vieja");
+
+    let cuerpoRecibido: unknown;
+    server.use(
+      http.patch("http://127.0.0.1:8000/api/v1/torneo-grupos/2", async ({ request }) => {
+        cuerpoRecibido = await request.json();
+        return HttpResponse.json({ id: 2, nombre: "Liga Vieja", estado: "Activo", fecha_registro: "2026-01-01T00:00:00", fecha_modificacion: "2026-01-01T00:00:00" });
+      }),
+    );
+
+    const tarjeta = screen.getByText("Liga Vieja").closest(".tarjeta-torneo") as HTMLElement;
+    expect(within(tarjeta).queryByRole("button", { name: "Archivar" })).not.toBeInTheDocument();
+    await user.click(within(tarjeta).getByRole("button", { name: "Reactivar" }));
+
+    await waitFor(() => expect(cuerpoRecibido).toEqual({ estado: "Activo" }));
   });
 });

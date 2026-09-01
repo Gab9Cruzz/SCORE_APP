@@ -9,7 +9,7 @@ interface AccesoRow {
   usuario_id: number | null;
   username: string;
   exitoso: boolean;
-  motivo: "credenciales" | "inactivo" | null;
+  motivo: "credenciales" | "inactivo" | "bloqueado" | null;
   ip: string | null;
   user_agent: string | null;
   fecha: string;
@@ -19,13 +19,15 @@ const formatearFechaHora = (iso: string) =>
   new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "medium" });
 
 /** El motivo crudo de la base es un código corto ('credenciales',
- * 'inactivo'); acá se traduce a algo que se lee. Los dos textos dicen cosas
- * distintas a propósito: quien audita necesita separar "alguien está
- * probando contraseñas" de "una cuenta dada de baja sigue intentando
- * entrar con las suyas, que son correctas". */
+ * 'inactivo', 'bloqueado'); acá se traduce a algo que se lee. Los tres
+ * textos dicen cosas distintas a propósito: quien audita necesita separar
+ * "alguien está probando contraseñas" de "una cuenta dada de baja sigue
+ * intentando entrar con las suyas, que son correctas" de "el rate limit
+ * de 3B-14 ya lo frenó, ni se llegó a verificar la contraseña". */
 const MOTIVO: Record<string, string> = {
   credenciales: "Usuario o contraseña incorrectos",
   inactivo: "Cuenta inactiva",
+  bloqueado: "Bloqueado por intentos fallidos (rate limit)",
 };
 
 /** Navegador y sistema, sacados del User-Agent. No es identificación: es

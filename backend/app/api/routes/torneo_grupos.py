@@ -8,17 +8,25 @@ from app.services.torneo_grupo import TorneoGrupoService
 
 # Un TORNEO_GRUPO se CREA implícitamente vía POST /torneos con
 # torneo_grupo_nombre (torneos-admin-plan.md, D-Eng-1) — no hay un
-# POST acá. Esto solo lista lo agrupado (para la Pestaña Torneos) y
-# permite renombrar (EC-25).
+# POST acá. Esto solo lista lo agrupado (para la Pestaña Torneos),
+# permite renombrar (EC-25) y archivar/reactivar (3B-7,
+# cierre-backlog-todos-plan.md) — nunca DELETE, ver el comentario de
+# Estado en 01_schema.sql.
 router = APIRouter(prefix="/torneo-grupos", tags=["Torneo Grupos"])
 
 
 @router.get("", response_model=list[TorneoGrupoConEdiciones])
-async def listar_torneo_grupos(session: AsyncSession = Depends(get_db)) -> list[TorneoGrupoConEdiciones]:
+async def listar_torneo_grupos(
+    incluir_archivados: bool = False, session: AsyncSession = Depends(get_db)
+) -> list[TorneoGrupoConEdiciones]:
     """Tarjeta por grupo con sus ediciones (Fase 2, paso 1 del journey) —
     "N ediciones" y cuál es la más reciente/activa se calculan acá, no en
-    cada componente de frontend que necesite la lista (D-Eng-1)."""
-    return await TorneoGrupoService(session).listar_con_ediciones()
+    cada componente de frontend que necesite la lista (D-Eng-1).
+
+    3B-7 (docs/plans/cierre-backlog-todos-plan.md): sin
+    `incluir_archivados`, los grupos Archivado no aparecen — TorneosAdminPage
+    los pide explícito solo cuando el admin activa "Ver archivados"."""
+    return await TorneoGrupoService(session).listar_con_ediciones(incluir_archivados=incluir_archivados)
 
 
 @router.get("/{torneo_grupo_id}", response_model=TorneoGrupoConEdiciones)

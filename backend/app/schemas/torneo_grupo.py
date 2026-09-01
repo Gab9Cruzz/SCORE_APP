@@ -1,6 +1,9 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
+
+EstadoTorneoGrupo = Literal["Activo", "Archivado"]
 
 
 class TorneoGrupoOut(BaseModel):
@@ -8,16 +11,20 @@ class TorneoGrupoOut(BaseModel):
 
     id: int
     nombre: str
+    estado: EstadoTorneoGrupo
     fecha_registro: datetime
     fecha_modificacion: datetime
 
 
 class TorneoGrupoUpdate(BaseModel):
-    """Solo renombrar — torneos-admin-plan.md, EC-25: permitido sin
-    restricción, actualiza el nombre mostrado de todas sus ediciones
-    porque se compone en runtime (nunca se guarda concatenado)."""
+    """Renombrar (torneos-admin-plan.md, EC-25: permitido sin restricción,
+    actualiza el nombre mostrado de todas sus ediciones porque se compone
+    en runtime, nunca se guarda concatenado) y/o archivar/reactivar (3B-7,
+    docs/plans/cierre-backlog-todos-plan.md). Los dos campos opcionales:
+    un PATCH que solo archiva no debería tener que repetir el nombre."""
 
-    nombre: str
+    nombre: str | None = None
+    estado: EstadoTorneoGrupo | None = None
 
 
 class EdicionResumen(BaseModel):

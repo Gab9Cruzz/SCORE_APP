@@ -22,3 +22,7 @@ class TorneoGrupo(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(100))
+    # 3B-7 (docs/plans/cierre-backlog-todos-plan.md): baja lógica, sin
+    # cascada — 'Archivado' solo oculta el grupo de /torneo-grupos por
+    # default, sus TORNEO (ediciones) existentes no se tocan.
+    estado: Mapped[str] = mapped_column(String(20), default="Activo")

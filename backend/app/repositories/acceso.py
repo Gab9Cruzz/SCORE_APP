@@ -83,3 +83,26 @@ class AccesoRepository(BaseRepository[Acceso]):
         """Total de filas — para poder decir en el log cuántas quedaron."""
         result = await self.session.execute(select(func.count()).select_from(Acceso))
         return result.scalar_one()
+
+    async def contar_fallos_credenciales_recientes(self, username: str, ip: str | None, desde: datetime) -> int:
+        """3B-14 (docs/plans/cierre-backlog-todos-plan.md): fallos de
+        CREDENCIALES (no 'inactivo' ni 'bloqueado' — ver el comentario de
+        chk_accesos_motivo en 02_constraints.sql) para este (username, IP)
+        desde `desde`. Por (username, IP) juntos, no username solo: bloquear
+        por username solo dejaría que cualquiera bloquee la cuenta de otro
+        con solo teclear su username mal a propósito (DoS barato); por IP
+        sola tampoco alcanza, una IP compartida (oficina, NAT) bloquearía a
+        todos por los fallos de uno.
+
+        `username` compara EXACTO (no ilike como `listar`, pensado para un
+        humano buscando en la bitácora) — acá es el mismo string que
+        UsuarioService.login recibió, no una búsqueda."""
+        stmt = select(func.count()).select_from(Acceso).where(
+            Acceso.username == username,
+            Acceso.motivo == "credenciales",
+            Acceso.fecha >= desde,
+        )
+        if ip is not None:
+            stmt = stmt.where(Acceso.ip == ip)
+        result = await self.session.execute(stmt)
+        return result.scalar_one()

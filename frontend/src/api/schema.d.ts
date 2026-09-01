@@ -332,6 +332,10 @@ export interface paths {
          * @description Tarjeta por grupo con sus ediciones (Fase 2, paso 1 del journey) —
          *     "N ediciones" y cuál es la más reciente/activa se calculan acá, no en
          *     cada componente de frontend que necesite la lista (D-Eng-1).
+         *
+         *     3B-7 (docs/plans/cierre-backlog-todos-plan.md): sin
+         *     `incluir_archivados`, los grupos Archivado no aparecen — TorneosAdminPage
+         *     los pide explícito solo cuando el admin activa "Ver archivados".
          */
         get: operations["listar_torneo_grupos_api_v1_torneo_grupos_get"];
         put?: never;
@@ -1269,7 +1273,7 @@ export interface components {
             /** Exitoso */
             exitoso: boolean;
             /** Motivo */
-            motivo: ("credenciales" | "inactivo") | null;
+            motivo: ("credenciales" | "inactivo" | "bloqueado") | null;
             /** Ip */
             ip: string | null;
             /** User Agent */
@@ -2635,6 +2639,11 @@ export interface components {
             /** Nombre */
             nombre: string;
             /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Activo" | "Archivado";
+            /**
              * Fecha Registro
              * Format: date-time
              */
@@ -2654,6 +2663,11 @@ export interface components {
             /** Nombre */
             nombre: string;
             /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Activo" | "Archivado";
+            /**
              * Fecha Registro
              * Format: date-time
              */
@@ -2666,13 +2680,17 @@ export interface components {
         };
         /**
          * TorneoGrupoUpdate
-         * @description Solo renombrar — torneos-admin-plan.md, EC-25: permitido sin
-         *     restricción, actualiza el nombre mostrado de todas sus ediciones
-         *     porque se compone en runtime (nunca se guarda concatenado).
+         * @description Renombrar (torneos-admin-plan.md, EC-25: permitido sin restricción,
+         *     actualiza el nombre mostrado de todas sus ediciones porque se compone
+         *     en runtime, nunca se guarda concatenado) y/o archivar/reactivar (3B-7,
+         *     docs/plans/cierre-backlog-todos-plan.md). Los dos campos opcionales:
+         *     un PATCH que solo archiva no debería tener que repetir el nombre.
          */
         TorneoGrupoUpdate: {
             /** Nombre */
-            nombre: string;
+            nombre?: string | null;
+            /** Estado */
+            estado?: ("Activo" | "Archivado") | null;
         };
         /** TorneoOut */
         TorneoOut: {
@@ -3549,7 +3567,9 @@ export interface operations {
     };
     listar_torneo_grupos_api_v1_torneo_grupos_get: {
         parameters: {
-            query?: never;
+            query?: {
+                incluir_archivados?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3563,6 +3583,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TorneoGrupoConEdiciones"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

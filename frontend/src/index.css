@@ -239,6 +239,23 @@ td:first-child {
   color: var(--warning);
 }
 
+/* TORNEO_GRUPO archivado (3B-7, docs/plans/cierre-backlog-todos-plan.md)
+ * — mismo tono neutro que .badge--finalizado: "ya no compite por
+ * atención", no un error ni una advertencia. */
+.badge--archivado {
+  background: rgba(147, 160, 189, 0.15);
+  margin-left: 0.4rem;
+}
+
+.ver-archivados-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0.5rem 0;
+}
+
 .error-text {
   color: var(--danger);
 }
@@ -393,6 +410,16 @@ td:first-child {
 
 .carga-evento {
   min-height: 220px;
+}
+
+/* 3B-1 (docs/plans/cierre-backlog-todos-plan.md): "sin conexión" en
+ * Control de Mesa — tono de advertencia, no de error (no rompió nada
+ * todavía, solo avisa por qué los eventos van a encolarse). */
+.mesa-offline-aviso {
+  background: rgba(224, 178, 58, 0.15);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
 }
 
 .tap-grid {

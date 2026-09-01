@@ -9,6 +9,7 @@ from app.exceptions.errors import (
     DomainRuleError,
     ForbiddenError,
     NotFoundError,
+    RateLimitError,
 )
 
 # asyncpg antepone el SQLSTATE y un preámbulo largo al mensaje. Esto se queda
@@ -59,6 +60,14 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ForbiddenError)
     async def _forbidden(_: Request, exc: ForbiddenError) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": exc.detail})
+
+    @app.exception_handler(RateLimitError)
+    async def _rate_limit(_: Request, exc: RateLimitError) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={"detail": exc.detail},
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        )
 
     # Red de seguridad: si un repositorio se olvida de atrapar un error de
     # Postgres y lo traduce a una excepción de dominio, esto evita que el

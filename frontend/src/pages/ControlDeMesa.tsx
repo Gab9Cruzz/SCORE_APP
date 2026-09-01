@@ -1,10 +1,41 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, apiErrorMessage } from "../api/client";
 import { useAuth } from "../auth/useAuth";
+import { useOnlineStatus } from "../hooks/useOnlineStatus";
+import {
+  type EventoPendiente,
+  guardarEventoPendiente,
+  leerEventoPendiente,
+  limpiarEventoPendiente,
+} from "../lib/colaOfflineEventos";
 import { Cronometro } from "./Cronometro";
 
+/** 3B-1 (docs/plans/cierre-backlog-todos-plan.md): distingue "no hay red"
+ * de "el backend rechazó la request" — solo el primer caso debe encolarse
+ * para reintentar solo, un 400/409 real (jugador ajeno al equipo, minuto
+ * fuera de rango...) reintentado a ciegas nunca va a pasar y confundiría
+ * más que un error inmediato. `fetch` tira `TypeError` cuando no llega a
+ * conectar (a diferencia de un 4xx/5xx, que sí resuelve una Response) —
+ * es la señal más confiable sin inventar un código de error propio. */
+function esErrorDeRed(error: unknown): boolean {
+  return error instanceof TypeError;
+}
+
+type EventoBody = {
+  partidos_id: number;
+  jugador_id: number;
+  equipo_id: number;
+  eventos_id: number;
+  jugador_id_entra?: number | null;
+  minuto: number;
+};
+
 const LIVE_POLL_MS = 5000;
+// 3B-1: cada cuánto reintenta solo un evento en cola, además de cuando
+// dispara el evento "online" del navegador — ver el efecto de reintento
+// en MesaPanel para por qué hace falta el intervalo además del evento.
+const INTERVALO_REINTENTO_MS = 15000;
 
 type TipoEvento = "Gol" | "Autogol" | "Tarjeta Amarilla" | "Tarjeta Roja" | "Cambio";
 const TIPOS: TipoEvento[] = ["Gol", "Autogol", "Tarjeta Amarilla", "Tarjeta Roja", "Cambio"];
@@ -183,6 +214,13 @@ function EditorFechaPartido(props: {
 export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver: () => void }) {
   const queryClient = useQueryClient();
   const { session } = useAuth();
+  const online = useOnlineStatus();
+  // 3B-1: se carga del localStorage al montar (no en un useEffect) para
+  // que un refresh de página a mitad de un corte no pierda el evento que
+  // ya se había guardado — mismo criterio que HITOS_PARTIDO (ver
+  // Cronometro.tsx): el estado real vive afuera del componente, esto solo
+  // lo refleja.
+  const [pendiente, setPendiente] = useState<EventoPendiente | null>(() => leerEventoPendiente(partidoId));
 
   const partidoQuery = useQuery({
     queryKey: ["partido", partidoId],
@@ -282,14 +320,7 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
   }, [eventosRegistrados, eventoNombrePorId, equipoLocalId]);
 
   const mutation = useMutation({
-    mutationFn: async (body: {
-      partidos_id: number;
-      jugador_id: number;
-      equipo_id: number;
-      eventos_id: number;
-      jugador_id_entra?: number | null;
-      minuto: number;
-    }) => {
+    mutationFn: async (body: EventoBody) => {
       const { data, error } = await api.POST("/api/v1/eventos-partido", { body });
       if (error) throw error;
       return data;
@@ -298,6 +329,82 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
       queryClient.invalidateQueries({ queryKey: ["eventos-partido", partidoId] });
     },
   });
+
+  // 3B-1: mensaje del intento de FLUSH automático (al reconectar) — no
+  // reusa `mutation.error`, que es de la última mutación disparada
+  // (podría quedar mostrando un fallo de un flush viejo sobre el form de
+  // carga normal, que es una mutación distinta en el tiempo aunque
+  // comparta el mismo hook). `null` = sin error que mostrar.
+  const [errorPendiente, setErrorPendiente] = useState<string | null>(null);
+
+  /** Reemplaza el `onSubmit={(body) => mutation.mutate(body)}` directo
+   * que tenía este panel: intenta la carga normal, y si falla
+   * específicamente por falta de red (no por un rechazo real del
+   * backend — ver esErrorDeRed), la guarda para reintentar sola al
+   * reconectar en vez de perderla.
+   *
+   * Devuelve si CargaEvento debe resetear el form (`true`) o quedarse en
+   * la pantalla de confirmación mostrando el error (`false`) — cargado
+   * con éxito Y encolado para enviar solo son los dos casos "true": en
+   * ninguno de los dos el admin tiene algo más que hacer con ESTE
+   * formulario. Solo un rechazo real del backend (ni red ni éxito)
+   * amerita dejarlo abierto. */
+  async function manejarSubmitEvento(body: EventoBody): Promise<boolean> {
+    try {
+      await mutation.mutateAsync(body);
+      return true;
+    } catch (error) {
+      if (esErrorDeRed(error)) {
+        guardarEventoPendiente(partidoId, body);
+        setPendiente(leerEventoPendiente(partidoId));
+        return true;
+      }
+      // No es de red: mutation.error ya queda seteado (mutateAsync
+      // relanza la excepción) y CargaEvento lo muestra — se queda abierto.
+      return false;
+    }
+  }
+
+  /** Intenta enviar lo que está en la cola — la llama tanto el efecto de
+   * reconexión (automático) como el botón "Reintentar ahora" (manual, por
+   * si el admin sabe que ya hay señal antes de que el navegador se entere). */
+  async function flushPendiente(body: EventoBody) {
+    try {
+      await mutation.mutateAsync(body);
+      limpiarEventoPendiente(partidoId);
+      setPendiente(null);
+      setErrorPendiente(null);
+    } catch (error) {
+      if (!esErrorDeRed(error)) {
+        limpiarEventoPendiente(partidoId);
+        setPendiente(null);
+        setErrorPendiente(apiErrorMessage(error, "El evento pendiente no se pudo guardar — cargalo de nuevo."));
+      }
+      // Sigue siendo de red: queda tal cual en la cola, sin marcar error
+      // (todavía no es un fallo definitivo, es "seguimos sin conexión").
+    }
+  }
+
+  // Reintento automático de lo pendiente: el evento "online" del
+  // navegador (rápido cuando SÍ dispara) + un intervalo de respaldo — un
+  // wifi de cancha que sigue "conectado" pero intermitente no siempre
+  // dispara online/offline, así que atarse solo a ese evento dejaría la
+  // cola sin reintentar hasta el próximo "Reintentar ahora" manual. No
+  // depende de `online` (el estado del hook, para el banner) — la fuente
+  // de verdad de si YA hay señal es el resultado real del POST, no lo que
+  // el navegador cree.
+  useEffect(() => {
+    if (!pendiente) return;
+    const { guardadoEn: _guardadoEn, ...body } = pendiente;
+    const intentar = () => void flushPendiente(body);
+    const intervalo = setInterval(intentar, INTERVALO_REINTENTO_MS);
+    window.addEventListener("online", intentar);
+    return () => {
+      clearInterval(intervalo);
+      window.removeEventListener("online", intentar);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendiente]);
 
   // Corrección de minuto de un evento ya cargado (gestion-avanzada-
   // equipos-control-mesa-plan.md, Entregable 3 — "cargué un gol en el
@@ -373,22 +480,69 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
           service — solo 'En curso' habilita carga nueva. 'Finalizado'
           sigue mostrando la timeline con corrección de minuto habilitada
           más abajo (EC-15), no se toca acá. */}
+      {/* 3B-1 (docs/plans/cierre-backlog-todos-plan.md, offline-first en
+          Control de Mesa, alcance reducido): indicador de "sin conexión"
+          — informativo aunque no haya nada pendiente todavía, para que el
+          árbitro sepa POR QUÉ un evento nuevo se va a encolar en vez de
+          entrar directo. */}
+      {!online && (
+        <p className="muted mesa-offline-aviso">
+          🔌 Sin conexión — los eventos se guardan en este dispositivo y se envían solos al reconectar.
+        </p>
+      )}
+      {errorPendiente && <p className="error-text">{errorPendiente}</p>}
+
       {partido.estado === "En curso" ? (
-        <CargaEvento
-          partidoId={partidoId}
-          equipoLocalId={partido.equipos_id_local}
-          equipoVisitanteId={partido.equipos_id_visitante}
-          nombreLocal={nombreLocal}
-          nombreVisitante={nombreVisitante}
-          plantillaLocal={plantillaLocalQuery.data ?? []}
-          plantillaVisitante={plantillaVisitanteQuery.data ?? []}
-          eventosRegistrados={eventosRegistrados}
-          eventoIdPorNombre={eventoIdPorNombre}
-          eventoNombrePorId={eventoNombrePorId}
-          onSubmit={(body) => mutation.mutate(body)}
-          submitting={mutation.isPending}
-          submitError={mutation.isError ? apiErrorMessage(mutation.error) : null}
-        />
+        pendiente ? (
+          // Un solo slot de cola (ver colaOfflineEventos.ts) — mientras
+          // haya algo pendiente, el form de carga se oculta en vez de
+          // dejar que un segundo evento pise al primero en el mismo slot.
+          <section className="card">
+            <p className="muted">
+              Hay un evento cargado el {new Date(pendiente.guardadoEn).toLocaleTimeString("es-AR")} que todavía no
+              se pudo enviar{online ? "" : " (sin conexión)"}.
+            </p>
+            <div className="confirmar-evento__acciones">
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  limpiarEventoPendiente(partidoId);
+                  setPendiente(null);
+                  setErrorPendiente(null);
+                }}
+              >
+                Descartar
+              </button>
+              <button
+                type="button"
+                disabled={mutation.isPending}
+                onClick={() => {
+                  const { guardadoEn: _guardadoEn, ...body } = pendiente;
+                  void flushPendiente(body);
+                }}
+              >
+                {mutation.isPending ? "Enviando..." : "Reintentar ahora"}
+              </button>
+            </div>
+          </section>
+        ) : (
+          <CargaEvento
+            partidoId={partidoId}
+            equipoLocalId={partido.equipos_id_local}
+            equipoVisitanteId={partido.equipos_id_visitante}
+            nombreLocal={nombreLocal}
+            nombreVisitante={nombreVisitante}
+            plantillaLocal={plantillaLocalQuery.data ?? []}
+            plantillaVisitante={plantillaVisitanteQuery.data ?? []}
+            eventosRegistrados={eventosRegistrados}
+            eventoIdPorNombre={eventoIdPorNombre}
+            eventoNombrePorId={eventoNombrePorId}
+            onSubmit={manejarSubmitEvento}
+            submitting={mutation.isPending}
+            submitError={mutation.isError ? apiErrorMessage(mutation.error) : null}
+          />
+        )
       ) : (
         <section className="card">
           <p className="muted">
@@ -508,14 +662,12 @@ function CargaEvento(props: {
   eventosRegistrados: EventoPartidoRow[];
   eventoIdPorNombre: Map<string, number>;
   eventoNombrePorId: Map<number, string>;
-  onSubmit: (body: {
-    partidos_id: number;
-    jugador_id: number;
-    equipo_id: number;
-    eventos_id: number;
-    jugador_id_entra?: number | null;
-    minuto: number;
-  }) => void;
+  /** `true` = se resetea el form (carga exitosa O ya se encoló para
+   * enviar sola — ver manejarSubmitEvento); `false` = se queda en la
+   * pantalla de confirmación mostrando `submitError`, para que el
+   * jugador/equipo/minuto ya elegidos no se pierdan si el admin solo
+   * necesita corregir el minuto y reintentar. */
+  onSubmit: (body: EventoBody) => Promise<boolean>;
   submitting: boolean;
   submitError: string | null;
 }) {
@@ -558,9 +710,14 @@ function CargaEvento(props: {
 
   const jugadorSimple = tipo !== "Cambio" ? sale : null;
 
-  function handleConfirmar() {
+  async function handleConfirmar() {
     if (!tipo || !equipoId || sale === null || !minuto) return;
-    props.onSubmit({
+    // Espera el resultado antes de resetear — un `reset()` inmediato (sin
+    // esperar) le hacía desaparecer la pantalla de confirmación (y con
+    // ella `submitError`) apenas se hacía clic, así que un rechazo real
+    // del backend nunca se llegaba a ver: el form ya había vuelto al
+    // primer paso antes de que la respuesta volviera.
+    const exito = await props.onSubmit({
       partidos_id: props.partidoId,
       jugador_id: sale,
       equipo_id: equipoId,
@@ -568,7 +725,7 @@ function CargaEvento(props: {
       jugador_id_entra: tipo === "Cambio" ? entra : null,
       minuto: Number(minuto),
     });
-    reset();
+    if (exito) reset();
   }
 
   const puedeConfirmar =

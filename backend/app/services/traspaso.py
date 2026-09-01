@@ -50,7 +50,29 @@ class TraspasoService:
         INSERT nuevos dentro del mismo flush, así que cerrar primero y
         agregar después alcanza.
         """
+        # inscripcion_destino se resuelve PRIMERO (antes de tocar el
+        # origen) — 3B-8 (docs/plans/cierre-backlog-todos-plan.md) necesita
+        # su Torneo_ID para el chequeo de "misma edición" de abajo, y el
+        # resto del método ya lo necesitaba para el lock.
+        inscripcion_destino = await self.inscripcion_repo.get_or_404(data.inscripcion_destino_id)
+
         if data.inscripcion_origen_id is not None:
+            # 3B-8: TRASPASOS siempre asumió que origen y destino son de la
+            # MISMA edición — la UI (TraspasosDelTorneo.tsx) solo ofrece
+            # pickers de esta edición, pero nada lo exigía ACÁ, así que un
+            # curl directo con dos inscripciones de ediciones distintas
+            # colaba un "traspaso" que en los hechos es otra cosa: mover un
+            # jugador a otra edición es un ALTA NUEVA ahí (Registro por
+            # lote / Agregar jugador en la edición destino), no un
+            # traspaso — TRASPASOS no tiene ningún campo para modelar
+            # "cambió de edición", solo "cambió de equipo dentro de una".
+            inscripcion_origen = await self.inscripcion_repo.get_or_404(data.inscripcion_origen_id)
+            if inscripcion_origen.torneo_id != inscripcion_destino.torneo_id:
+                raise DomainRuleError(
+                    "Origen y destino deben ser de la misma edición. Para mover un jugador a otra "
+                    "edición, date de alta ahí directamente (Registro por lote o Agregar jugador) "
+                    "en vez de un traspaso."
+                )
             origen = await self.jugador_equipo_repo.get_activo_en_inscripcion(
                 data.jugador_perfil_id, data.inscripcion_origen_id
             )
@@ -76,7 +98,6 @@ class TraspasoService:
         # destino — fn_validar_exclusividad_torneo (06_triggers.sql) no
         # alcanza sola bajo concurrencia real, ver
         # JugadorEquipoRepository.lock_exclusividad_torneo.
-        inscripcion_destino = await self.inscripcion_repo.get_or_404(data.inscripcion_destino_id)
         await self.jugador_equipo_repo.lock_exclusividad_torneo(data.jugador_perfil_id, inscripcion_destino.torneo_id)
 
         nueva_membresia = JugadorEquipo(

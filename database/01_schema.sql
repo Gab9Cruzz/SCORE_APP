@@ -49,9 +49,16 @@ CREATE TABLE MODALIDAD (
 -- ("{Nombre} - Edición {Numero_Edicion}"), nunca se guarda concatenado en
 -- TORNEO.Nombre: si el grupo se renombra después, todas sus ediciones
 -- reflejan el nombre nuevo sin tener que tocar cada fila de TORNEO.
+-- Estado (3B-7, docs/plans/cierre-backlog-todos-plan.md): baja LÓGICA
+-- (nunca DELETE — mismo criterio que el resto del esquema), sin cascada.
+-- 'Archivado' solo oculta el grupo de /torneo-grupos por default (los
+-- selectores de la Pestaña Torneos) — sus TORNEO (ediciones) existentes
+-- NO se tocan, siguen consultables/jugables tal cual estaban. Un grupo
+-- archivado por error no arrastra nada al reactivarlo.
 CREATE TABLE TORNEO_GRUPO (
     ID SERIAL PRIMARY KEY,
     Nombre VARCHAR(100) NOT NULL,
+    Estado VARCHAR(20) NOT NULL DEFAULT 'Activo',
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

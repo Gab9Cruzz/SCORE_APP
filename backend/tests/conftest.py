@@ -92,7 +92,18 @@ async def _test_db_ready() -> None:
 
 @pytest_asyncio.fixture(scope="session")
 async def engine(_test_db_ready):
-    eng = create_async_engine(TEST_DATABASE_URL, future=True)
+    # pool_pre_ping=True (mismo criterio que app/db/database.py:make_engine,
+    # nunca se replicó acá): sin esto, una conexión que Postgres cerró del
+    # otro lado mientras estaba idle en el pool (server closed the
+    # connection unexpectedly) recién se nota cuando un test la toma y
+    # falla con un error de infraestructura, no de lógica — visto en
+    # corridas completas de la suite (~150s+) con varios tests que abren
+    # conexiones propias fuera del fixture `db_session` compartido (ver
+    # test_ec6_confirmar_concurrente_no_supera_el_cupo). pool_pre_ping
+    # hace un SELECT liviano antes de entregar cada conexión y la
+    # reemplaza sola si ya no sirve — mismo mecanismo, sin cambiar el
+    # resto del fixture.
+    eng = create_async_engine(TEST_DATABASE_URL, future=True, pool_pre_ping=True)
     yield eng
     await eng.dispose()
 

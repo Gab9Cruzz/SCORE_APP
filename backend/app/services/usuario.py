@@ -1,7 +1,10 @@
+from datetime import datetime, timedelta
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.security import create_access_token, hash_password, verify_password
-from app.exceptions.errors import AuthError, ForbiddenError, NotFoundError
+from app.exceptions.errors import AuthError, ForbiddenError, NotFoundError, RateLimitError
 from app.models.usuario import Usuario
 from app.repositories.acceso import AccesoRepository
 from app.repositories.usuario import UsuarioRepository
@@ -102,7 +105,33 @@ class UsuarioService:
         `ip` y `user_agent` los pasa el router desde el Request; son
         opcionales para que un llamador interno (o un test que no le
         importa) no tenga que fabricarlos.
-        """
+
+        3B-14 (docs/plans/cierre-backlog-todos-plan.md): antes de tocar la
+        base para resolver el usuario, chequea el rate limit por
+        (username, IP) — ver AccesoRepository.contar_fallos_credenciales_recientes
+        para por qué el par y no uno solo. El chequeo va PRIMERO (no
+        después de resolver `usuario`) para no gastar ni esa consulta en
+        un intento ya bloqueado, y para que el mensaje/motivo sea idéntico
+        exista o no la cuenta — no filtra más de lo que 'credenciales' ya
+        filtra."""
+        settings = get_settings()
+        if settings.login_rate_limit_intentos > 0 and settings.login_rate_limit_ventana_minutos > 0:
+            desde = datetime.now() - timedelta(minutes=settings.login_rate_limit_ventana_minutos)
+            fallos = await self.acceso_repo.contar_fallos_credenciales_recientes(username, ip, desde)
+            if fallos >= settings.login_rate_limit_intentos:
+                await self._registrar_acceso(
+                    usuario_id=None,
+                    username=username,
+                    exitoso=False,
+                    motivo="bloqueado",
+                    ip=ip,
+                    user_agent=user_agent,
+                )
+                raise RateLimitError(
+                    "Demasiados intentos fallidos. Esperá unos minutos antes de volver a intentar.",
+                    retry_after_seconds=settings.login_rate_limit_ventana_minutos * 60,
+                )
+
         usuario = await self.repo.get_by_username(username)
 
         if usuario is None or not verify_password(password, usuario.password_hash):

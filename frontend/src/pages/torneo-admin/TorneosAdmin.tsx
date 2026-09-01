@@ -18,6 +18,8 @@ interface EdicionResumen {
 interface TorneoGrupo {
   id: number;
   nombre: string;
+  // 3B-7 (docs/plans/cierre-backlog-todos-plan.md): baja lógica, sin cascada.
+  estado: "Activo" | "Archivado";
   ediciones: EdicionResumen[];
 }
 interface TorneoCreatePayload {
@@ -131,10 +133,16 @@ export function TorneosAdminPage() {
     sincronizarUrl({ estado: valor });
   }
 
+  // 3B-7: apagado por default — un grupo Archivado no compite por
+  // atención con los activos salvo que el admin lo pida explícito.
+  const [verArchivados, setVerArchivados] = useState(false);
+
   const gruposQuery = useQuery({
-    queryKey: ["torneo-grupos"],
+    queryKey: ["torneo-grupos", verArchivados],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/torneo-grupos", {});
+      const { data, error } = await api.GET("/api/v1/torneo-grupos", {
+        params: { query: { incluir_archivados: verArchivados } },
+      } as never);
       if (error) throw error;
       return data as TorneoGrupo[];
     },
@@ -207,6 +215,22 @@ export function TorneosAdminPage() {
   );
 
   const hayFiltro = disciplinaFiltro !== null || modalidadFiltro !== null || estadoFiltro !== null;
+
+  // 3B-7: distinto de `estadoFiltro`/`estadoDeGrupo` de más arriba (el
+  // Estado de la EDICIÓN — Activo/Inactivo/Finalizado, 3A-9) — esto es el
+  // Estado del GRUPO (Activo/Archivado), un concepto nuevo y separado que
+  // solo comparte el nombre del campo.
+  const cambiarEstadoGrupo = useMutation({
+    mutationFn: async ({ id, estado }: { id: number; estado: "Activo" | "Archivado" }) => {
+      const { data, error } = await api.PATCH("/api/v1/torneo-grupos/{torneo_grupo_id}", {
+        params: { path: { torneo_grupo_id: id } },
+        body: { estado },
+      } as never);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["torneo-grupos"] }),
+  });
 
   const crearTorneo = useMutation({
     mutationFn: async (body: TorneoCreatePayload) => {
@@ -509,6 +533,17 @@ export function TorneosAdminPage() {
         </button>
       </div>
 
+      {/* 3B-7: apagado por default (ver el estado verArchivados) — con
+          esto en "off" ni siquiera se pide incluir_archivados=true al
+          backend. */}
+      <label className="ver-archivados-toggle">
+        <input type="checkbox" checked={verArchivados} onChange={(e) => setVerArchivados(e.target.checked)} />
+        Ver archivados
+      </label>
+      {cambiarEstadoGrupo.isError && (
+        <p className="error-text">{apiErrorMessage(cambiarEstadoGrupo.error)}</p>
+      )}
+
       {/* Sin torneos la barra no se renderiza: una barra de filtros sobre
           cero resultados es ruido, no navegación. */}
       {grupos.length > 0 && (
@@ -549,7 +584,10 @@ export function TorneosAdminPage() {
           const edicion = edicionParaAbrir(grupo);
           return (
             <div key={grupo.id} className="tarjeta-torneo">
-              <h2>{grupo.nombre}</h2>
+              <h2>
+                {grupo.nombre}
+                {grupo.estado === "Archivado" && <span className="badge badge--archivado"> Archivado</span>}
+              </h2>
               <p className="muted">
                 {catalogo.nombreDisciplina(edicion?.disciplina_id)}
                 {grupo.ediciones.length > 1 && ` · ${grupo.ediciones.length} ediciones`}
@@ -570,6 +608,23 @@ export function TorneosAdminPage() {
                   onClick={() => edicion && navigate(`/torneo-admin/torneos/${edicion.id}`)}
                 >
                   Ver Torneo →
+                </button>
+                {/* 3B-7: baja lógica, sin cascada — ver el comentario de
+                    cambiarEstadoGrupo. Nunca un botón "Eliminar" de
+                    verdad: la recomendación del plan fue explícita en no
+                    ofrecer DELETE acá. */}
+                <button
+                  type="button"
+                  className="link-button"
+                  disabled={cambiarEstadoGrupo.isPending}
+                  onClick={() =>
+                    cambiarEstadoGrupo.mutate({
+                      id: grupo.id,
+                      estado: grupo.estado === "Archivado" ? "Activo" : "Archivado",
+                    })
+                  }
+                >
+                  {grupo.estado === "Archivado" ? "Reactivar" : "Archivar"}
                 </button>
               </div>
             </div>
