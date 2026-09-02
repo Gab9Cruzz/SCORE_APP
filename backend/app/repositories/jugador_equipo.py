@@ -2,6 +2,7 @@ from sqlalchemy import func, select, text
 
 from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.jugador_equipo import JugadorEquipo
+from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
 from app.repositories.base import BaseRepository
 
 
@@ -108,6 +109,23 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one()
+
+    async def existe_activa_para_jugador(self, jugador_id: int) -> bool:
+        """3B-3 (docs/plans/cierre-backlog-todos-plan.md): ¿tiene ESTE
+        JUGADOR (persona) alguna membresía Activo en CUALQUIER
+        disciplina/roster? Cruza JUGADOR_PERFIL_DISCIPLINA porque
+        JUGADOR_EQUIPO ancla al perfil, no al jugador directo (mismo
+        criterio que el resto de este repositorio) — usada para bloquear
+        la desactivación de la persona en vez de dejarla desaparecer de
+        golpe de un roster vigente."""
+        stmt = (
+            select(JugadorEquipo.id)
+            .join(JugadorPerfilDisciplina, JugadorPerfilDisciplina.id == JugadorEquipo.jugador_perfil_id)
+            .where(JugadorPerfilDisciplina.jugador_id == jugador_id, JugadorEquipo.estado == "Activo")
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first() is not None
 
     async def dorsal_en_uso(self, inscripcion_torneo_id: int, dorsal: int) -> bool:
         """Mismo criterio que uq_dorsal_por_roster_vigente (03_indexes.sql):

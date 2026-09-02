@@ -135,3 +135,33 @@ async def test_foto_url_es_opcional_y_editable(client: AsyncClient, admin_genera
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["foto_url"] == "https://example.com/foto.jpg"
+
+
+async def test_desactivar_jugador_con_membresia_activa_es_rechazado(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    """3B-3 (docs/plans/cierre-backlog-todos-plan.md): Carlos Pérez
+    (jugador 1, 05_seed.sql) está Activo en Tiburones FC — desactivarlo lo
+    haría desaparecer de los listados mientras el sistema lo sigue
+    contando en un roster vigente."""
+    resp = await client.delete("/api/v1/jugadores/1", headers=admin_general_headers)
+    assert resp.status_code == 409, resp.text
+    assert "membresías activas" in resp.json()["detail"].lower()
+
+    resp = await client.get("/api/v1/jugadores/1", headers=admin_general_headers)
+    assert resp.json()["estado"] == "Activo"
+
+
+async def test_desactivar_jugador_sin_membresia_activa_funciona(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    resp = await client.post(
+        "/api/v1/jugadores",
+        json={"nombre": "Sin Equipo", "cedula": "0977200001", "correo_electronico": "sinequipo@example.com"},
+        headers=admin_general_headers,
+    )
+    jugador_id = resp.json()["id"]
+
+    resp = await client.delete(f"/api/v1/jugadores/{jugador_id}", headers=admin_general_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["estado"] == "Inactivo"
