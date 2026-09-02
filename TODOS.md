@@ -88,25 +88,30 @@ y `fn_validar_exclusividad_torneo` hoy no saben conciliar.
 
 ## Frontend — deferido desde el design doc de Dashboard/Control de Mesa/Partido en Vivo
 
-- El modelo de datos no distingue titular/suplente ni "convocado a este
+- ~~El modelo de datos no distingue titular/suplente ni "convocado a este
   partido". El flujo de Cambio usa toda la plantilla vigente como
-  candidatos a entrar/salir (ver limitación documentada en
-  `frontend/README.md`). **En curso** (necesita confirmar si el problema
-  ya duele en uso real antes de construirse), ver
-  `cierre-backlog-todos-plan.md` §3B-2.
+  candidatos a entrar/salir~~ — **hecho.** Tabla `CONVOCADO_A_PARTIDO`
+  (delgada, no autoritativa, mismo patrón que `EQUIPO_JUGADOR_BASE`) +
+  panel "Convocados" opt-in en Control de Mesa (`Convocatoria.tsx`) para
+  definir titular/suplente por partido — sin convocatoria guardada, el
+  comportamiento no cambia (toda la plantilla vigente sigue siendo
+  candidata); con una guardada, `CargaEvento` filtra a solo los convocados
+  (3B-2, `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-02).
 
 ## Deferido desde el plan de Equipos y Jugadores (`docs/plans/equipos-jugadores-plan.md`)
 
-- **Desactivación de una persona** (`JUGADORES.Estado → Inactivo`) que
-  tiene perfiles de disciplina o membresías de equipo activas. **En
-  curso** (necesita confirmar el default — bloquear vs. cascada — antes
-  de implementar), ver `cierre-backlog-todos-plan.md` §3B-3, que ya trae
-  una recomendación (bloquear con 409, no cascada silenciosa).
-- **Límite de tamaño de plantilla** para disciplinas de equipo grande
-  (Fútbol). El plan sí limita pareja/individual vía
-  `Modalidad.Tamano_Equipo`, pero no pone techo a un roster de fútbol.
-  **En curso** (falta el número real, competitivo/reglamentario, no
-  técnico), ver `cierre-backlog-todos-plan.md` §3B-4.
+- ~~Desactivación de una persona~~ (`JUGADORES.Estado → Inactivo`) que
+  tiene perfiles de disciplina o membresías de equipo activas — **hecho.**
+  Bloqueada con 409 (no cascada silenciosa) si el jugador tiene alguna
+  `JUGADOR_EQUIPO` en estado Activo — recomendación del plan tomada
+  literal (3B-3, `docs/plans/cierre-backlog-todos-plan.md`, hecho el
+  2026-09-02).
+- ~~Límite de tamaño de plantilla~~ para disciplinas de equipo grande
+  (Fútbol) — **hecho.** `Modalidad.Tamano_Plantilla_Max` (nullable, solo
+  seteado para Fútbol 11 = 25 jugadores; el resto de las modalidades de
+  fútbol y todo lo demás queda sin techo), validado en
+  `RegistroLoteService` junto al resto de las reglas de cupo (3B-4,
+  `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-02).
 - **Notificación por correo** al jugador cuando es traspasado o pasa a
   jugador libre — **aparcado**. Módulo de notificaciones aparte, requiere
   decidir proveedor de correo primero (decisión de infraestructura, no de
@@ -168,9 +173,13 @@ y `fn_validar_exclusividad_torneo` hoy no saben conciliar.
   categorías genéricas como placeholder editable solo por migración SQL —
   no la tabla oficial de cada federación (varía por región/edad/género),
   y no es una decisión técnica.
-- **Límite superior de inscripciones por torneo** (cuántos Equipos/Jugadores
-  caben en un bracket). **En curso** (falta el número, depende del
-  torneo), ver `cierre-backlog-todos-plan.md` §3B-10.
+- ~~Límite superior de inscripciones por torneo~~ (cuántos Equipos/Jugadores
+  caben en un bracket) — **hecho.** `Torneo.Cupo_Maximo_Inscripciones`
+  (nullable = sin límite, decisión tomada), con lock
+  `pg_advisory_xact_lock` propio (mismo patrón que el cupo de modalidad,
+  EC-6) contra la carrera de dos inscripciones simultáneas llegando juntas
+  al límite (3B-10, `docs/plans/cierre-backlog-todos-plan.md`, hecho el
+  2026-09-02).
 - **eSports — brackets y estadísticas** — **aparcado**. El catálogo cubre
   inscripción (equipos de 5, parejas, 1v1), no brackets de doble
   eliminación ni integración con APIs de plataformas (Riot, Steam) — es
@@ -330,10 +339,21 @@ no debería sorprender a nadie:
   `MotorFormatosPanel` muestran las rondas en columnas sin las líneas de
   conexión del árbol — es pieza de diseño gráfico (SVG/canvas), no
   bloqueaba la funcionalidad.
-- **Walkover/retiro a mitad de una fase de Eliminación.** **En curso**
-  (necesita una sesión de diseño propia, sin opción "obviamente
-  correcta" para recomendar todavía), ver
-  `cierre-backlog-todos-plan.md` §3B-13.
+- ~~Walkover/retiro a mitad de una fase de Eliminación.~~ — **hecho** para
+  disciplinas de equipo. `PARTIDOS.Es_Walkover`/`Walkover_Equipo_Ausente_ID`
+  + botón "Walkover" en `PartidosDelTorneo` (TorneoAdmin/Árbitro): marca
+  3-0 contra el ausente, propaga el ganador al siguiente partido del
+  bracket igual que un resultado normal. En fase de Eliminación siempre
+  disponible (el bracket necesita un ganador para avanzar); en Liga/Grupos
+  requiere `Torneo.Permite_Walkover_Grupos` (opt-in al crear el torneo, tal
+  como se pidió) — sin ese flag, un walkover en fase de grupos se
+  rechaza con 409 (3B-13, `docs/plans/cierre-backlog-todos-plan.md`, hecho
+  el 2026-09-02). **Queda afuera:** el escenario de abandono en
+  disciplinas individuales (Tenis) — el Motor de Formatos hoy no genera
+  `PARTIDOS` para inscripciones individuales en absoluto (filtra
+  `equipo_id IS NOT NULL`), es la limitación aparte de "Registro de
+  resultados para disciplinas individuales" más abajo, no algo que este
+  ítem pueda resolver sin ese trabajo previo.
 
 ---
 
