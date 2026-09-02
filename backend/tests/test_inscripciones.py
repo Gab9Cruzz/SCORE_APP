@@ -109,3 +109,79 @@ async def test_inscribir_equipo_en_torneo_inexistente_da_404(
         headers=admin_general_headers,
     )
     assert resp.status_code == 404, resp.text
+
+
+async def test_3b10_cupo_maximo_de_inscripciones_rechaza_al_llegar_al_limite(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    """3B-10 (docs/plans/cierre-backlog-todos-plan.md): NULL = sin límite
+    (comportamiento default, ya cubierto por el resto de esta suite) —
+    este test cubre el caso con cupo seteado."""
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "disciplina_id": 1,
+            "modalidad_id": 1,
+            "torneo_grupo_nombre": "Torneo Cupo Chico",
+            "fecha_inicio": "2026-05-01",
+            "fecha_fin": "2026-06-01",
+            "cupo_maximo_inscripciones": 1,
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    torneo_id = resp.json()["id"]
+    assert resp.json()["cupo_maximo_inscripciones"] == 1
+
+    equipo_a = (
+        await client.post(
+            "/api/v1/equipos",
+            json={"nombre": "Cupo Chico A", "disciplina_id": 1, "modalidad_id": 1},
+            headers=admin_general_headers,
+        )
+    ).json()["id"]
+    equipo_b = (
+        await client.post(
+            "/api/v1/equipos",
+            json={"nombre": "Cupo Chico B", "disciplina_id": 1, "modalidad_id": 1},
+            headers=admin_general_headers,
+        )
+    ).json()["id"]
+
+    resp = await client.post(
+        "/api/v1/inscripciones", json={"torneo_id": torneo_id, "equipo_id": equipo_a}, headers=admin_general_headers
+    )
+    assert resp.status_code == 201, resp.text
+    inscripcion_a_id = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/inscripciones", json={"torneo_id": torneo_id, "equipo_id": equipo_b}, headers=admin_general_headers
+    )
+    assert resp.status_code == 400, resp.text
+    assert "cupo máximo" in resp.json()["detail"].lower()
+
+    # Cancelar la primera libera el cupo — no es un tope "de por vida".
+    resp = await client.patch(
+        f"/api/v1/inscripciones/{inscripcion_a_id}", json={"estado": "Cancelado"}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = await client.post(
+        "/api/v1/inscripciones", json={"torneo_id": torneo_id, "equipo_id": equipo_b}, headers=admin_general_headers
+    )
+    assert resp.status_code == 201, resp.text
+
+
+async def test_3b10_sin_cupo_seteado_no_hay_limite(client: AsyncClient, admin_general_headers: dict[str, str]):
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "disciplina_id": 1,
+            "modalidad_id": 1,
+            "torneo_grupo_nombre": "Torneo Sin Cupo",
+            "fecha_inicio": "2026-05-01",
+            "fecha_fin": "2026-06-01",
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.json()["cupo_maximo_inscripciones"] is None

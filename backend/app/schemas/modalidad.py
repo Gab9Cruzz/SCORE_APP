@@ -21,4 +21,9 @@ class ModalidadOut(BaseModel):
     disciplina_id: int
     nombre: str
     tamano_equipo: int
+    # 3B-4 (docs/plans/cierre-backlog-todos-plan.md): NULL = sin tope de
+    # plantilla. Igual que tamano_equipo, es de solo lectura desde la API
+    # (Decisión C1 — catálogo inmutable salvo Estado): lo setea la
+    # migración/el seed, no un PATCH.
+    tamano_plantilla_max: int | None = None
     estado: EstadoModalidad

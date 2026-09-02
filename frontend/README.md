@@ -38,9 +38,15 @@ Dependencies en el design doc).
 - `/partido/:partidoId/en-vivo` — Partido en Vivo (público). Marcador y
   timeline de eventos, se actualiza solo cada 5s.
 
-## Limitación conocida
+## Convocatoria a un partido (3B-2)
 
-El modelo de datos no distingue titular/suplente — el flujo de Cambio en
-Control de Mesa ofrece toda la plantilla vigente del equipo (menos quien ya
-salió o fue expulsado) como candidatos para "quién entra", no solo el banco
-real. Ver el pre-chequeo de Cambio en el design doc.
+`Control de Mesa` tiene un panel "Convocados" opt-in (componente
+`Convocatoria.tsx`): sin convocatoria guardada para el partido, el flujo de
+Cambio sigue ofreciendo toda la plantilla vigente del equipo como candidatos
+(comportamiento de siempre). Si el árbitro/admin define una convocatoria
+(titular/suplente por jugador), `CargaEvento` filtra los candidatos a solo
+esos convocados — el resto de la plantilla deja de aparecer como opción
+hasta que se saque la convocatoria. La tabla `CONVOCADO_A_PARTIDO` es
+delgada y no autoritativa (mismo patrón que `EQUIPO_JUGADOR_BASE`): no
+reemplaza la plantilla, solo dice quién de esa plantilla fue convocado a
+ESE partido puntual.

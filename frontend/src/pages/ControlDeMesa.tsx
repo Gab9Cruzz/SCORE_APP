@@ -9,6 +9,7 @@ import {
   leerEventoPendiente,
   limpiarEventoPendiente,
 } from "../lib/colaOfflineEventos";
+import { Convocatoria } from "./Convocatoria";
 import { Cronometro } from "./Cronometro";
 
 /** 3B-1 (docs/plans/cierre-backlog-todos-plan.md): distingue "no hay red"
@@ -288,6 +289,41 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
     enabled: equipoVisitanteId != null,
   });
 
+  // 3B-2 (docs/plans/cierre-backlog-todos-plan.md): mismo queryKey que
+  // Convocatoria.tsx (React Query dedupea el fetch solo) — acá se USA
+  // para filtrar los candidatos de CargaEvento, allá se EDITA.
+  const convocadosQuery = useQuery({
+    queryKey: ["convocados", partidoId],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/partidos/{partido_id}/convocados", {
+        params: { path: { partido_id: partidoId } },
+      });
+      if (error) throw error;
+      return data as { jugador_perfil_id: number }[];
+    },
+  });
+  // Sin convocatoria guardada = sin filtrar (toda la plantilla vigente
+  // sigue siendo candidata, comportamiento de siempre) — es estrictamente
+  // opt-in, ver el comentario de Convocatoria.tsx.
+  const perfilesConvocados = useMemo(
+    () => new Set((convocadosQuery.data ?? []).map((c) => c.jugador_perfil_id)),
+    [convocadosQuery.data],
+  );
+  const plantillaLocalFiltrada = useMemo(
+    () =>
+      perfilesConvocados.size === 0
+        ? (plantillaLocalQuery.data ?? [])
+        : (plantillaLocalQuery.data ?? []).filter((j) => perfilesConvocados.has(j.jugador_perfil_id)),
+    [plantillaLocalQuery.data, perfilesConvocados],
+  );
+  const plantillaVisitanteFiltrada = useMemo(
+    () =>
+      perfilesConvocados.size === 0
+        ? (plantillaVisitanteQuery.data ?? [])
+        : (plantillaVisitanteQuery.data ?? []).filter((j) => perfilesConvocados.has(j.jugador_perfil_id)),
+    [plantillaVisitanteQuery.data, perfilesConvocados],
+  );
+
   const equipoNombre = useMemo(
     () => new Map((equiposQuery.data ?? []).map((e) => [e.id, e.nombre])),
     [equiposQuery.data],
@@ -471,6 +507,17 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
         nombreVisitante={nombreVisitante}
       />
 
+      {/* 3B-2 (docs/plans/cierre-backlog-todos-plan.md): opt-in — sin
+          convocatoria guardada, CargaEvento sigue ofreciendo toda la
+          plantilla (ver el filtro en el render de CargaEvento más abajo). */}
+      <Convocatoria
+        partidoId={partidoId}
+        nombreLocal={nombreLocal}
+        nombreVisitante={nombreVisitante}
+        plantillaLocal={plantillaLocalQuery.data ?? []}
+        plantillaVisitante={plantillaVisitanteQuery.data ?? []}
+      />
+
       {/* 3A-8 (docs/plans/cierre-backlog-todos-plan.md, EC-C): antes, la
           única protección contra cargar un evento en un partido que no
           arrancó vivía en el filtro de la lista de ControlDeMesaPage — acá
@@ -533,8 +580,10 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
             equipoVisitanteId={partido.equipos_id_visitante}
             nombreLocal={nombreLocal}
             nombreVisitante={nombreVisitante}
-            plantillaLocal={plantillaLocalQuery.data ?? []}
-            plantillaVisitante={plantillaVisitanteQuery.data ?? []}
+            // 3B-2: filtrada por convocatoria si hay una guardada — ver
+            // el comentario de perfilesConvocados más arriba.
+            plantillaLocal={plantillaLocalFiltrada}
+            plantillaVisitante={plantillaVisitanteFiltrada}
             eventosRegistrados={eventosRegistrados}
             eventoIdPorNombre={eventoIdPorNombre}
             eventoNombrePorId={eventoNombrePorId}
@@ -639,6 +688,9 @@ interface PlantillaJugador {
   equipo_id: number;
   equipo: string;
   dorsal: number | null;
+  // 3B-2 (docs/plans/cierre-backlog-todos-plan.md) — CONVOCADO_A_PARTIDO
+  // ancla acá, no en jugador_id.
+  jugador_perfil_id: number;
 }
 
 interface EventoPartidoRow {

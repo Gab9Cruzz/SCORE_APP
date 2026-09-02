@@ -408,7 +408,13 @@ DECLARE
     v_goles_local INT;
     v_goles_visitante INT;
 BEGIN
-    IF NEW.Estado = 'Finalizado' AND OLD.Estado <> 'Finalizado' AND NEW.Fase_ID IS NOT NULL THEN
+    -- 3B-13 (docs/plans/cierre-backlog-todos-plan.md): un walkover NUNCA
+    -- está "empatado sin desempate" — es 3-0 por definición, así que este
+    -- chequeo no aplica (sin este AND, un walkover en Eliminación con 0
+    -- eventos reales de cada lado se vería como 0-0 y el trigger lo
+    -- rechazaría pidiendo un Ganador_Desempate_ID que no tiene sentido acá).
+    IF NEW.Estado = 'Finalizado' AND OLD.Estado <> 'Finalizado' AND NEW.Fase_ID IS NOT NULL
+       AND NOT NEW.Es_Walkover THEN
         SELECT Tipo INTO v_tipo_fase FROM FASE WHERE ID = NEW.Fase_ID;
         IF v_tipo_fase = 'Eliminacion' THEN
             SELECT
@@ -449,18 +455,27 @@ BEGIN
     IF NEW.Estado = 'Finalizado' AND OLD.Estado <> 'Finalizado'
        AND (NEW.Partido_Siguiente_ID IS NOT NULL OR NEW.Partido_Perdedor_Siguiente_ID IS NOT NULL) THEN
 
-        SELECT
-            COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_LOCAL),
-            COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_VISITANTE)
-          INTO v_goles_local, v_goles_visitante
-          FROM vw_goles_acreditados ga
-         WHERE ga.PARTIDOS_ID = NEW.ID;
+        -- 3B-13: un walkover resuelve el ganador directo por
+        -- Walkover_Equipo_Ausente_ID (el OTRO equipo) — no hay eventos
+        -- reales que contar (nadie jugó), así que el conteo normal de
+        -- abajo se salta entero para estas filas.
+        IF NEW.Es_Walkover THEN
+            v_ganador_id := CASE WHEN NEW.Walkover_Equipo_Ausente_ID = NEW.EQUIPOS_ID_LOCAL
+                                  THEN NEW.EQUIPOS_ID_VISITANTE ELSE NEW.EQUIPOS_ID_LOCAL END;
+        ELSE
+            SELECT
+                COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_LOCAL),
+                COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_VISITANTE)
+              INTO v_goles_local, v_goles_visitante
+              FROM vw_goles_acreditados ga
+             WHERE ga.PARTIDOS_ID = NEW.ID;
 
-        v_ganador_id := CASE
-            WHEN v_goles_local > v_goles_visitante THEN NEW.EQUIPOS_ID_LOCAL
-            WHEN v_goles_visitante > v_goles_local THEN NEW.EQUIPOS_ID_VISITANTE
-            ELSE NEW.Ganador_Desempate_ID     -- ya validado NOT NULL por el trigger BEFORE si hubo empate
-        END;
+            v_ganador_id := CASE
+                WHEN v_goles_local > v_goles_visitante THEN NEW.EQUIPOS_ID_LOCAL
+                WHEN v_goles_visitante > v_goles_local THEN NEW.EQUIPOS_ID_VISITANTE
+                ELSE NEW.Ganador_Desempate_ID     -- ya validado NOT NULL por el trigger BEFORE si hubo empate
+            END;
+        END IF;
         v_perdedor_id := CASE WHEN v_ganador_id = NEW.EQUIPOS_ID_LOCAL
                                THEN NEW.EQUIPOS_ID_VISITANTE ELSE NEW.EQUIPOS_ID_LOCAL END;
 

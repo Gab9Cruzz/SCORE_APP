@@ -35,11 +35,17 @@ CREATE TABLE DISCIPLINA (
     Orden_Popularidad INT
 );
 
+-- Tamano_Plantilla_Max (3B-4, docs/plans/cierre-backlog-todos-plan.md):
+-- tope de PLANTILLA (roster completo, con suplentes) para una modalidad
+-- de equipo grande — distinto de Tamano_Equipo, que es cuántos juegan A
+-- LA VEZ. NULL = sin tope. Ver el comentario del modelo ORM
+-- (app/models/modalidad.py) para el detalle completo.
 CREATE TABLE MODALIDAD (
     ID SERIAL PRIMARY KEY,
     Disciplina_ID INT NOT NULL,
     Nombre VARCHAR(30) NOT NULL,
     Tamano_Equipo INT NOT NULL,
+    Tamano_Plantilla_Max INT,
     Estado VARCHAR(20) DEFAULT 'Activo'
 );
 
@@ -97,7 +103,17 @@ CREATE TABLE TORNEO (
     -- Solo relevante si Formato IN ('Eliminacion','Grupos_Playoffs') y el
     -- bracket llega a tener una ronda de Semifinal (EC-58). Default TRUE:
     -- el usuario confirmó incluirlo (Decisiones confirmadas del plan).
-    Incluye_Tercer_Lugar BOOLEAN NOT NULL DEFAULT TRUE
+    Incluye_Tercer_Lugar BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Cupo_Maximo_Inscripciones (3B-10, docs/plans/cierre-backlog-todos-plan.md):
+    -- NULL = sin límite (default). Lo decide cada admin al crear ESTE
+    -- torneo puntual, no hay un número universal.
+    Cupo_Maximo_Inscripciones INT,
+    -- Permite_Walkover_Grupos (3B-13): habilita marcar un partido de Liga
+    -- o de la fase de grupos como walkover (3-0 por ausencia) — en
+    -- Eliminación siempre está permitido (el bracket necesita un ganador
+    -- para avanzar), así que este flag solo aplica fuera de esa fase. Ver
+    -- PartidoService.marcar_walkover.
+    Permite_Walkover_Grupos BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- Disciplina_ID/Modalidad_ID son NOT NULL desde
@@ -412,7 +428,16 @@ CREATE TABLE PARTIDOS (
     ARBITRO_ID INT,
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    Estado VARCHAR(20) DEFAULT 'Programado'
+    Estado VARCHAR(20) DEFAULT 'Programado',
+    -- Walkover/retiro (3B-13, docs/plans/cierre-backlog-todos-plan.md):
+    -- Es_Walkover marca un partido cerrado por ausencia, no por juego
+    -- real — 3-0 fijo a favor del equipo presente (Walkover_Equipo_Ausente_ID
+    -- es el que NO se presentó). vw_resultados_partidos usa este flag para
+    -- devolver ese 3-0 en vez de contar EVENTOS_PARTIDO reales (que acá no
+    -- existen, nadie jugó). Distinto de Ganador_Desempate_ID/Ganador_Corrido_ID:
+    -- esos resuelven CÓMO terminó un partido que SÍ se jugó.
+    Es_Walkover BOOLEAN NOT NULL DEFAULT FALSE,
+    Walkover_Equipo_Ausente_ID INT
 );
 
 CREATE TABLE EVENTOS (
@@ -496,6 +521,22 @@ CREATE TABLE EVENTOS_PARTIDO (
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Estado VARCHAR(20) DEFAULT 'Registrado'
+);
+
+-- Convocatoria a UN partido puntual (3B-2, docs/plans/cierre-backlog-todos-plan.md):
+-- titular/suplente para ESE partido — mismo espíritu no-autoritativo que
+-- EQUIPO_JUGADOR_BASE (arriba), NO reemplaza a JUGADOR_EQUIPO (el roster
+-- vigente del torneo sigue siendo la única fuente de "quién puede jugar
+-- en este equipo"). Anclada en Jugador_Perfil_ID, mismo criterio que el
+-- resto del esquema. Sin fila acá para un partido = comportamiento de
+-- siempre (toda la plantilla vigente es candidata, EventoPartidoService
+-- no cambia esa validación).
+CREATE TABLE CONVOCADO_A_PARTIDO (
+    ID SERIAL PRIMARY KEY,
+    Partido_ID INT NOT NULL,
+    Jugador_Perfil_ID INT NOT NULL,
+    Titular BOOLEAN NOT NULL DEFAULT FALSE,
+    Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Auditoria de cambios: alta, modificacion o baja logica de CUALQUIER

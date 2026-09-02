@@ -45,6 +45,16 @@ class TorneoBase(BaseModel):
     # Modalidad.tamano_equipo (Corrido si es individual, Periodos 2x45' si
     # es de equipo). Nunca None una vez creado el torneo — ver TorneoOut.
     config_tiempo: ConfiguracionTiempoTorneoCreate | None = None
+    # 3B-10 (docs/plans/cierre-backlog-todos-plan.md): NULL (default) =
+    # sin límite — cada admin decide el número para ESTE torneo, no hay
+    # uno universal.
+    cupo_maximo_inscripciones: int | None = None
+    # 3B-13: habilita marcar walkover en Liga/fase de grupos (en
+    # Eliminación siempre está permitido — el bracket necesita un ganador
+    # para avanzar, no tiene sentido apagarlo ahí). Default False: un
+    # torneo existente no cambia de comportamiento hasta que el admin lo
+    # prenda a propósito.
+    permite_walkover_grupos: bool = False
 
     @field_validator("fecha_fin")
     @classmethod
@@ -113,6 +123,8 @@ class TorneoUpdate(BaseModel):
     # (EC-13 del plan: no hay trigger que lo impida, es responsabilidad
     # del admin no cambiarla a mitad de un torneo en curso).
     config_tiempo: ConfiguracionTiempoTorneoCreate | None = None
+    cupo_maximo_inscripciones: int | None = None
+    permite_walkover_grupos: bool | None = None
 
 
 class TorneoOut(TorneoBase):

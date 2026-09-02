@@ -44,11 +44,15 @@ ON CONFLICT (Nombre) DO NOTHING;
 -- unique_modalidad_por_disciplina, ya existente desde
 -- equipos-jugadores-plan.md).
 
-INSERT INTO MODALIDAD (Disciplina_ID, Nombre, Tamano_Equipo)
-SELECT d.ID, m.nombre, m.tamano FROM DISCIPLINA d
+-- Fútbol 11 es la única con Tamano_Plantilla_Max seteado (25, 3B-4 —
+-- docs/plans/cierre-backlog-todos-plan.md): el resto de las modalidades
+-- del catálogo queda NULL (sin tope) hasta que alguien pida un número
+-- real para ellas también — no hay uno universal para inventar.
+INSERT INTO MODALIDAD (Disciplina_ID, Nombre, Tamano_Equipo, Tamano_Plantilla_Max)
+SELECT d.ID, m.nombre, m.tamano, m.plantilla_max FROM DISCIPLINA d
 JOIN (VALUES
-    ('Fútbol 11', 11), ('Fútbol 7', 7), ('Fútbol 5', 5), ('Fútsal', 5)
-) AS m(nombre, tamano) ON true
+    ('Fútbol 11', 11, 25), ('Fútbol 7', 7, NULL), ('Fútbol 5', 5, NULL), ('Fútsal', 5, NULL)
+) AS m(nombre, tamano, plantilla_max) ON true
 WHERE d.Nombre = 'Fútbol'
 ON CONFLICT (Disciplina_ID, Nombre) DO NOTHING;
 

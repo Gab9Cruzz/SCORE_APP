@@ -23,7 +23,12 @@ ALTER TABLE MODALIDAD
     ADD CONSTRAINT fk_modalidad_disciplina FOREIGN KEY (Disciplina_ID) REFERENCES DISCIPLINA(ID) ON DELETE CASCADE,
     ADD CONSTRAINT chk_modalidad_tamano CHECK (Tamano_Equipo > 0),
     ADD CONSTRAINT chk_modalidad_estado CHECK (Estado IN ('Activo', 'Inactivo')),
-    ADD CONSTRAINT unique_modalidad_por_disciplina UNIQUE (Disciplina_ID, Nombre);
+    ADD CONSTRAINT unique_modalidad_por_disciplina UNIQUE (Disciplina_ID, Nombre),
+    -- 3B-4: el plantel completo (con suplentes) nunca puede ser MENOR que
+    -- cuántos juegan a la vez.
+    ADD CONSTRAINT chk_modalidad_plantilla_max CHECK (
+        Tamano_Plantilla_Max IS NULL OR Tamano_Plantilla_Max >= Tamano_Equipo
+    );
 
 -- TORNEO_GRUPO (3B-7, docs/plans/cierre-backlog-todos-plan.md)
 ALTER TABLE TORNEO_GRUPO
@@ -50,7 +55,9 @@ ALTER TABLE TORNEO
     -- IntegrityError (exceptions/handlers.py), y el plan pide un 400 con
     -- mensaje específico (T33) — mismo criterio que la validación de
     -- dorsal (EC-45): Python se anticipa para dar el mensaje claro.
-    ADD CONSTRAINT chk_torneo_formato CHECK (Formato IN ('Liga', 'Eliminacion', 'Grupos_Playoffs'));
+    ADD CONSTRAINT chk_torneo_formato CHECK (Formato IN ('Liga', 'Eliminacion', 'Grupos_Playoffs')),
+    -- 3B-10: NULL = sin límite; si se setea, tiene que ser un cupo real.
+    ADD CONSTRAINT chk_torneo_cupo_maximo CHECK (Cupo_Maximo_Inscripciones IS NULL OR Cupo_Maximo_Inscripciones > 0);
 
 -- EQUIPOS
 -- Disciplina_ID/Modalidad_ID: sin ON DELETE CASCADE a proposito — el
@@ -223,7 +230,15 @@ ALTER TABLE PARTIDOS
     ADD CONSTRAINT chk_partidos_jornada CHECK (Jornada IS NULL OR Jornada > 0),
     ADD CONSTRAINT chk_partidos_slot_siguiente CHECK (Slot_Siguiente IS NULL OR Slot_Siguiente IN ('Local', 'Visitante')),
     ADD CONSTRAINT chk_partidos_slot_perdedor_siguiente CHECK (Slot_Perdedor_Siguiente IS NULL OR Slot_Perdedor_Siguiente IN ('Local', 'Visitante')),
-    ADD CONSTRAINT unique_partido UNIQUE (Torneo_ID, EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE, Fecha_Partido);
+    ADD CONSTRAINT unique_partido UNIQUE (Torneo_ID, EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE, Fecha_Partido),
+    ADD CONSTRAINT fk_partidos_walkover_ausente FOREIGN KEY (Walkover_Equipo_Ausente_ID) REFERENCES EQUIPOS(ID),
+    -- 3B-13: Walkover_Equipo_Ausente_ID va DE LA MANO con Es_Walkover — ni
+    -- un walkover sin decir quién faltó, ni un partido normal con un
+    -- "ausente" fantasma colgando.
+    ADD CONSTRAINT chk_partidos_walkover CHECK (
+        (NOT Es_Walkover AND Walkover_Equipo_Ausente_ID IS NULL)
+     OR (Es_Walkover AND Walkover_Equipo_Ausente_ID IS NOT NULL)
+    );
 
 -- EVENTOS
 ALTER TABLE EVENTOS
@@ -286,6 +301,15 @@ ALTER TABLE EVENTOS_PARTIDO
     ADD CONSTRAINT chk_eventos_partido_minuto CHECK (MINUTO >= 0 AND MINUTO <= 130),
     ADD CONSTRAINT chk_eventos_partido_cambio_distinto CHECK (JUGADOR_ID_ENTRA IS NULL OR JUGADOR_ID_ENTRA <> JUGADOR_ID),
     ADD CONSTRAINT chk_eventos_partido_estado CHECK (Estado IN ('Registrado', 'Anulado'));
+
+-- CONVOCADO_A_PARTIDO (3B-2, docs/plans/cierre-backlog-todos-plan.md)
+-- ON DELETE CASCADE en ambas FK — mismo criterio que EQUIPO_JUGADOR_BASE:
+-- es un banco de candidatos para un partido puntual, no un rastro que
+-- deba sobrevivir si el partido o el perfil desaparecen.
+ALTER TABLE CONVOCADO_A_PARTIDO
+    ADD CONSTRAINT fk_convocado_partido FOREIGN KEY (Partido_ID) REFERENCES PARTIDOS(ID) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_convocado_perfil FOREIGN KEY (Jugador_Perfil_ID) REFERENCES JUGADOR_PERFIL_DISCIPLINA(ID) ON DELETE CASCADE,
+    ADD CONSTRAINT unique_convocado_partido UNIQUE (Partido_ID, Jugador_Perfil_ID);
 
 -- AUDITORIA (bitacora de cambios)
 -- Sin ON DELETE: rastro de auditoria, mismo criterio que ACCESOS.Usuario_ID

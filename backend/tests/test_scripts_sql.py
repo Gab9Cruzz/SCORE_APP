@@ -43,6 +43,8 @@ SCRIPTS_VIGENTES = [
     "21_migracion_desempate_manual.sql",
     "22_migracion_rate_limiting_login.sql",
     "23_migracion_archivar_torneo_grupo.sql",
+    "24_migracion_limites_y_walkover.sql",
+    "25_migracion_convocados.sql",
 ]
 
 DB_SCRIPTS = "torneos_mvp_scripts_test"

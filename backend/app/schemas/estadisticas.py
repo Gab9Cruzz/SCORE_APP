@@ -88,5 +88,9 @@ class PlantillaJugadorOut(BaseModel):
     equipo: str
     jugador_id: int
     jugador: str
+    # 3B-2 (docs/plans/cierre-backlog-todos-plan.md): lo que necesita el
+    # frontend para armar la convocatoria (CONVOCADO_A_PARTIDO ancla acá,
+    # no en jugador_id).
+    jugador_perfil_id: int
     dorsal: int | None
     fecha_inicio: date

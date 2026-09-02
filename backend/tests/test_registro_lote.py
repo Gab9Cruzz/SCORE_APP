@@ -529,3 +529,99 @@ async def test_ec6_confirmar_concurrente_no_supera_el_cupo(engine: AsyncEngine):
             await limpieza_conn.close()
         await setup.close()
         await setup_conn.close()
+
+
+async def test_3b4_limite_de_plantilla_de_equipo_grande(
+    client: AsyncClient, db_session: AsyncSession, admin_general_headers: dict[str, str]
+):
+    """3B-4 (docs/plans/cierre-backlog-todos-plan.md): antes de esto,
+    tamano_equipo>2 (equipo grande) no tenía NINGÚN tope en Registro por
+    Lote — Tamano_Plantilla_Max lo agrega, opcional (NULL = sigue sin
+    tope, comportamiento de siempre)."""
+    disciplina = Disciplina(nombre="Fútbol Plantilla Chica")
+    db_session.add(disciplina)
+    await db_session.flush()
+    # tamano_equipo=3 (>2, "equipo grande" para este método) con un
+    # Tamano_Plantilla_Max chico a propósito (4) — chk_modalidad_plantilla_max
+    # exige Tamano_Plantilla_Max >= Tamano_Equipo, así que no puede ser
+    # MENOR que cuántos juegan a la vez.
+    modalidad = Modalidad(
+        disciplina_id=disciplina.id, nombre="Trío Chico", tamano_equipo=3, tamano_plantilla_max=4
+    )
+    db_session.add(modalidad)
+    await db_session.commit()
+    await db_session.refresh(disciplina)
+    await db_session.refresh(modalidad)
+    disciplina_id, modalidad_id = disciplina.id, modalidad.id
+
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "nombre": "Liga Plantilla Chica",
+            "disciplina_id": disciplina_id,
+            "modalidad_id": modalidad_id,
+            "torneo_grupo_nombre": "Liga Plantilla Chica",
+            "fecha_inicio": "2026-05-01",
+            "fecha_fin": "2026-06-01",
+        },
+        headers=admin_general_headers,
+    )
+    torneo_id = resp.json()["id"]
+    resp = await client.post(
+        "/api/v1/equipos",
+        json={"nombre": "Equipo Plantilla Chica", "disciplina_id": disciplina_id, "modalidad_id": modalidad_id},
+        headers=admin_general_headers,
+    )
+    equipo_id = resp.json()["id"]
+    resp = await client.post(
+        "/api/v1/inscripciones",
+        json={"torneo_id": torneo_id, "equipo_id": equipo_id},
+        headers=admin_general_headers,
+    )
+    inscripcion_id = resp.json()["id"]
+
+    resp = await client.post(
+        VALIDAR,
+        json={
+            "inscripcion_torneo_id": inscripcion_id,
+            "fecha_inicio": "2026-05-01",
+            "filas": [
+                _fila("0977300001", "Plantilla Uno"),
+                _fila("0977300002", "Plantilla Dos"),
+                _fila("0977300003", "Plantilla Tres"),
+                _fila("0977300004", "Plantilla Cuatro"),
+                _fila("0977300005", "Plantilla Cinco"),
+            ],
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert len(body["validos"]) == 4
+    assert len(body["invalidos"]) == 1
+    assert "máximo 4 jugadores" in body["invalidos"][0]["motivo"]
+
+
+async def test_3b4_equipo_grande_sin_tope_seteado_sigue_sin_limite(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    # Torneo 1 (05_seed.sql, Fútbol 11, tamano_equipo=11) — sin
+    # Tamano_Plantilla_Max seteado en el seed, así que un lote de varios
+    # jugadores nuevos para el mismo roster no debe rechazar por cupo.
+    resp = await client.post(
+        VALIDAR,
+        json={
+            "inscripcion_torneo_id": INSCRIPCION_AGUILAS,
+            "fecha_inicio": "2026-02-01",
+            "filas": [
+                _fila("0977300010", "Sin Tope Uno"),
+                _fila("0977300011", "Sin Tope Dos"),
+                _fila("0977300012", "Sin Tope Tres"),
+            ],
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert len(body["validos"]) == 3
+    assert body["invalidos"] == []

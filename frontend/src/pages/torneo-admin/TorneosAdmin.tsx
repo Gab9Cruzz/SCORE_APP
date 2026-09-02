@@ -52,6 +52,12 @@ interface TorneoCreatePayload {
     duracion_periodo_minutos?: number;
     duracion_descanso_minutos?: number;
   };
+  // 3B-10 (docs/plans/cierre-backlog-todos-plan.md): sin mandar = sin
+  // límite (comportamiento de siempre).
+  cupo_maximo_inscripciones?: number;
+  // 3B-13: solo aplica a Liga/fase de grupos — en Eliminación el
+  // walkover siempre está permitido, no hace falta pedirlo.
+  permite_walkover_grupos?: boolean;
 }
 
 const formatearFecha = (iso: string) => new Date(iso).toLocaleDateString("es-AR");
@@ -335,6 +341,20 @@ export function TorneosAdminPage() {
         : []),
       { name: "fecha_inicio", label: "Fecha de inicio", type: "date", required: true },
       { name: "fecha_fin", label: "Fecha de fin", type: "date", required: true },
+      // 3B-10 (docs/plans/cierre-backlog-todos-plan.md): opcional, sin
+      // mandar = sin límite. Siempre disponible, no depende del Formato.
+      { name: "cupo_maximo_inscripciones", label: "Cupo máximo de inscripciones (opcional)", type: "number" },
+      // 3B-13: solo tiene sentido fuera de Eliminación pura — ahí el
+      // walkover ya está siempre permitido, no hay nada que habilitar.
+      ...(formato !== "Eliminacion"
+        ? ([
+            {
+              name: "permite_walkover_grupos",
+              label: "Permitir walkover en Liga/fase de grupos",
+              type: "checkbox",
+            },
+          ] as ResourceFormField[])
+        : []),
       {
         name: "tipo_cronometro",
         label: "Cronómetro",
@@ -388,6 +408,11 @@ export function TorneosAdminPage() {
                   : undefined,
               }
             : { tipo_cronometro: "Corrido" },
+        cupo_maximo_inscripciones: values.cupo_maximo_inscripciones
+          ? Number(values.cupo_maximo_inscripciones)
+          : undefined,
+        permite_walkover_grupos:
+          formato !== "Eliminacion" ? Boolean(values.permite_walkover_grupos) : undefined,
       },
       {
         // EC-46 (motor-formatos-plantillas-navegacion-plan.md): mismo

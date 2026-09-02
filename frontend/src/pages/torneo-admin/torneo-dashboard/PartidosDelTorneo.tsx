@@ -20,6 +20,9 @@ interface PartidoRow {
   grupo_id: number | null;
   estado: string;
   arbitro_id: number | null;
+  // 3B-13 (docs/plans/cierre-backlog-todos-plan.md).
+  es_walkover: boolean;
+  walkover_equipo_ausente_id: number | null;
 }
 interface InscripcionRow {
   id: number;
@@ -109,6 +112,7 @@ export function PartidosDelTorneoPage() {
       {crud.truncado && (
         <p className="muted">Mostrando los primeros {LIMITE_LISTA} partidos de esta edición.</p>
       )}
+      {crud.customAction.isError && <p className="error-text">{apiErrorMessage(crud.customAction.error)}</p>}
       <ResourceTable<PartidoRow>
         rows={crud.listQuery.data ?? []}
         columns={[
@@ -122,7 +126,21 @@ export function PartidosDelTorneoPage() {
           },
           { key: "fecha_partido", label: "Fecha", render: (r) => formatearFecha(r.fecha_partido) },
           { key: "fase", label: "Fase" },
-          { key: "estado", label: "Estado" },
+          {
+            key: "estado",
+            label: "Estado",
+            render: (r) => (
+              <>
+                {r.estado}
+                {r.es_walkover && (
+                  <span className="badge badge--archivado" title="Cerrado por walkover (ausencia)">
+                    {" "}
+                    W.O.
+                  </span>
+                )}
+              </>
+            ),
+          },
         ]}
         isLoading={crud.listQuery.isLoading}
         isError={crud.listQuery.isError}
@@ -132,8 +150,85 @@ export function PartidosDelTorneoPage() {
         softDeleteLabel="Cancelar"
         softDeletePending={crud.softDelete.isPending}
         estadosDeBaja={["Cancelado"]}
+        extraActions={(fila) => (
+          <AccionWalkover
+            partido={fila}
+            nombreLocal={fila.equipos_id_local != null ? (nombreEquipo.get(fila.equipos_id_local) ?? "?") : null}
+            nombreVisitante={
+              fila.equipos_id_visitante != null ? (nombreEquipo.get(fila.equipos_id_visitante) ?? "?") : null
+            }
+            onMarcar={(equipoAusenteId) =>
+              crud.customAction.mutate({
+                path: `/api/v1/partidos/${fila.id}/walkover`,
+                body: { equipo_ausente_id: equipoAusenteId },
+              })
+            }
+            marcando={crud.customAction.isPending}
+          />
+        )}
       />
     </div>
+  );
+}
+
+/** 3B-13 (docs/plans/cierre-backlog-todos-plan.md): "no se presentó" para
+ * UN partido puntual — botón chico, sin pantalla aparte, mismo criterio
+ * que el resto de las acciones de fila de este dashboard. Solo se ofrece
+ * cuando tiene sentido (partido con los dos equipos definidos, todavía no
+ * cerrado) — el backend igual re-valida todo (estado, habilitación de
+ * Liga/grupos, etc.), esto es solo para no mostrar el botón donde ya se
+ * sabe que va a fallar. */
+function AccionWalkover(props: {
+  partido: PartidoRow;
+  nombreLocal: string | null;
+  nombreVisitante: string | null;
+  onMarcar: (equipoAusenteId: number) => void;
+  marcando: boolean;
+}) {
+  const { partido, nombreLocal, nombreVisitante, onMarcar, marcando } = props;
+  const [abierto, setAbierto] = useState(false);
+
+  const puedeOfrecerse =
+    (partido.estado === "Programado" || partido.estado === "En curso") &&
+    partido.equipos_id_local != null &&
+    partido.equipos_id_visitante != null;
+  if (!puedeOfrecerse) return null;
+
+  if (!abierto) {
+    return (
+      <button type="button" className="link-button" onClick={() => setAbierto(true)}>
+        Walkover
+      </button>
+    );
+  }
+
+  return (
+    <span className="accion-walkover">
+      <span className="muted">¿Quién no se presentó?</span>
+      <button
+        type="button"
+        disabled={marcando}
+        onClick={() => {
+          onMarcar(partido.equipos_id_local as number);
+          setAbierto(false);
+        }}
+      >
+        {nombreLocal}
+      </button>
+      <button
+        type="button"
+        disabled={marcando}
+        onClick={() => {
+          onMarcar(partido.equipos_id_visitante as number);
+          setAbierto(false);
+        }}
+      >
+        {nombreVisitante}
+      </button>
+      <button type="button" className="link-button" onClick={() => setAbierto(false)}>
+        Cancelar
+      </button>
+    </span>
   );
 }
 

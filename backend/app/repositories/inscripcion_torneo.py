@@ -1,4 +1,4 @@
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 
 from app.models.inscripcion_torneo import InscripcionTorneo
 from app.repositories.base import BaseRepository
@@ -27,3 +27,15 @@ class InscripcionTorneoRepository(BaseRepository[InscripcionTorneo]):
             text("SELECT pg_advisory_xact_lock(:inscripcion_torneo_id)"),
             {"inscripcion_torneo_id": inscripcion_torneo_id},
         )
+
+    async def contar_no_canceladas(self, torneo_id: int) -> int:
+        """3B-10 (docs/plans/cierre-backlog-todos-plan.md): cuántas
+        inscripciones ocupan cupo en este torneo AHORA — 'Cancelado' no
+        cuenta (libera el cupo), 'Inscrito'/'Confirmado' sí."""
+        stmt = (
+            select(func.count())
+            .select_from(InscripcionTorneo)
+            .where(InscripcionTorneo.torneo_id == torneo_id, InscripcionTorneo.estado != "Cancelado")
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one()

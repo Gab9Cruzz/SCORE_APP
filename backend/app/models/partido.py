@@ -56,3 +56,9 @@ class Partido(TimestampMixin, Base):
     arbitro_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
     # Valores válidos: Programado, En curso, Finalizado, Cancelado
     estado: Mapped[str] = mapped_column(String(20), default="Programado")
+    # Walkover/retiro (3B-13, docs/plans/cierre-backlog-todos-plan.md):
+    # marca un partido cerrado por ausencia, no por juego real — 3-0 fijo
+    # a favor del presente (vw_resultados_partidos lo aplica). Ver el
+    # comentario completo en 01_schema.sql.
+    es_walkover: Mapped[bool] = mapped_column(default=False)
+    walkover_equipo_ausente_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id"))

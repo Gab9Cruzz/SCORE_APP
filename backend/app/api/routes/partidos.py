@@ -11,7 +11,9 @@ from app.schemas.hito_partido import (
     HitoPartidoOut,
     HitoPartidoUpdate,
 )
-from app.schemas.partido import EstadoPartido, PartidoCreate, PartidoOut, PartidoUpdate
+from app.schemas.convocado_a_partido import ConvocadoOut, ConvocatoriaSetRequest
+from app.schemas.partido import EstadoPartido, PartidoCreate, PartidoOut, PartidoUpdate, WalkoverRequest
+from app.services.convocado_a_partido import ConvocadoAPartidoService
 from app.services.estadisticas import EstadisticasService
 from app.services.hito_partido import HitoPartidoService
 from app.services.partido import PartidoService
@@ -88,6 +90,24 @@ async def cancelar_partido(partido_id: int, session: AsyncSession = Depends(get_
     return await PartidoService(session).soft_delete(partido_id)
 
 
+@router.post(
+    "/{partido_id}/walkover",
+    response_model=PartidoOut,
+    dependencies=[Depends(require_roles("TorneoAdmin", "Arbitro"))],
+)
+async def marcar_walkover(
+    partido_id: int,
+    data: WalkoverRequest,
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+) -> PartidoOut:
+    """3B-13 (docs/plans/cierre-backlog-todos-plan.md): cierra el partido
+    3-0 por ausencia. Ver PartidoService.marcar_walkover para cuándo está
+    permitido (Eliminación siempre, Liga/fase de grupos solo si el
+    torneo lo habilitó)."""
+    return await PartidoService(session).marcar_walkover(partido_id, data.equipo_ausente_id, usuario_actual)
+
+
 # ------------------------------------------------------------
 # Motor de Tiempos + Control de Mesa en vivo
 # (gestion-avanzada-equipos-control-mesa-plan.md, Fase 3)
@@ -152,3 +172,31 @@ async def corregir_hito_partido(
     """Corrección de Minuto_Reloj/Timestamp_Real de un hito ya cargado
     (Flujo 5 del plan)."""
     return await HitoPartidoService(session).corregir(partido_id, hito_id, data, usuario_actual)
+
+
+# Convocados/titular-suplente (3B-2, docs/plans/cierre-backlog-todos-plan.md)
+# — público en lectura (mismo criterio que el resto de este router: quien
+# mira el partido puede ver la convocatoria), solo TorneoAdmin/el Árbitro
+# asignado la arma.
+@router.get("/{partido_id}/convocados", response_model=list[ConvocadoOut])
+async def listar_convocados(partido_id: int, session: AsyncSession = Depends(get_db)) -> list[ConvocadoOut]:
+    convocados = await ConvocadoAPartidoService(session).listar(partido_id)
+    return [ConvocadoOut.model_validate(c) for c in convocados]
+
+
+@router.put(
+    "/{partido_id}/convocados",
+    response_model=list[ConvocadoOut],
+    dependencies=[Depends(require_roles("TorneoAdmin", "Arbitro"))],
+)
+async def definir_convocados(
+    partido_id: int,
+    data: ConvocatoriaSetRequest,
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+) -> list[ConvocadoOut]:
+    """Reemplaza la convocatoria ENTERA del partido de una sola vez — ver
+    ConvocatoriaSetRequest. Una lista vacía es válida: saca la
+    convocatoria (vuelve a "toda la plantilla es candidata")."""
+    convocados = await ConvocadoAPartidoService(session).reemplazar(partido_id, data, usuario_actual)
+    return [ConvocadoOut.model_validate(c) for c in convocados]

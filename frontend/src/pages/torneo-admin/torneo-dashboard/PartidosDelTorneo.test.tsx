@@ -103,4 +103,63 @@ describe("PartidosDelTorneoPage", () => {
     expect(await screen.findByText("Halcones FC vs Tiburones FC")).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Torneo" })).not.toBeInTheDocument();
   });
+
+  describe("walkover (3B-13)", () => {
+    const PARTIDO_PROGRAMADO = {
+      id: 1,
+      equipos_id_local: 1,
+      equipos_id_visitante: 2,
+      fecha_partido: "2026-05-01T16:00:00",
+      jornada: 1,
+      fase: "Regular",
+      grupo: null,
+      estado: "Programado",
+      arbitro_id: null,
+    };
+
+    it("'Walkover' pide quién no se presentó y manda el equipo elegido", async () => {
+      mockBase();
+      server.use(http.get(PARTIDOS, () => HttpResponse.json([PARTIDO_PROGRAMADO])));
+      let cuerpoRecibido: unknown;
+      server.use(
+        http.post("http://127.0.0.1:8000/api/v1/partidos/1/walkover", async ({ request }) => {
+          cuerpoRecibido = await request.json();
+          return HttpResponse.json({ ...PARTIDO_PROGRAMADO, estado: "Finalizado", es_walkover: true, walkover_equipo_ausente_id: 1 });
+        }),
+      );
+      const user = userEvent.setup();
+      renderPagina();
+      await screen.findByText("Halcones FC vs Tiburones FC");
+
+      await user.click(screen.getByRole("button", { name: "Walkover" }));
+      expect(screen.getByText("¿Quién no se presentó?")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Halcones FC" }));
+
+      await waitFor(() => expect(cuerpoRecibido).toEqual({ equipo_ausente_id: 1 }));
+    });
+
+    it("no ofrece 'Walkover' en un partido ya Finalizado", async () => {
+      mockBase();
+      server.use(
+        http.get(PARTIDOS, () => HttpResponse.json([{ ...PARTIDO_PROGRAMADO, estado: "Finalizado" }])),
+      );
+      renderPagina();
+      await screen.findByText("Halcones FC vs Tiburones FC");
+
+      expect(screen.queryByRole("button", { name: "Walkover" })).not.toBeInTheDocument();
+    });
+
+    it("muestra el badge W.O. en un partido cerrado por walkover", async () => {
+      mockBase();
+      server.use(
+        http.get(PARTIDOS, () =>
+          HttpResponse.json([{ ...PARTIDO_PROGRAMADO, estado: "Finalizado", es_walkover: true, walkover_equipo_ausente_id: 1 }]),
+        ),
+      );
+      renderPagina();
+      await screen.findByText("Halcones FC vs Tiburones FC");
+
+      expect(await screen.findByText("W.O.")).toBeInTheDocument();
+    });
+  });
 });

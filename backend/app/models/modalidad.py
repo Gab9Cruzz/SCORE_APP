@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -23,5 +23,12 @@ class Modalidad(Base):
     nombre: Mapped[str] = mapped_column(String(30))
     # CHECK (Tamano_Equipo > 0) — chk_modalidad_tamano
     tamano_equipo: Mapped[int]
+    # 3B-4 (docs/plans/cierre-backlog-todos-plan.md): tope de PLANTILLA
+    # (roster completo, con suplentes) para una modalidad de equipo grande
+    # (tamano_equipo > 2) — distinto de tamano_equipo, que es cuántos
+    # juegan A LA VEZ, no el máximo del plantel. NULL = sin tope (el
+    # default de siempre). No aplica a Individual/Pareja: esas ya tienen
+    # su tope exacto en tamano_equipo (EC-6, RegistroLoteService).
+    tamano_plantilla_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Valores válidos: Activo, Inactivo (chk_modalidad_estado)
     estado: Mapped[str] = mapped_column(String(20), default="Activo")

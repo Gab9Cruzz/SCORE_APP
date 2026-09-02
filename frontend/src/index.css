@@ -482,6 +482,48 @@ td:first-child {
   align-items: center;
 }
 
+/* 3B-2 (docs/plans/cierre-backlog-todos-plan.md): panel de convocados —
+ * dos columnas (una por equipo), cada jugador con su checkbox de
+ * convocado + titular al lado. */
+.convocatoria-equipos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.convocatoria-lista {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.convocatoria-lista li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.convocatoria-titular {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* 3B-13 (docs/plans/cierre-backlog-todos-plan.md): fila de "¿quién no se
+ * presentó?" en la sub-pestaña Partidos — mismo espaciado que
+ * .confirmar-evento__acciones, sin el estilo "botón primario" (acá los
+ * dos equipos pesan igual, no hay una acción "principal"). */
+.accion-walkover {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .confirmar-evento__acciones button[type="button"]:not(.link-button) {
   background: var(--accent);
   border: none;

@@ -82,5 +82,16 @@ class PartidoOut(PartidoBase):
     slot_perdedor_siguiente: SlotBracket | None = None
     ganador_desempate_id: int | None = None
     ganador_corrido_id: int | None = None
+    # 3B-13 (docs/plans/cierre-backlog-todos-plan.md).
+    es_walkover: bool = False
+    walkover_equipo_ausente_id: int | None = None
     fecha_registro: datetime
     fecha_modificacion: datetime
+
+
+class WalkoverRequest(BaseModel):
+    """POST /partidos/{id}/walkover (3B-13) — el equipo que NO se
+    presentó. El otro gana 3-0 automático; ver PartidoService.marcar_walkover
+    para cuándo está permitido."""
+
+    equipo_ausente_id: int

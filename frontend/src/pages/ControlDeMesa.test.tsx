@@ -16,6 +16,7 @@ const EVENTOS = "http://127.0.0.1:8000/api/v1/eventos";
 const EVENTOS_PARTIDO = "http://127.0.0.1:8000/api/v1/eventos-partido";
 const PLANTILLA_1 = "http://127.0.0.1:8000/api/v1/estadisticas/equipos/1/plantilla";
 const PLANTILLA_2 = "http://127.0.0.1:8000/api/v1/estadisticas/equipos/2/plantilla";
+const CONVOCADOS_3 = "http://127.0.0.1:8000/api/v1/partidos/3/convocados";
 
 const SESSION_STORAGE_KEY = "score-app.session";
 
@@ -51,8 +52,16 @@ function montarMesaPanel() {
       ]),
     ),
     http.get(EVENTOS_PARTIDO, () => HttpResponse.json([])),
-    http.get(PLANTILLA_1, () => HttpResponse.json([{ jugador_id: 5, jugador: "Andrés Vera", equipo_id: 1, equipo: "Tiburones FC", dorsal: 9 }])),
+    http.get(PLANTILLA_1, () =>
+      HttpResponse.json([
+        { jugador_id: 5, jugador: "Andrés Vera", equipo_id: 1, equipo: "Tiburones FC", dorsal: 9, jugador_perfil_id: 50 },
+      ]),
+    ),
     http.get(PLANTILLA_2, () => HttpResponse.json([])),
+    // 3B-2 (docs/plans/cierre-backlog-todos-plan.md): sin convocatoria
+    // guardada — MesaPanel debe seguir ofreciendo toda la plantilla, ver
+    // Convocatoria.tsx.
+    http.get(CONVOCADOS_3, () => HttpResponse.json([])),
   );
   sembrarSesion();
   const queryClient = createTestQueryClient();

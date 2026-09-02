@@ -674,6 +674,29 @@ export interface paths {
         patch: operations["actualizar_partido_api_v1_partidos__partido_id__patch"];
         trace?: never;
     };
+    "/api/v1/partidos/{partido_id}/walkover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marcar Walkover
+         * @description 3B-13 (docs/plans/cierre-backlog-todos-plan.md): cierra el partido
+         *     3-0 por ausencia. Ver PartidoService.marcar_walkover para cuándo está
+         *     permitido (Eliminación siempre, Liga/fase de grupos solo si el
+         *     torneo lo habilitó).
+         */
+        post: operations["marcar_walkover_api_v1_partidos__partido_id__walkover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/partidos/{partido_id}/duracion": {
         parameters: {
             query?: never;
@@ -764,6 +787,29 @@ export interface paths {
          *     (Flujo 5 del plan).
          */
         patch: operations["corregir_hito_partido_api_v1_partidos__partido_id__hitos__hito_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/partidos/{partido_id}/convocados": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Convocados */
+        get: operations["listar_convocados_api_v1_partidos__partido_id__convocados_get"];
+        /**
+         * Definir Convocados
+         * @description Reemplaza la convocatoria ENTERA del partido de una sola vez — ver
+         *     ConvocatoriaSetRequest. Una lista vacía es válida: saca la
+         *     convocatoria (vuelve a "toda la plantilla es candidata").
+         */
+        put: operations["definir_convocados_api_v1_partidos__partido_id__convocados_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/inscripciones": {
@@ -1432,6 +1478,50 @@ export interface components {
             jugador_nombre: string;
             /** Mensaje */
             mensaje: string;
+        };
+        /**
+         * ConvocadoInput
+         * @description Una fila de la convocatoria que manda el frontend — ver
+         *     ConvocatoriaSetRequest para el shape completo del PUT.
+         */
+        ConvocadoInput: {
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number;
+            /**
+             * Titular
+             * @default false
+             */
+            titular: boolean;
+        };
+        /** ConvocadoOut */
+        ConvocadoOut: {
+            /** Id */
+            id: number;
+            /** Partido Id */
+            partido_id: number;
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number;
+            /** Titular */
+            titular: boolean;
+            /**
+             * Fecha Registro
+             * Format: date-time
+             */
+            fecha_registro: string;
+        };
+        /**
+         * ConvocatoriaSetRequest
+         * @description PUT /partidos/{id}/convocados reemplaza la convocatoria ENTERA de
+         *     ese partido de una sola vez (3B-2, docs/plans/cierre-backlog-todos-plan.md)
+         *     — no hay POST/DELETE de una fila suelta: el flujo real es "el
+         *     entrenador arma la lista completa antes del partido", no ir tildando
+         *     de a uno contra el servidor. Una lista vacía es válida (saca la
+         *     convocatoria entera, vuelve al comportamiento de siempre: toda la
+         *     plantilla es candidata).
+         */
+        ConvocatoriaSetRequest: {
+            /** Convocados */
+            convocados: components["schemas"]["ConvocadoInput"][];
         };
         /**
          * DisciplinaConModalidadesOut
@@ -2211,6 +2301,8 @@ export interface components {
             nombre: string;
             /** Tamano Equipo */
             tamano_equipo: number;
+            /** Tamano Plantilla Max */
+            tamano_plantilla_max?: number | null;
             /**
              * Estado
              * @enum {string}
@@ -2305,6 +2397,13 @@ export interface components {
             ganador_desempate_id?: number | null;
             /** Ganador Corrido Id */
             ganador_corrido_id?: number | null;
+            /**
+             * Es Walkover
+             * @default false
+             */
+            es_walkover: boolean;
+            /** Walkover Equipo Ausente Id */
+            walkover_equipo_ausente_id?: number | null;
             /**
              * Fecha Registro
              * Format: date-time
@@ -2413,6 +2512,8 @@ export interface components {
             jugador_id: number;
             /** Jugador */
             jugador: string;
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number;
             /** Dorsal */
             dorsal: number | null;
             /**
@@ -2622,6 +2723,13 @@ export interface components {
              */
             incluye_tercer_lugar: boolean;
             config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoCreate"] | null;
+            /** Cupo Maximo Inscripciones */
+            cupo_maximo_inscripciones?: number | null;
+            /**
+             * Permite Walkover Grupos
+             * @default false
+             */
+            permite_walkover_grupos: boolean;
             /** Torneo Grupo Id */
             torneo_grupo_id?: number | null;
             /** Torneo Grupo Nombre */
@@ -2731,6 +2839,13 @@ export interface components {
              */
             incluye_tercer_lugar: boolean;
             config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoOut"] | null;
+            /** Cupo Maximo Inscripciones */
+            cupo_maximo_inscripciones?: number | null;
+            /**
+             * Permite Walkover Grupos
+             * @default false
+             */
+            permite_walkover_grupos: boolean;
             /** Id */
             id: number;
             /** Torneo Grupo Id */
@@ -2778,6 +2893,10 @@ export interface components {
             /** Incluye Tercer Lugar */
             incluye_tercer_lugar?: boolean | null;
             config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoCreate"] | null;
+            /** Cupo Maximo Inscripciones */
+            cupo_maximo_inscripciones?: number | null;
+            /** Permite Walkover Grupos */
+            permite_walkover_grupos?: boolean | null;
         };
         /** TraspasoCreate */
         TraspasoCreate: {
@@ -2914,6 +3033,16 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * WalkoverRequest
+         * @description POST /partidos/{id}/walkover (3B-13) — el equipo que NO se
+         *     presentó. El otro gana 3-0 automático; ver PartidoService.marcar_walkover
+         *     para cuándo está permitido.
+         */
+        WalkoverRequest: {
+            /** Equipo Ausente Id */
+            equipo_ausente_id: number;
         };
     };
     responses: never;
@@ -4614,6 +4743,41 @@ export interface operations {
             };
         };
     };
+    marcar_walkover_api_v1_partidos__partido_id__walkover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WalkoverRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     obtener_duracion_partido_api_v1_partidos__partido_id__duracion_get: {
         parameters: {
             query?: never;
@@ -4734,6 +4898,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HitoPartidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_convocados_api_v1_partidos__partido_id__convocados_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConvocadoOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    definir_convocados_api_v1_partidos__partido_id__convocados_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConvocatoriaSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConvocadoOut"][];
                 };
             };
             /** @description Validation Error */

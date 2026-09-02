@@ -42,3 +42,12 @@ class Torneo(TimestampMixin, Base):
     equipos_por_grupo: Mapped[int | None] = mapped_column(Integer, nullable=True)
     clasificados_por_grupo: Mapped[int | None] = mapped_column(Integer, nullable=True)
     incluye_tercer_lugar: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 3B-10 (docs/plans/cierre-backlog-todos-plan.md): tope de
+    # INSCRIPCIONES_TORNEO para este torneo puntual — NULL (default) =
+    # sin límite, el comportamiento de siempre. Lo decide cada admin al
+    # crear el torneo (depende del torneo, no hay un número universal).
+    cupo_maximo_inscripciones: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 3B-13 (docs/plans/cierre-backlog-todos-plan.md): habilita walkover
+    # en Liga/fase de grupos — en Eliminación siempre está permitido, ver
+    # PartidoService.marcar_walkover.
+    permite_walkover_grupos: Mapped[bool] = mapped_column(Boolean, default=False)

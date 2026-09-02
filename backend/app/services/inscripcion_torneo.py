@@ -8,6 +8,7 @@ from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.jugador import Jugador
 from app.models.jugador_equipo import JugadorEquipo
 from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
+from app.models.torneo import Torneo
 from app.repositories.disciplina import DisciplinaRepository
 from app.repositories.equipo import EquipoRepository
 from app.repositories.equipo_jugador_base import EquipoJugadorBaseRepository
@@ -57,6 +58,21 @@ class InscripcionTorneoService:
         inscripcion = await self._crear_individual(data)
         return InscripcionTorneoOut.model_validate(inscripcion)
 
+    async def _verificar_cupo(self, torneo: Torneo) -> None:
+        """3B-10 (docs/plans/cierre-backlog-todos-plan.md): NULL en
+        `Cupo_Maximo_Inscripciones` = sin límite, el comportamiento de
+        siempre — la mayoría de los torneos no lo van a tocar. El lock (EC-6,
+        mismo patrón) serializa la LECTURA del conteo contra cualquier otra
+        alta concurrente sobre el MISMO torneo antes de confiar en él."""
+        if torneo.cupo_maximo_inscripciones is None:
+            return
+        await self.torneo_repo.lock_cupo_inscripciones(torneo.id)
+        actuales = await self.repo.contar_no_canceladas(torneo.id)
+        if actuales >= torneo.cupo_maximo_inscripciones:
+            raise DomainRuleError(
+                f"Este torneo llegó a su cupo máximo de {torneo.cupo_maximo_inscripciones} inscripciones."
+            )
+
     async def _crear_por_equipo(self, data: InscripcionTorneoCreate) -> InscripcionTorneoOut:
         """Pareja/Conjunto. unique_inscripcion (02_constraints.sql) sigue
         evitando el mismo equipo dos veces en el mismo torneo (el 409 lo
@@ -75,6 +91,7 @@ class InscripcionTorneoService:
         DomainRuleError ya se traduce a 400 en exceptions/handlers.py.
         """
         torneo = await self.torneo_repo.get_or_404(data.torneo_id)
+        await self._verificar_cupo(torneo)
         equipo = await self.equipo_repo.get_or_404(data.equipo_id)
 
         if equipo.disciplina_id != torneo.disciplina_id:
@@ -208,6 +225,7 @@ class InscripcionTorneoService:
         EQUIPOS. También crea JUGADOR_EQUIPO (Dorsal=NULL) para que
         fn_validar_exclusividad_torneo siga aplicando sin reescribirse."""
         torneo = await self.torneo_repo.get_or_404(data.torneo_id)
+        await self._verificar_cupo(torneo)
         cedula = data.jugador_cedula.strip()
         nombre = data.jugador_nombre.strip()
         correo = data.jugador_correo_electronico.strip()

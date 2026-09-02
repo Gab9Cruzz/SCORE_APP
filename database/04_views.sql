@@ -79,6 +79,10 @@ ORDER BY p.Fecha_Partido;
 -- la vez (roster distinto en cada uno), así que Equipo_ID solo ya no
 -- identifica una plantilla única.
 -- ------------------------------------------------------------
+-- Jugador_Perfil_ID (3B-2, docs/plans/cierre-backlog-todos-plan.md):
+-- agregada para que el consumidor de esta vista (plantilla de un equipo)
+-- pueda anclar CONVOCADO_A_PARTIDO sin una consulta aparte — aditiva,
+-- ningún consumidor existente que lea columnas puntuales se entera.
 CREATE OR REPLACE VIEW vw_jugadores_activos_por_equipo AS
 SELECT
     e.ID       AS Equipo_ID,
@@ -86,6 +90,7 @@ SELECT
     it.Torneo_ID,
     j.ID       AS Jugador_ID,
     j.Nombre   AS Jugador,
+    jpd.ID     AS Jugador_Perfil_ID,
     je.Dorsal,
     je.Fecha_Inicio
 FROM JUGADOR_EQUIPO je
@@ -155,6 +160,11 @@ ORDER BY ga.TORNEO_ID, Goles DESC, Jugador;
 -- sin equipos definidos todavía ("Ganador Partido N") no tiene resultado
 -- que mostrar acá — GET /torneos/{id}/bracket consulta PARTIDOS directo
 -- con LEFT JOIN para poder mostrar esas casillas vacías.
+-- Walkover (3B-13, docs/plans/cierre-backlog-todos-plan.md): un partido
+-- Es_Walkover no tiene EVENTOS_PARTIDO reales (nadie jugó), así que
+-- Goles_Local/Visitante se fuerzan a 3-0 a favor del equipo presente en
+-- vez de contar eventos — el CASE gana sobre el COUNT normal solo para
+-- esas filas, cualquier otro partido sigue exactamente igual que antes.
 CREATE OR REPLACE VIEW vw_resultados_partidos AS
 SELECT
     p.ID       AS Partido_ID,
@@ -163,23 +173,30 @@ SELECT
     el.Nombre  AS Equipo_Local,
     ev_eq.ID   AS Equipo_Visitante_ID,
     ev_eq.Nombre AS Equipo_Visitante,
-    COUNT(ga.Evento_Partido_ID)
-        FILTER (WHERE ga.Equipo_Acreditado = p.EQUIPOS_ID_LOCAL)     AS Goles_Local,
-    COUNT(ga.Evento_Partido_ID)
-        FILTER (WHERE ga.Equipo_Acreditado = p.EQUIPOS_ID_VISITANTE) AS Goles_Visitante,
+    CASE
+        WHEN p.Es_Walkover THEN (CASE WHEN p.Walkover_Equipo_Ausente_ID = p.EQUIPOS_ID_LOCAL THEN 0 ELSE 3 END)
+        ELSE COUNT(ga.Evento_Partido_ID) FILTER (WHERE ga.Equipo_Acreditado = p.EQUIPOS_ID_LOCAL)
+    END AS Goles_Local,
+    CASE
+        WHEN p.Es_Walkover THEN (CASE WHEN p.Walkover_Equipo_Ausente_ID = p.EQUIPOS_ID_VISITANTE THEN 0 ELSE 3 END)
+        ELSE COUNT(ga.Evento_Partido_ID) FILTER (WHERE ga.Equipo_Acreditado = p.EQUIPOS_ID_VISITANTE)
+    END AS Goles_Visitante,
     p.Fecha_Partido,
     p.Jornada,
     p.Fase,
     p.Grupo,
     p.Fase_ID,
     p.Grupo_ID,
-    p.Estado
+    p.Estado,
+    p.Es_Walkover,
+    p.Walkover_Equipo_Ausente_ID
 FROM PARTIDOS p
 JOIN EQUIPOS el    ON el.ID    = p.EQUIPOS_ID_LOCAL
 JOIN EQUIPOS ev_eq ON ev_eq.ID = p.EQUIPOS_ID_VISITANTE
 LEFT JOIN vw_goles_acreditados ga ON ga.PARTIDOS_ID = p.ID
 GROUP BY p.ID, p.TORNEO_ID, el.ID, el.Nombre, ev_eq.ID, ev_eq.Nombre,
-         p.Fecha_Partido, p.Jornada, p.Fase, p.Grupo, p.Fase_ID, p.Grupo_ID, p.Estado;
+         p.Fecha_Partido, p.Jornada, p.Fase, p.Grupo, p.Fase_ID, p.Grupo_ID, p.Estado,
+         p.Es_Walkover, p.Walkover_Equipo_Ausente_ID;
 
 -- ------------------------------------------------------------
 -- Tabla de posiciones
