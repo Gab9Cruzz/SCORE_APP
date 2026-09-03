@@ -23,6 +23,54 @@ async def test_listar_inscripciones_es_publico(client: AsyncClient):
     assert len(resp.json()) == 3  # 05_seed.sql inscribe a los 3 equipos
 
 
+# --- require_torneo_access_de (rbac-licencias-torneos-plan.md, Fase 2) ---
+
+
+async def test_torneo_admin_sin_asignacion_no_puede_inscribir_ni_editar(
+    client: AsyncClient, admin_general_headers: dict[str, str], torneo_admin_headers: dict[str, str]
+):
+    """torneo_admin_headers (conftest.py) es un TorneoAdmin SIN asignación
+    al Torneo 1 — POST/PATCH deben rechazar (torneo_id resuelto del body y
+    del inscripcion_id, respectivamente, no un path param directo)."""
+    resp = await client.post(
+        "/api/v1/equipos", json={"nombre": "Equipo Sin Asignar", "disciplina_id": 1, "modalidad_id": 1},
+        headers=admin_general_headers,
+    )
+    equipo_id = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/inscripciones", json={"torneo_id": 1, "equipo_id": equipo_id}, headers=torneo_admin_headers
+    )
+    assert resp.status_code == 403
+    assert "asignado" in resp.json()["detail"]
+
+    resp = await client.patch(
+        "/api/v1/inscripciones/1", json={"estado": "Cancelado"}, headers=torneo_admin_headers
+    )
+    assert resp.status_code == 403
+
+
+async def test_torneo_admin_con_asignacion_puede_inscribir_y_editar(
+    client: AsyncClient, admin_general_headers: dict[str, str], torneo_admin_con_torneo_headers: dict[str, str]
+):
+    """torneo_admin_con_torneo_headers (conftest.py) está asignado al Torneo 1."""
+    resp = await client.post(
+        "/api/v1/equipos", json={"nombre": "Equipo Con Asignar", "disciplina_id": 1, "modalidad_id": 1},
+        headers=admin_general_headers,
+    )
+    equipo_id = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/inscripciones", json={"torneo_id": 1, "equipo_id": equipo_id}, headers=torneo_admin_con_torneo_headers
+    )
+    assert resp.status_code == 201, resp.text
+
+    resp = await client.patch(
+        "/api/v1/inscripciones/1", json={"estado": "Confirmado"}, headers=torneo_admin_con_torneo_headers
+    )
+    assert resp.status_code == 200, resp.text
+
+
 async def test_admin_inscribe_equipo_nuevo(client: AsyncClient, admin_general_headers: dict[str, str]):
     resp = await client.post("/api/v1/equipos", json={"nombre": "Equipo Nuevo Inscripcion", "disciplina_id": 1, "modalidad_id": 1}, headers=admin_general_headers)
     equipo_id = resp.json()["id"]

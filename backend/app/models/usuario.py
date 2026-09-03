@@ -1,4 +1,4 @@
-from sqlalchemy import String
+from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -24,3 +24,11 @@ class Usuario(TimestampMixin, Base):
     rol: Mapped[str] = mapped_column(String(20), default="Publico")
     # Valores válidos: Activo, Inactivo (chk_usuarios_estado)
     estado: Mapped[str] = mapped_column(String(20), default="Activo")
+    # Licencia de uso (rbac-licencias-torneos-plan.md, D1/D2a): kill switch
+    # de nivel superior sobre TODA cuenta autenticada, no solo TorneoAdmin —
+    # sin licencia, cero acceso administrativo aunque Estado='Activo' y
+    # aunque ASIGNACION_TORNEO_ADMIN diga lo contrario. Se chequea fresco en
+    # cada request (get_current_user/get_current_user_optional/login), no
+    # vive en el JWT — así la revocación es inmediata, sin esperar a que
+    # expire el token.
+    licencia_activa: Mapped[bool] = mapped_column(Boolean, default=True)

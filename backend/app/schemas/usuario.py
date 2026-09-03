@@ -59,5 +59,23 @@ class UsuarioOut(BaseModel):
     nombre: str
     rol: RolUsuario
     estado: EstadoUsuario
+    # rbac-licencias-torneos-plan.md, §4.5 (corrección post outside-voice):
+    # sin este campo, el toggle del panel de Admin General no tiene con
+    # qué pintar su estado inicial al cargar GET /usuarios.
+    licencia_activa: bool
     fecha_registro: datetime
     fecha_modificacion: datetime
+
+
+class LicenciaUpdate(BaseModel):
+    """Body de PATCH /usuarios/{id}/licencia (rbac-licencias-torneos-plan.md, §4.5)."""
+
+    activa: bool
+
+
+class AsignacionTorneosUpdate(BaseModel):
+    """Body de PATCH /usuarios/{id}/torneos — reemplaza el set completo de
+    torneos asignados (rbac-licencias-torneos-plan.md, §4.5; endpoint
+    corregido de PUT a PATCH, ver Eng review hallazgo #2)."""
+
+    torneo_ids: list[int]

@@ -5,9 +5,18 @@ import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
+import { TOKEN_STORAGE_KEY } from "./api/client";
 import { AuthProvider } from "./auth/AuthContext";
 import { server } from "./test/msw-server";
 import { createTestQueryClient } from "./test/test-utils";
+
+// Mismo key privado que AuthContext.tsx (ver UsuariosAdmin.test.tsx).
+const SESSION_STORAGE_KEY = "score-app.session";
+
+function sembrarSesion(rol: string, id: number) {
+  localStorage.setItem(TOKEN_STORAGE_KEY, "fake-token");
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ username: "usuario_test", rol, id }));
+}
 
 const LOGIN = "http://127.0.0.1:8000/api/v1/auth/login";
 const ME = "http://127.0.0.1:8000/api/v1/auth/me";
@@ -155,5 +164,58 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
     expect(
       screen.getByText(/No pudimos confirmar tu usuario/),
     ).toBeInTheDocument();
+  });
+});
+
+// --- Licencia revocada a mitad de sesión (rbac-licencias-torneos-plan.md, §5.2) ---
+
+describe("LicenseRevokedScreen (rbac-licencias-torneos-plan.md, §5.2)", () => {
+  beforeEach(() => {
+    server.use(
+      http.get(TORNEOS, () => HttpResponse.json([])),
+      http.get(PARTIDOS, () => HttpResponse.json([])),
+      http.get(USUARIOS, () => HttpResponse.json([])),
+      http.get(ME, () => HttpResponse.json({ id: 42, username: "usuario_test", rol: "TorneoAdmin" })),
+    );
+  });
+
+  // /dashboard (Dashboard.tsx) hace GET /api/v1/torneos directo, sin pasar
+  // por RequireRole — es pública, pero el interceptor de client.ts aplica
+  // a CUALQUIER response, sesión o no. Se usa acá en vez de
+  // /torneo-admin/torneos porque esa pantalla en realidad consulta
+  // /api/v1/torneo-grupos, no /api/v1/torneos (verificado en el código,
+  // no asumido).
+  it("un 403 con X-License-Revoked reemplaza el shell entero, sin importar la ruta activa", async () => {
+    sembrarSesion("TorneoAdmin", 42);
+    server.use(
+      http.get(TORNEOS, () =>
+        HttpResponse.json(
+          { detail: "Licencia inactiva o revocada. Contactá al administrador." },
+          { status: 403, headers: { "X-License-Revoked": "true" } },
+        ),
+      ),
+    );
+
+    renderApp("/dashboard");
+
+    expect(await screen.findByText("Licencia Inactiva o Revocada")).toBeInTheDocument();
+    expect(screen.getByText("Contacte al administrador.")).toBeInTheDocument();
+    // El shell normal (Dashboard) ya no está — la pantalla de bloqueo
+    // reemplaza TODO, no solo el contenido de la ruta.
+    expect(screen.queryByRole("heading", { name: "Dashboard de Torneo" })).not.toBeInTheDocument();
+  });
+
+  it("un 403 genérico (rol insuficiente) NO dispara la pantalla de licencia", async () => {
+    sembrarSesion("TorneoAdmin", 42);
+    server.use(
+      http.get(TORNEOS, () =>
+        HttpResponse.json({ detail: "Esta operación requiere TorneoAdmin o AdminGeneral." }, { status: 403 }),
+      ),
+    );
+
+    renderApp("/dashboard");
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Dashboard de Torneo" })).toBeInTheDocument());
+    expect(screen.queryByText("Licencia Inactiva o Revocada")).not.toBeInTheDocument();
   });
 });

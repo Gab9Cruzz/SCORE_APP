@@ -24,6 +24,15 @@ CREATE INDEX idx_accesos_fecha ON ACCESOS(Fecha DESC);
 CREATE INDEX idx_accesos_usuario ON ACCESOS(Usuario_ID);
 CREATE INDEX idx_accesos_username ON ACCESOS(Username);
 
+-- ASIGNACION_TORNEO_ADMIN (rbac-licencias-torneos-plan.md)
+-- unique_asignacion_usuario_torneo (02_constraints.sql) ya es un indice
+-- btree de (Usuario_ID, Torneo_ID) — cubre el lookup de
+-- require_torneo_access. idx_asignacion_usuario cubre ademas el lookup
+-- solo-por-Usuario_ID de GET /usuarios/{id}/torneos; idx_asignacion_torneo
+-- cubre el join de GET /torneos?solo_mios=true.
+CREATE INDEX idx_asignacion_usuario ON ASIGNACION_TORNEO_ADMIN(Usuario_ID);
+CREATE INDEX idx_asignacion_torneo ON ASIGNACION_TORNEO_ADMIN(Torneo_ID);
+
 -- EQUIPOS
 -- Los dos filtros nuevos de GET /equipos?disciplina_id=&modalidad_id=
 -- (equipos-disciplina-navegacion-plan.md, Mejora #1: los filtros

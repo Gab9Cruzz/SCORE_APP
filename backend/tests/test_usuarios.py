@@ -167,3 +167,195 @@ async def test_admin_general_puede_desactivar_a_otro_usuario(
     resp = await client.delete(f"/api/v1/usuarios/{otro_id}", headers=admin_general_headers)
     assert resp.status_code == 200
     assert resp.json()["estado"] == "Inactivo"
+
+
+# --- Licencia + asignación de torneos (rbac-licencias-torneos-plan.md) ---
+
+
+async def test_usuario_out_incluye_licencia_activa(client: AsyncClient, admin_general_headers: dict[str, str]):
+    resp = await client.get("/api/v1/usuarios", headers=admin_general_headers)
+    assert resp.status_code == 200
+    assert all("licencia_activa" in u for u in resp.json())
+    # DEFAULT TRUE (rbac-licencias-torneos-plan.md, §3.1): nadie pierde
+    # acceso el día del deploy.
+    assert all(u["licencia_activa"] is True for u in resp.json())
+
+
+async def test_admin_general_revoca_y_reotorga_licencia_de_otro(
+    client: AsyncClient, admin_general_headers: dict[str, str], torneo_admin_headers: dict[str, str]
+):
+    resp = await client.get("/api/v1/auth/me", headers=torneo_admin_headers)
+    otro_id = resp.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/usuarios/{otro_id}/licencia", json={"activa": False}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["licencia_activa"] is False
+
+    # La cuenta revocada pierde acceso de inmediato — sin esperar el JWT.
+    resp = await client.get("/api/v1/auth/me", headers=torneo_admin_headers)
+    assert resp.status_code == 403
+    assert resp.headers.get("X-License-Revoked") == "true"
+
+    resp = await client.patch(
+        f"/api/v1/usuarios/{otro_id}/licencia", json={"activa": True}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200
+    assert resp.json()["licencia_activa"] is True
+
+
+async def test_admin_general_no_puede_revocarse_su_propia_licencia(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    # Clon exacto de test_admin_general_no_puede_desactivarse_a_si_mismo
+    # (T6) — con potencialmente un solo AdminGeneral en la base, esto es
+    # el mismo self-lockout, otro campo.
+    resp = await client.get("/api/v1/auth/me", headers=admin_general_headers)
+    mi_id = resp.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/usuarios/{mi_id}/licencia", json={"activa": False}, headers=admin_general_headers
+    )
+    assert resp.status_code == 403
+
+    # Otorgarse la propia licencia (ya la tiene) no está bloqueado — el
+    # guard es específico de auto-REVOCACIÓN, no de tocar el propio campo.
+    resp = await client.patch(
+        f"/api/v1/usuarios/{mi_id}/licencia", json={"activa": True}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200
+
+
+async def test_torneo_admin_no_puede_tocar_licencia_ni_asignaciones(
+    client: AsyncClient, torneo_admin_headers: dict[str, str], admin_general_headers: dict[str, str]
+):
+    resp = await client.get("/api/v1/auth/me", headers=torneo_admin_headers)
+    mi_id = resp.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/usuarios/{mi_id}/licencia", json={"activa": False}, headers=torneo_admin_headers
+    )
+    assert resp.status_code == 403
+
+    resp = await client.patch(
+        f"/api/v1/usuarios/{mi_id}/torneos", json={"torneo_ids": [1]}, headers=torneo_admin_headers
+    )
+    assert resp.status_code == 403
+
+
+async def test_asignar_torneo_a_usuario_con_rol_incorrecto_es_rechazado(
+    client: AsyncClient, admin_general_headers: dict[str, str], arbitro_headers: dict[str, str]
+):
+    resp = await client.get("/api/v1/auth/me", headers=arbitro_headers)
+    arbitro_id = resp.json()["id"]
+
+    # DomainRuleError (service) — llega antes que el trigger de DB en
+    # operación normal, mismo doble-cinturón que fn_validar_torneo_modalidad.
+    resp = await client.patch(
+        f"/api/v1/usuarios/{arbitro_id}/torneos", json={"torneo_ids": [1]}, headers=admin_general_headers
+    )
+    assert resp.status_code == 400
+
+
+async def test_set_torneos_asignados_reemplaza_el_set_completo(
+    client: AsyncClient, admin_general_headers: dict[str, str], torneo_admin_headers: dict[str, str]
+):
+    resp = await client.get("/api/v1/auth/me", headers=torneo_admin_headers)
+    torneo_admin_id = resp.json()["id"]
+
+    resp = await client.get(f"/api/v1/usuarios/{torneo_admin_id}/torneos", headers=admin_general_headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+    resp = await client.patch(
+        f"/api/v1/usuarios/{torneo_admin_id}/torneos",
+        json={"torneo_ids": [1]},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json() == [1]
+
+    # El propio TorneoAdmin puede leer SU set (no el de otro).
+    resp = await client.get(f"/api/v1/usuarios/{torneo_admin_id}/torneos", headers=torneo_admin_headers)
+    assert resp.status_code == 200
+    assert resp.json() == [1]
+
+    # Set vacío = desasignar todo — comportamiento explícito, no un caso especial.
+    resp = await client.patch(
+        f"/api/v1/usuarios/{torneo_admin_id}/torneos",
+        json={"torneo_ids": []},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_set_torneos_asignados_con_id_inexistente_da_404_con_el_id_culpable(
+    client: AsyncClient, admin_general_headers: dict[str, str], torneo_admin_headers: dict[str, str]
+):
+    """T7 (rbac-licencias-torneos-plan.md, GAP identificado en la CEO
+    review): un torneo_id basura no debe perderse silencioso en el
+    diff — debe rechazar con 404 antes de tocar ninguna fila."""
+    resp = await client.get("/api/v1/auth/me", headers=torneo_admin_headers)
+    torneo_admin_id = resp.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/usuarios/{torneo_admin_id}/torneos",
+        json={"torneo_ids": [1, 999999]},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 404
+    assert "999999" in resp.json()["detail"]
+
+    # Nada se aplicó — ni siquiera el ID 1 válido del mismo pedido.
+    resp = await client.get(f"/api/v1/usuarios/{torneo_admin_id}/torneos", headers=admin_general_headers)
+    assert resp.json() == []
+
+
+async def test_torneo_admin_puede_leer_su_propio_set_pero_no_el_de_otro(
+    client: AsyncClient,
+    admin_general_headers: dict[str, str],
+    torneo_admin_headers: dict[str, str],
+    torneo_admin_con_torneo_headers: dict[str, str],
+):
+    resp = await client.get("/api/v1/auth/me", headers=torneo_admin_con_torneo_headers)
+    otro_id = resp.json()["id"]
+
+    resp = await client.get(f"/api/v1/usuarios/{otro_id}/torneos", headers=torneo_admin_headers)
+    assert resp.status_code == 403
+
+
+async def test_degradar_torneo_admin_desactiva_sus_asignaciones(
+    client: AsyncClient,
+    admin_general_headers: dict[str, str],
+    torneo_admin_con_torneo_headers: dict[str, str],
+):
+    """T15 / hallazgo #3 de la voz externa Eng: degradar el rol de un
+    TorneoAdmin con torneos asignados debe desactivar esas filas — si no,
+    quedan huérfanas y podrían resucitar acceso si se lo re-promueve."""
+    resp = await client.get("/api/v1/auth/me", headers=torneo_admin_con_torneo_headers)
+    body = resp.json()
+    usuario_id = body["id"]
+    assert body["rol"] == "TorneoAdmin"
+
+    resp = await client.get(f"/api/v1/usuarios/{usuario_id}/torneos", headers=admin_general_headers)
+    assert resp.json() == [1]
+
+    resp = await client.patch(
+        f"/api/v1/usuarios/{usuario_id}", json={"rol": "Arbitro"}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = await client.get(f"/api/v1/usuarios/{usuario_id}/torneos", headers=admin_general_headers)
+    assert resp.json() == []
+
+    # Re-promoverlo NO resucita la asignación vieja — queda Inactivo hasta
+    # que un AdminGeneral lo asigne de nuevo, conscientemente.
+    resp = await client.patch(
+        f"/api/v1/usuarios/{usuario_id}", json={"rol": "TorneoAdmin"}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200
+
+    resp = await client.get(f"/api/v1/usuarios/{usuario_id}/torneos", headers=admin_general_headers)
+    assert resp.json() == []

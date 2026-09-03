@@ -186,6 +186,10 @@ export interface paths {
          * Dar De Baja Torneo
          * @description Borrado lógico (Estado='Inactivo'). No hay DELETE físico: ver el
          *     comentario sobre ON DELETE CASCADE en database/02_constraints.sql.
+         *
+         *     require_torneo_access (rbac-licencias-torneos-plan.md, §4.3/§4.6):
+         *     AdminGeneral bypass total; TorneoAdmin exige asignación Activa a ESTE
+         *     torneo_id — sin asignación, 403 antes de llegar al service.
          */
         delete: operations["dar_de_baja_torneo_api_v1_torneos__torneo_id__delete"];
         options?: never;
@@ -1152,6 +1156,57 @@ export interface paths {
         patch: operations["actualizar_usuario_api_v1_usuarios__usuario_id__patch"];
         trace?: never;
     };
+    "/api/v1/usuarios/{usuario_id}/licencia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Actualizar Licencia
+         * @description Rechaza que un AdminGeneral se revoque su propia licencia — chequeo
+         *     en AsignacionTorneoAdminService.set_licencia (clon de T6).
+         */
+        patch: operations["actualizar_licencia_api_v1_usuarios__usuario_id__licencia_patch"];
+        trace?: never;
+    };
+    "/api/v1/usuarios/{usuario_id}/torneos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Torneos Asignados
+         * @description AdminGeneral ve cualquier cuenta; TorneoAdmin solo puede consultar
+         *     su PROPIO set (precarga del modal "Gestionar torneos" que él mismo no
+         *     puede abrir para sí — hoy el panel es exclusivo de AdminGeneral, pero
+         *     el endpoint de lectura queda abierto a self por si un TorneoAdmin
+         *     necesita confirmar sus propios torneos desde otra pantalla).
+         */
+        get: operations["obtener_torneos_asignados_api_v1_usuarios__usuario_id__torneos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Actualizar Torneos Asignados
+         * @description Reemplaza el set completo de torneos asignados a `usuario_id`. Sin
+         *     bypass de "self" — solo AdminGeneral, igual que el resto de la
+         *     escritura de este router (comentario del header del archivo).
+         */
+        patch: operations["actualizar_torneos_asignados_api_v1_usuarios__usuario_id__torneos_patch"];
+        trace?: never;
+    };
     "/api/v1/accesos": {
         parameters: {
             query?: never;
@@ -1329,6 +1384,16 @@ export interface components {
              * Format: date-time
              */
             fecha: string;
+        };
+        /**
+         * AsignacionTorneosUpdate
+         * @description Body de PATCH /usuarios/{id}/torneos — reemplaza el set completo de
+         *     torneos asignados (rbac-licencias-torneos-plan.md, §4.5; endpoint
+         *     corregido de PUT a PATCH, ver Eng review hallazgo #2).
+         */
+        AsignacionTorneosUpdate: {
+            /** Torneo Ids */
+            torneo_ids: number[];
         };
         /** AuditoriaOut */
         AuditoriaOut: {
@@ -2291,6 +2356,14 @@ export interface components {
             /** Foto Url */
             foto_url?: string | null;
         };
+        /**
+         * LicenciaUpdate
+         * @description Body de PATCH /usuarios/{id}/licencia (rbac-licencias-torneos-plan.md, §4.5).
+         */
+        LicenciaUpdate: {
+            /** Activa */
+            activa: boolean;
+        };
         /** ModalidadOut */
         ModalidadOut: {
             /** Id */
@@ -2992,6 +3065,8 @@ export interface components {
              * @enum {string}
              */
             estado: "Activo" | "Inactivo";
+            /** Licencia Activa */
+            licencia_activa: boolean;
             /**
              * Fecha Registro
              * Format: date-time
@@ -3343,6 +3418,7 @@ export interface operations {
                 limit?: number;
                 estado?: ("Activo" | "Inactivo" | "Finalizado") | null;
                 torneo_grupo_id?: number | null;
+                solo_mios?: boolean;
             };
             header?: never;
             path?: never;
@@ -5777,6 +5853,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsuarioOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    actualizar_licencia_api_v1_usuarios__usuario_id__licencia_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                usuario_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LicenciaUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsuarioOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_torneos_asignados_api_v1_usuarios__usuario_id__torneos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                usuario_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": number[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    actualizar_torneos_asignados_api_v1_usuarios__usuario_id__torneos_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                usuario_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AsignacionTorneosUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": number[];
                 };
             };
             /** @description Validation Error */

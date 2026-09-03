@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user, require_roles, require_torneo_access
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.fase import FaseOut
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/torneos", tags=["Motor de Formatos"])
 @router.post(
     "/{torneo_id}/fixture",
     response_model=FaseOut,
-    dependencies=[Depends(require_roles("TorneoAdmin"))],
+    dependencies=[Depends(require_roles("TorneoAdmin")), Depends(require_torneo_access())],
 )
 async def generar_fixture(torneo_id: int, session: AsyncSession = Depends(get_db)) -> FaseOut:
     """Formato Liga: todos contra todos (ida y vuelta si el torneo lo
@@ -31,7 +31,7 @@ async def generar_fixture(torneo_id: int, session: AsyncSession = Depends(get_db
 @router.post(
     "/{torneo_id}/sorteo",
     response_model=FaseOut,
-    dependencies=[Depends(require_roles("TorneoAdmin"))],
+    dependencies=[Depends(require_roles("TorneoAdmin")), Depends(require_torneo_access())],
 )
 async def sortear(
     torneo_id: int,
@@ -49,7 +49,7 @@ async def sortear(
 @router.post(
     "/{torneo_id}/playoffs",
     response_model=FaseOut,
-    dependencies=[Depends(require_roles("TorneoAdmin"))],
+    dependencies=[Depends(require_roles("TorneoAdmin")), Depends(require_torneo_access())],
 )
 async def generar_playoffs(
     torneo_id: int,

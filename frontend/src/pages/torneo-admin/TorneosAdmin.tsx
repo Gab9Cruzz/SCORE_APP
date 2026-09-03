@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../api/client";
+import { useAuth } from "../../auth/useAuth";
 import { ResourceForm, type ResourceFieldValue, type ResourceFormField } from "../../components/admin/ResourceForm";
 import { useCatalogo } from "../../hooks/useCatalogo";
 import { FiltroDisciplinasBar } from "./FiltroDisciplinasBar";
@@ -81,6 +82,7 @@ function edicionParaAbrir(grupo: TorneoGrupo): EdicionResumen {
 export function TorneosAdminPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { session } = useAuth();
   const [modo, setModo] = useState<Modo>({ tipo: "lista" });
   // 3A-10 (docs/plans/cierre-backlog-todos-plan.md): antes esto solo LEÍA
   // ?disciplina_id= al montar (llegar desde la grilla de Equipos con
@@ -156,6 +158,36 @@ export function TorneosAdminPage() {
 
   const catalogo = useCatalogo();
 
+  // rbac-licencias-torneos-plan.md, Fase 3: filtra el listado a los
+  // torneos que el TorneoAdmin tiene asignados (E1, GET /torneos?solo_mios=true)
+  // — AdminGeneral sigue viendo todo, sin filtro (bypass, mismo criterio
+  // que el backend). `/api/v1/torneo-grupos` (arriba) no se tocó — sigue
+  // devolviendo TODOS los grupos con TODAS sus ediciones; el recorte pasa
+  // acá, en el cliente, comparando cada edición contra el set de IDs
+  // asignados. torneo_grupos.py queda deliberadamente fuera de Fase 2
+  // (spans múltiples ediciones, torneo_id no es 1:1 — ver el plan): filtrar
+  // en el cliente evita esa ambigüedad sin tocar ese router.
+  const misTorneosQuery = useQuery({
+    queryKey: ["torneos", "solo-mios"],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/torneos", {
+        params: { query: { solo_mios: true, limit: 200 } },
+      } as never);
+      if (error) throw error;
+      return data as { id: number }[];
+    },
+    enabled: session?.rol === "TorneoAdmin",
+  });
+
+  // `null` = sin filtro — tanto para AdminGeneral (bypass real) como
+  // mientras la query de arriba está en vuelo (evita el flash de "no
+  // tenés torneos" antes de que llegue el set real; se angosta solo en
+  // cuanto resuelve, nunca al revés).
+  const misTorneoIds = useMemo(() => {
+    if (session?.rol !== "TorneoAdmin" || misTorneosQuery.data === undefined) return null;
+    return new Set(misTorneosQuery.data.map((t) => t.id));
+  }, [session?.rol, misTorneosQuery.data]);
+
   const grupos = useMemo(() => gruposQuery.data ?? [], [gruposQuery.data]);
 
   /** La disciplina/modalidad/estado de un grupo son las de la edición que
@@ -212,12 +244,18 @@ export function TorneosAdminPage() {
   const gruposVisibles = useMemo(
     () =>
       grupos.filter((g) => {
+        // Al menos UNA edición del grupo debe estar entre las asignadas —
+        // un grupo con ediciones mixtas (algunas asignadas, otras no)
+        // sigue mostrándose (mismo criterio que "Ver Torneo" abre la
+        // edición Activa más reciente, no una lista completa de ediciones
+        // para elegir): recorte a nivel de grupo, no de edición individual.
+        if (misTorneoIds !== null && !g.ediciones.some((e) => misTorneoIds.has(e.id))) return false;
         if (disciplinaFiltro !== null && disciplinaDeGrupo(g) !== disciplinaFiltro) return false;
         if (modalidadFiltro !== null && modalidadDeGrupo(g) !== modalidadFiltro) return false;
         if (estadoFiltro !== null && estadoDeGrupo(g) !== estadoFiltro) return false;
         return true;
       }),
-    [grupos, disciplinaFiltro, modalidadFiltro, estadoFiltro],
+    [grupos, misTorneoIds, disciplinaFiltro, modalidadFiltro, estadoFiltro],
   );
 
   const hayFiltro = disciplinaFiltro !== null || modalidadFiltro !== null || estadoFiltro !== null;

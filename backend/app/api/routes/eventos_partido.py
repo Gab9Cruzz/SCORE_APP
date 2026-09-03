@@ -1,15 +1,32 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user, require_roles, require_torneo_access_de
 from app.db.session import get_db
 from app.models.usuario import Usuario
+from app.repositories.evento_partido import EventoPartidoRepository
+from app.repositories.partido import PartidoRepository
 from app.schemas.evento_partido import EventoPartidoCreate, EventoPartidoMinutoUpdate, EventoPartidoOut
 from app.services.evento_partido import EventoPartidoService
 
 # Goles, tarjetas y cambios dentro de un partido. Distinto de /eventos, que
 # es el catálogo (Gol, Autogol, Tarjeta Amarilla, ...).
 router = APIRouter(prefix="/eventos-partido", tags=["Eventos de partido"])
+
+
+# Resolvers de torneo_id (rbac-licencias-torneos-plan.md, Fase 2) —
+# EventoPartido.partidos_id -> Partido.torneo_id (1 hop). "Arbitro" sin
+# scoping en TODAS las rutas de este router (mismo criterio que
+# partidos.py: ya tiene su propio ownership-check en el Service, D5).
+async def _torneo_id_del_body(data: EventoPartidoCreate, session: AsyncSession = Depends(get_db)) -> int:
+    partido = await PartidoRepository(session).get_or_404(data.partidos_id)
+    return partido.torneo_id
+
+
+async def _torneo_id_de_evento_partido(evento_partido_id: int, session: AsyncSession = Depends(get_db)) -> int:
+    evento = await EventoPartidoRepository(session).get_or_404(evento_partido_id)
+    partido = await PartidoRepository(session).get_or_404(evento.partidos_id)
+    return partido.torneo_id
 
 
 @router.get("", response_model=list[EventoPartidoOut])
@@ -30,7 +47,10 @@ async def obtener_evento_partido(
     "",
     response_model=EventoPartidoOut,
     status_code=201,
-    dependencies=[Depends(require_roles("TorneoAdmin", "Arbitro"))],
+    dependencies=[
+        Depends(require_roles("TorneoAdmin", "Arbitro")),
+        Depends(require_torneo_access_de(_torneo_id_del_body, "Arbitro")),
+    ],
 )
 async def registrar_evento_partido(
     data: EventoPartidoCreate,
@@ -49,7 +69,10 @@ async def registrar_evento_partido(
 @router.patch(
     "/{evento_partido_id}",
     response_model=EventoPartidoOut,
-    dependencies=[Depends(require_roles("TorneoAdmin", "Arbitro"))],
+    dependencies=[
+        Depends(require_roles("TorneoAdmin", "Arbitro")),
+        Depends(require_torneo_access_de(_torneo_id_de_evento_partido, "Arbitro")),
+    ],
 )
 async def corregir_minuto_evento_partido(
     evento_partido_id: int,
@@ -68,7 +91,10 @@ async def corregir_minuto_evento_partido(
 @router.post(
     "/{evento_partido_id}/anular",
     response_model=EventoPartidoOut,
-    dependencies=[Depends(require_roles("TorneoAdmin", "Arbitro"))],
+    dependencies=[
+        Depends(require_roles("TorneoAdmin", "Arbitro")),
+        Depends(require_torneo_access_de(_torneo_id_de_evento_partido, "Arbitro")),
+    ],
 )
 async def anular_evento_partido(
     evento_partido_id: int,

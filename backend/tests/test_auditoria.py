@@ -247,3 +247,76 @@ async def test_purga_desactivada_no_borra_nada(db_session: AsyncSession):
 
     assert await AuditoriaRepository(db_session).purgar_anteriores_a(0) == 0
     assert len(await _auditoria_de(db_session, "torneo", 999)) == 1
+
+
+# --- RBAC licencias + asignación (rbac-licencias-torneos-plan.md, T11) ---
+#
+# T11 es el test MÁS importante de todo el plan (ver la CEO REVIEW del
+# plan): valida la premisa central de §1 — que el listener genérico de
+# este archivo realmente cubre USUARIOS.Licencia_Activa y la tabla nueva
+# ASIGNACION_TORNEO_ADMIN sin ninguna configuración extra. Si esto
+# fallara, sería porque algún código nuevo mutó vía Core
+# (session.execute(insert/update(...))) en vez de session.add()/setattr()
+# ORM — exactamente el hallazgo #1 de la voz externa Eng que motivó
+# reescribir AsignacionTorneoAdminService.set_torneos_asignados.
+
+
+async def test_cambio_de_licencia_queda_registrado(
+    client: AsyncClient, db_session: AsyncSession, admin_general_headers: dict[str, str]
+):
+    creado = await client.post(
+        "/api/v1/usuarios",
+        json={"username": "audita_licencia", "nombre": "Audita Licencia", "password": "clave12345", "rol": "Arbitro"},
+        headers=admin_general_headers,
+    )
+    usuario_id = creado.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/usuarios/{usuario_id}/licencia", json={"activa": False}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200, resp.text
+
+    filas = await _auditoria_de(db_session, "usuarios", usuario_id)
+    # Fila 0 = el propio POST /usuarios (crear); fila 1 = el PATCH de licencia.
+    cambio_licencia = [f for f in filas if f.accion == "modificar"]
+    assert len(cambio_licencia) == 1
+    assert cambio_licencia[0].datos_anteriores["licencia_activa"] is True
+    assert cambio_licencia[0].datos_nuevos["licencia_activa"] is False
+    assert cambio_licencia[0].usuario_id is not None  # el AdminGeneral del fixture
+
+
+async def test_asignacion_de_torneo_queda_registrada(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_general_headers: dict[str, str],
+    torneo_admin_headers: dict[str, str],
+):
+    resp = await client.get("/api/v1/auth/me", headers=torneo_admin_headers)
+    torneo_admin_id = resp.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/usuarios/{torneo_admin_id}/torneos",
+        json={"torneo_ids": [1]},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    filas = await _auditoria_de(db_session, "asignacion_torneo_admin")
+    creadas = [f for f in filas if f.accion == "crear" and f.datos_nuevos.get("usuario_id") == torneo_admin_id]
+    assert len(creadas) == 1
+    assert creadas[0].datos_nuevos["torneo_id"] == 1
+    assert creadas[0].datos_nuevos["estado"] == "Activo"
+
+    # Desasignar (Estado -> Inactivo) también audita — es un "modificar",
+    # nunca un DELETE físico (mismo soft-delete que el resto del esquema).
+    resp = await client.patch(
+        f"/api/v1/usuarios/{torneo_admin_id}/torneos", json={"torneo_ids": []}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200
+
+    filas = await _auditoria_de(db_session, "asignacion_torneo_admin")
+    desactivadas = [
+        f for f in filas if f.accion == "modificar" and f.datos_nuevos.get("estado") == "Inactivo"
+    ]
+    assert len(desactivadas) == 1
+    assert desactivadas[0].datos_anteriores["estado"] == "Activo"

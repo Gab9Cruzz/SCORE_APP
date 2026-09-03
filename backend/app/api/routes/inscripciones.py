@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import require_roles, require_torneo_access_de
 from app.db.session import get_db
+from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.schemas.inscripcion_torneo import (
     InscripcionTorneoCreate,
     InscripcionTorneoOut,
@@ -11,6 +12,18 @@ from app.schemas.inscripcion_torneo import (
 from app.services.inscripcion_torneo import InscripcionTorneoService
 
 router = APIRouter(prefix="/inscripciones", tags=["Inscripciones"])
+
+
+# Resolvers de torneo_id (rbac-licencias-torneos-plan.md, Fase 2) —
+# InscripcionTorneo.torneo_id es directo (database/01_schema.sql), sin
+# join intermedio.
+async def _torneo_id_del_body(data: InscripcionTorneoCreate) -> int:
+    return data.torneo_id
+
+
+async def _torneo_id_de_inscripcion(inscripcion_id: int, session: AsyncSession = Depends(get_db)) -> int:
+    inscripcion = await InscripcionTorneoRepository(session).get_or_404(inscripcion_id)
+    return inscripcion.torneo_id
 
 
 @router.get("", response_model=list[InscripcionTorneoOut])
@@ -30,7 +43,13 @@ async def obtener_inscripcion(
 
 
 @router.post(
-    "", response_model=InscripcionTorneoOut, status_code=201, dependencies=[Depends(require_roles("TorneoAdmin"))]
+    "",
+    response_model=InscripcionTorneoOut,
+    status_code=201,
+    dependencies=[
+        Depends(require_roles("TorneoAdmin")),
+        Depends(require_torneo_access_de(_torneo_id_del_body)),
+    ],
 )
 async def crear_inscripcion(
     data: InscripcionTorneoCreate, session: AsyncSession = Depends(get_db)
@@ -47,7 +66,10 @@ async def crear_inscripcion(
 @router.patch(
     "/{inscripcion_id}",
     response_model=InscripcionTorneoOut,
-    dependencies=[Depends(require_roles("TorneoAdmin"))],
+    dependencies=[
+        Depends(require_roles("TorneoAdmin")),
+        Depends(require_torneo_access_de(_torneo_id_de_inscripcion)),
+    ],
 )
 async def actualizar_inscripcion(
     inscripcion_id: int, data: InscripcionTorneoUpdate, session: AsyncSession = Depends(get_db)

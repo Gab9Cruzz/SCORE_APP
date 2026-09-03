@@ -3,8 +3,10 @@ from datetime import date
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import require_roles, require_torneo_access_de
 from app.db.session import get_db
+from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
+from app.repositories.jugador_equipo import JugadorEquipoRepository
 from app.schemas.jugador_equipo import (
     JugadorEquipoCreate,
     JugadorEquipoOut,
@@ -14,6 +16,19 @@ from app.services.jugador_equipo import JugadorEquipoService
 
 # jugador_equipo: quién juega en qué equipo y desde/hasta cuándo.
 router = APIRouter(prefix="/plantillas", tags=["Plantillas"])
+
+
+# Resolvers de torneo_id (rbac-licencias-torneos-plan.md, Fase 2) —
+# JugadorEquipo.inscripcion_torneo_id -> InscripcionTorneo.torneo_id (1 hop).
+async def _torneo_id_del_body(data: JugadorEquipoCreate, session: AsyncSession = Depends(get_db)) -> int:
+    inscripcion = await InscripcionTorneoRepository(session).get_or_404(data.inscripcion_torneo_id)
+    return inscripcion.torneo_id
+
+
+async def _torneo_id_de_vinculo(vinculo_id: int, session: AsyncSession = Depends(get_db)) -> int:
+    vinculo = await JugadorEquipoRepository(session).get_or_404(vinculo_id)
+    inscripcion = await InscripcionTorneoRepository(session).get_or_404(vinculo.inscripcion_torneo_id)
+    return inscripcion.torneo_id
 
 
 @router.get("", response_model=list[JugadorEquipoOut])
@@ -37,7 +52,13 @@ async def obtener_vinculo(vinculo_id: int, session: AsyncSession = Depends(get_d
 
 
 @router.post(
-    "", response_model=JugadorEquipoOut, status_code=201, dependencies=[Depends(require_roles("TorneoAdmin"))]
+    "",
+    response_model=JugadorEquipoOut,
+    status_code=201,
+    dependencies=[
+        Depends(require_roles("TorneoAdmin")),
+        Depends(require_torneo_access_de(_torneo_id_del_body)),
+    ],
 )
 async def dar_de_alta_jugador(
     data: JugadorEquipoCreate, session: AsyncSession = Depends(get_db)
@@ -50,7 +71,12 @@ async def dar_de_alta_jugador(
 
 
 @router.patch(
-    "/{vinculo_id}", response_model=JugadorEquipoOut, dependencies=[Depends(require_roles("TorneoAdmin"))]
+    "/{vinculo_id}",
+    response_model=JugadorEquipoOut,
+    dependencies=[
+        Depends(require_roles("TorneoAdmin")),
+        Depends(require_torneo_access_de(_torneo_id_de_vinculo)),
+    ],
 )
 async def actualizar_vinculo(
     vinculo_id: int, data: JugadorEquipoUpdate, session: AsyncSession = Depends(get_db)
@@ -61,7 +87,10 @@ async def actualizar_vinculo(
 @router.post(
     "/{vinculo_id}/baja",
     response_model=JugadorEquipoOut,
-    dependencies=[Depends(require_roles("TorneoAdmin"))],
+    dependencies=[
+        Depends(require_roles("TorneoAdmin")),
+        Depends(require_torneo_access_de(_torneo_id_de_vinculo)),
+    ],
 )
 async def dar_de_baja_jugador(
     vinculo_id: int, fecha_fin: date, session: AsyncSession = Depends(get_db)

@@ -4,6 +4,8 @@ import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useSearchParams } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { TOKEN_STORAGE_KEY } from "../../api/client";
+import { AuthProvider } from "../../auth/AuthContext";
 import { server } from "../../test/msw-server";
 import { createTestQueryClient, createWrapper } from "../../test/test-utils";
 import { TorneosAdminPage } from "./TorneosAdmin";
@@ -499,7 +501,9 @@ describe("TorneosAdminPage — filtro de Estado + persistencia en URL (3A-9/3A-1
     return render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[initialEntry]}>
-          <TorneosAdminPage />
+          <AuthProvider>
+            <TorneosAdminPage />
+          </AuthProvider>
           <UbicacionDebug />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -653,5 +657,68 @@ describe("TorneosAdminPage — archivar/reactivar TORNEO_GRUPO (3B-7)", () => {
     await user.click(within(tarjeta).getByRole("button", { name: "Reactivar" }));
 
     await waitFor(() => expect(cuerpoRecibido).toEqual({ estado: "Activo" }));
+  });
+});
+
+// --- Filtro "mis torneos" para TorneoAdmin (rbac-licencias-torneos-plan.md, Fase 3) ---
+
+describe("TorneosAdminPage — filtro por asignación (rbac-licencias-torneos-plan.md, Fase 3)", () => {
+  const DOS_GRUPOS = [
+    {
+      id: 1,
+      nombre: "Torneo Asignado",
+      ediciones: [
+        { id: 100, numero_edicion: 1, disciplina_id: 1, modalidad_id: 1, estado: "Activo", fecha_inicio: "2026-04-01", fecha_fin: "2026-06-30" },
+      ],
+    },
+    {
+      id: 2,
+      nombre: "Torneo No Asignado",
+      ediciones: [
+        { id: 200, numero_edicion: 1, disciplina_id: 1, modalidad_id: 1, estado: "Activo", fecha_inicio: "2026-04-01", fecha_fin: "2026-06-30" },
+      ],
+    },
+  ];
+
+  function sembrarSesionTorneoAdmin() {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "fake-token");
+    localStorage.setItem(
+      "score-app.session",
+      JSON.stringify({ username: "torneo_admin_test", rol: "TorneoAdmin", id: 7 }),
+    );
+  }
+
+  it("TorneoAdmin solo ve los grupos con al menos una edición asignada", async () => {
+    mockCatalogos();
+    sembrarSesionTorneoAdmin();
+    server.use(
+      http.get("http://127.0.0.1:8000/api/v1/torneo-grupos", () => HttpResponse.json(DOS_GRUPOS)),
+      http.get("http://127.0.0.1:8000/api/v1/torneos", ({ request }) => {
+        const url = new URL(request.url);
+        // solo_mios=true (E1) — devuelve únicamente la edición 100.
+        if (url.searchParams.get("solo_mios") === "true") {
+          return HttpResponse.json([{ id: 100 }]);
+        }
+        return HttpResponse.json([]);
+      }),
+    );
+    const Wrapper = createWrapper();
+    render(<TorneosAdminPage />, { wrapper: Wrapper });
+
+    expect(await screen.findByText("Torneo Asignado")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Torneo No Asignado")).not.toBeInTheDocument());
+  });
+
+  it("AdminGeneral (o sin sesión) ve todos los grupos sin filtrar", async () => {
+    mockCatalogos();
+    // Sin sembrarSesionTorneoAdmin(): session es null (equivalente a
+    // AdminGeneral para este filtro — misTorneosQuery ni se dispara,
+    // enabled: session?.rol === "TorneoAdmin").
+    server.use(http.get("http://127.0.0.1:8000/api/v1/torneo-grupos", () => HttpResponse.json(DOS_GRUPOS)));
+    const Wrapper = createWrapper();
+    render(<TorneosAdminPage />, { wrapper: Wrapper });
+
+    expect(await screen.findByText("Torneo Asignado")).toBeInTheDocument();
+    expect(screen.getByText("Torneo No Asignado")).toBeInTheDocument();
   });
 });

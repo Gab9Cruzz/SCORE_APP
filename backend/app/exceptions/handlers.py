@@ -8,6 +8,7 @@ from app.exceptions.errors import (
     ConflictError,
     DomainRuleError,
     ForbiddenError,
+    LicenseRevokedError,
     NotFoundError,
     RateLimitError,
 )
@@ -55,6 +56,20 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={"detail": exc.detail},
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Registrada ANTES de ForbiddenError a propósito, aunque Starlette
+    # resuelve por MRO de la excepción (no por orden de registro) — deja
+    # explícito en el código que LicenseRevokedError es un caso más
+    # específico. `X-License-Revoked` (no un campo en el body) para que
+    # `client.ts` distinga esto de un 403 genérico sin clonar el stream de
+    # la respuesta (rbac-licencias-torneos-plan.md, D3).
+    @app.exception_handler(LicenseRevokedError)
+    async def _license_revoked(_: Request, exc: LicenseRevokedError) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"detail": exc.detail},
+            headers={"X-License-Revoked": "true"},
         )
 
     @app.exception_handler(ForbiddenError)

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.models.disciplina import Disciplina
 from app.models.modalidad import Modalidad
+from app.models.usuario import Usuario
 from app.repositories.jugador_equipo import JugadorEquipoRepository
 from app.schemas.equipo import EquipoCreate
 from app.schemas.inscripcion_torneo import InscripcionTorneoCreate
@@ -53,6 +54,42 @@ async def _crear_disciplina_y_modalidad(
     await db_session.refresh(disciplina)
     await db_session.refresh(modalidad)
     return disciplina.id, modalidad.id
+
+
+# --- require_torneo_access_de (rbac-licencias-torneos-plan.md, Fase 2) ---
+
+
+async def test_torneo_admin_sin_asignacion_no_puede_validar_ni_confirmar(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    payload = {
+        "inscripcion_torneo_id": INSCRIPCION_TIBURONES,
+        "fecha_inicio": "2026-02-01",
+        "filas": [_fila("0977000201", "Sin Asignar")],
+    }
+    resp = await client.post(VALIDAR, json=payload, headers=torneo_admin_headers)
+    assert resp.status_code == 403
+    assert "asignado" in resp.json()["detail"]
+
+    resp = await client.post(CONFIRMAR, json=payload, headers=torneo_admin_headers)
+    assert resp.status_code == 403
+
+
+async def test_torneo_admin_con_asignacion_puede_validar_y_confirmar(
+    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]
+):
+    payload = {
+        "inscripcion_torneo_id": INSCRIPCION_TIBURONES,
+        "fecha_inicio": "2026-02-01",
+        "filas": [_fila("0977000202", "Con Asignar")],
+    }
+    resp = await client.post(VALIDAR, json=payload, headers=torneo_admin_con_torneo_headers)
+    assert resp.status_code == 200, resp.text
+    assert len(resp.json()["validos"]) == 1
+
+    resp = await client.post(CONFIRMAR, json=payload, headers=torneo_admin_con_torneo_headers)
+    assert resp.status_code == 200, resp.text
+    assert len(resp.json()["insertados"]) == 1
 
 
 async def test_ec1_cedula_duplicada_en_el_lote(client: AsyncClient, admin_general_headers: dict[str, str]):
@@ -450,7 +487,12 @@ async def test_ec6_confirmar_concurrente_no_supera_el_cupo(engine: AsyncEngine):
                 torneo_grupo_nombre="Abierto Concurrencia EC6",
                 fecha_inicio=date(2026, 5, 1),
                 fecha_fin=date(2026, 5, 10),
-            )
+            ),
+            # AdminGeneral "de mentira" (no persistido, no hace falta —
+            # rbac-licencias-torneos-plan.md, D4): TorneoService.create solo
+            # lee .rol para decidir si auto-asigna al creador, y AdminGeneral
+            # no genera ninguna fila (bypass total vía require_torneo_access).
+            Usuario(rol="AdminGeneral"),
         )
         equipo = await EquipoService(setup).create(
             EquipoCreate(nombre="Pareja Concurrencia EC6", disciplina_id=disciplina_id, modalidad_id=modalidad_id)

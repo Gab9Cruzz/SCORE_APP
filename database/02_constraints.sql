@@ -258,11 +258,15 @@ ALTER TABLE EVENTOS
 -- fallos, cada intento bloqueado extendería la ventana de bloqueo sola
 -- (UsuarioService.login solo cuenta motivo='credenciales' al decidir si
 -- bloquear).
+-- 'licencia_revocada' (rbac-licencias-torneos-plan.md): la cuenta existe,
+-- la contraseña es correcta, pero Licencia_Activa=FALSE — el login se
+-- rechaza igual que 'inactivo', con un motivo distinto para poder
+-- distinguir "cuenta desactivada" de "licencia revocada" en la bitácora.
 ALTER TABLE ACCESOS
     ADD CONSTRAINT fk_accesos_usuario FOREIGN KEY (Usuario_ID) REFERENCES USUARIOS(ID),
     ADD CONSTRAINT chk_accesos_motivo CHECK (
         (Exitoso = TRUE AND Motivo IS NULL)
-     OR (Exitoso = FALSE AND Motivo IN ('credenciales', 'inactivo', 'bloqueado'))
+     OR (Exitoso = FALSE AND Motivo IN ('credenciales', 'inactivo', 'bloqueado', 'licencia_revocada'))
     );
 
 
@@ -287,6 +291,18 @@ ALTER TABLE USUARIOS
     ADD CONSTRAINT chk_usuarios_password_hash CHECK (LENGTH(Password_Hash) >= 20),
     ADD CONSTRAINT chk_usuarios_rol CHECK (Rol IN ('AdminGeneral', 'TorneoAdmin', 'Arbitro', 'Publico')),
     ADD CONSTRAINT chk_usuarios_estado CHECK (Estado IN ('Activo', 'Inactivo'));
+
+-- ASIGNACION_TORNEO_ADMIN (rbac-licencias-torneos-plan.md, §3.2)
+-- unique_asignacion_usuario_torneo: como mucho una fila por (Usuario_ID,
+-- Torneo_ID) — revocar/reotorgar es un flip de Estado sobre la MISMA
+-- fila, nunca un INSERT nuevo. FK sin ON DELETE especial (CASCADE
+-- implícito de Postgres es RESTRICT): igual que el resto del esquema, las
+-- cuentas y torneos se dan de baja lógica, no se borran físicamente.
+ALTER TABLE ASIGNACION_TORNEO_ADMIN
+    ADD CONSTRAINT unique_asignacion_usuario_torneo UNIQUE (Usuario_ID, Torneo_ID),
+    ADD CONSTRAINT fk_asignacion_usuario FOREIGN KEY (Usuario_ID) REFERENCES USUARIOS(ID),
+    ADD CONSTRAINT fk_asignacion_torneo FOREIGN KEY (Torneo_ID) REFERENCES TORNEO(ID),
+    ADD CONSTRAINT chk_asignacion_estado CHECK (Estado IN ('Activo', 'Inactivo'));
 
 -- EVENTOS_PARTIDO
 -- El rango de MINUTO llega a 130: cubre los 120' de prórroga más el

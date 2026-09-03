@@ -43,6 +43,41 @@ class TorneoRepository(BaseRepository[Torneo]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        torneo_ids_permitidos: Sequence[int] | None = None,
+        **filtros: object,
+    ) -> list[Torneo]:
+        """Override de BaseRepository.list: agrega un filtro `IN` opcional
+        (rbac-licencias-torneos-plan.md, E1 — GET /torneos?solo_mios=true)
+        que el `list()` genérico no soporta (solo hace igualdad por
+        columna). `torneo_ids_permitidos=[]` (lista vacía, no None)
+        significa "el caller no tiene NINGÚN torneo asignado" — debe
+        devolver 0 filas, no todas; `None` significa "sin restricción"
+        (comportamiento de siempre)."""
+        if torneo_ids_permitidos is not None:
+            stmt = select(Torneo).where(Torneo.id.in_(torneo_ids_permitidos))
+            for campo, valor in filtros.items():
+                if valor is not None:
+                    stmt = stmt.where(getattr(Torneo, campo) == valor)
+            stmt = stmt.order_by(Torneo.id).offset(skip).limit(limit)
+            result = await self.session.execute(stmt)
+            return list(result.scalars().all())
+        return await super().list(skip=skip, limit=limit, **filtros)
+
+    async def ids_existentes(self, torneo_ids: Sequence[int]) -> set[int]:
+        """Usado por AsignacionTorneoAdminService.set_torneos_asignados
+        (rbac-licencias-torneos-plan.md, T7) para rechazar con 404 —y el/los
+        ID culpable(s)— cualquier torneo_id que no exista, en vez de que un
+        ID basura se pierda silencioso en el diff activar/desactivar."""
+        if not torneo_ids:
+            return set()
+        stmt = select(Torneo.id).where(Torneo.id.in_(torneo_ids))
+        result = await self.session.execute(stmt)
+        return set(result.scalars().all())
+
     async def ediciones_por_grupo(self, torneo_grupo_ids: Sequence[int]) -> dict[int, list[Torneo]]:
         """Las ediciones de VARIOS grupos en una sola consulta, agrupadas
         en Python (equipos-disciplina-navegacion-plan.md, Mejora #4).

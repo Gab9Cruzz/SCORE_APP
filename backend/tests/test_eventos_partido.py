@@ -109,21 +109,51 @@ async def test_arbitro_no_asignado_no_puede_anular_evento(
     assert "asignado" in resp.json()["detail"].lower()
 
 
-async def test_torneo_admin_puede_registrar_y_anular_evento(
-    client: AsyncClient, torneo_admin_headers: dict[str, str]
+async def test_torneo_admin_sin_asignacion_no_puede_registrar_ni_anular_evento(
+    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str], torneo_admin_headers: dict[str, str]
 ):
-    # TorneoAdmin no pasa por el ownership-check (D5) — sin partido "propio".
-    await _empezar_partido(client, torneo_admin_headers)
+    """rbac-licencias-torneos-plan.md, Fase 2 — distinto del
+    ownership-check de Árbitro (D5): acá el chequeo es de TorneoAdmin
+    contra ASIGNACION_TORNEO_ADMIN, resuelto vía partidos_id -> Partido.torneo_id."""
+    await _empezar_partido(client, torneo_admin_con_torneo_headers)
+    resp = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 20},
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 403
+    assert "asignado" in resp.json()["detail"]
+
+    # Evento real lo carga la cuenta asignada, para probar anular contra ella.
+    resp = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 21},
+        headers=torneo_admin_con_torneo_headers,
+    )
+    evento_id = resp.json()["id"]
+
+    resp = await client.post(f"/api/v1/eventos-partido/{evento_id}/anular", headers=torneo_admin_headers)
+    assert resp.status_code == 403
+
+
+async def test_torneo_admin_puede_registrar_y_anular_evento(
+    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]
+):
+    # TorneoAdmin no pasa por el ownership-check de Árbitro (D5) — pero SÍ
+    # necesita asignación al torneo del partido (rbac-licencias-torneos-plan.md,
+    # Fase 2) — torneo_admin_con_torneo_headers está asignado al Torneo 1
+    # (partido 3 pertenece a ese torneo, 05_seed.sql).
+    await _empezar_partido(client, torneo_admin_con_torneo_headers)
     resp = await client.post(
         "/api/v1/eventos-partido",
         json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 45},
-        headers=torneo_admin_headers,
+        headers=torneo_admin_con_torneo_headers,
     )
     assert resp.status_code == 201, resp.text
     evento_id = resp.json()["id"]
 
     resp = await client.post(
-        f"/api/v1/eventos-partido/{evento_id}/anular", headers=torneo_admin_headers
+        f"/api/v1/eventos-partido/{evento_id}/anular", headers=torneo_admin_con_torneo_headers
     )
     assert resp.status_code == 200
     assert resp.json()["estado"] == "Anulado"
@@ -145,20 +175,20 @@ async def test_registrar_evento_en_partido_programado_es_rechazado(
 
 
 async def test_registrar_evento_en_partido_finalizado_es_rechazado(
-    client: AsyncClient, torneo_admin_headers: dict[str, str]
+    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]
 ):
     """Alta NUEVA sigue bloqueada incluso después de Finalizado — distinto
     de corregir_minuto/anular sobre un evento YA cargado (EC-15), que este
     test no toca."""
     resp = await client.patch(
-        "/api/v1/partidos/3", json={"estado": "Finalizado"}, headers=torneo_admin_headers
+        "/api/v1/partidos/3", json={"estado": "Finalizado"}, headers=torneo_admin_con_torneo_headers
     )
     assert resp.status_code == 200, resp.text
 
     resp = await client.post(
         "/api/v1/eventos-partido",
         json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 30},
-        headers=torneo_admin_headers,
+        headers=torneo_admin_con_torneo_headers,
     )
     assert resp.status_code == 400, resp.text
     assert "en curso" in resp.json()["detail"].lower()

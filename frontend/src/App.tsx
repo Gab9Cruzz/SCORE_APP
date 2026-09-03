@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { useAuth } from "./auth/useAuth";
 import { NavBar } from "./components/NavBar";
 import { RequireRole } from "./components/RequireRole";
 import { ControlDeMesaPage } from "./pages/ControlDeMesa";
 import { DashboardPage } from "./pages/Dashboard";
+import { LicenseRevokedScreen } from "./pages/LicenseRevokedScreen";
 import { LoginPage } from "./pages/Login";
 import { PartidoEnVivoPage } from "./pages/PartidoEnVivo";
 import { MisPartidosPage } from "./pages/arbitro/MisPartidos";
@@ -25,6 +27,17 @@ import { TorneoDashboardPage } from "./pages/torneo-admin/torneo-dashboard/Torne
 import { TraspasosDelTorneoPage } from "./pages/torneo-admin/torneo-dashboard/TraspasosDelTorneo";
 
 export function App() {
+  const { licenseRevoked } = useAuth();
+
+  // rbac-licencias-torneos-plan.md, §5.2: chequeado ANTES que las rutas
+  // normales — reemplaza el shell entero (nav incluida), sin importar en
+  // qué ruta estaba el usuario cuando se le revocó la licencia. No es un
+  // <Route> más: una licencia revocada corta el acceso a TODA la app, no
+  // solo a las pantallas protegidas por RequireRole.
+  if (licenseRevoked) {
+    return <LicenseRevokedScreen />;
+  }
+
   return (
     <div className="app-shell">
       <NavBar />

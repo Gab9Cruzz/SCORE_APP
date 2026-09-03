@@ -119,6 +119,35 @@ async def test_crear_torneo_arma_su_fase_inicial_sola(client: AsyncClient, torne
 # ---------- T34/T35: Generar Fixture (Liga) ----------
 
 
+# --- require_torneo_access (rbac-licencias-torneos-plan.md, Fase 2) —
+# torneo_id es un path param directo, mismo dependency que torneos.py.
+
+
+async def test_torneo_admin_de_otro_torneo_no_puede_generar_fixture_ni_sorteo_ni_playoffs(
+    client: AsyncClient,
+    torneo_admin_con_torneo_headers: dict[str, str],
+    torneo_admin_headers: dict[str, str],
+):
+    """torneo_admin_con_torneo_headers crea (y por D4 queda auto-asignado
+    a) un torneo nuevo — torneo_admin_headers es una cuenta distinta, sin
+    relación con él."""
+    torneo_id, _equipos = await _torneo_con_equipos(
+        client, torneo_admin_con_torneo_headers, 4, nombre="Torneo Ajeno Motor"
+    )
+
+    resp = await client.post(f"/api/v1/torneos/{torneo_id}/fixture", headers=torneo_admin_headers)
+    assert resp.status_code == 403
+    assert "asignado" in resp.json()["detail"]
+
+    resp = await client.post(
+        f"/api/v1/torneos/{torneo_id}/sorteo", json={"semilla": "ajena"}, headers=torneo_admin_headers
+    )
+    assert resp.status_code == 403
+
+    resp = await client.post(f"/api/v1/torneos/{torneo_id}/playoffs", headers=torneo_admin_headers)
+    assert resp.status_code == 403
+
+
 async def test_generar_fixture_liga_par(client: AsyncClient, torneo_admin_headers: dict[str, str]):
     torneo_id, equipos = await _torneo_con_equipos(client, torneo_admin_headers, 4, nombre="Liga Par")
     resp = await client.post(f"/api/v1/torneos/{torneo_id}/fixture", headers=torneo_admin_headers)

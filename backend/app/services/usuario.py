@@ -4,9 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.security import create_access_token, hash_password, verify_password
-from app.exceptions.errors import AuthError, ForbiddenError, NotFoundError, RateLimitError
+from app.exceptions.errors import AuthError, ForbiddenError, LicenseRevokedError, NotFoundError, RateLimitError
 from app.models.usuario import Usuario
 from app.repositories.acceso import AccesoRepository
+from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
 from app.repositories.usuario import UsuarioRepository
 from app.schemas.auth import Token
 from app.schemas.usuario import UsuarioCreate, UsuarioUpdate
@@ -16,6 +17,7 @@ class UsuarioService:
     def __init__(self, session: AsyncSession):
         self.repo = UsuarioRepository(session)
         self.acceso_repo = AccesoRepository(session)
+        self.asignacion_repo = AsignacionTorneoAdminRepository(session)
 
     async def get(self, id_: int, usuario_actual: Usuario) -> Usuario:
         usuario = await self.repo.get_or_404(id_)
@@ -54,7 +56,22 @@ class UsuarioService:
         payload = data.model_dump(exclude_unset=True, exclude={"password"})
         if data.password is not None:
             payload["password_hash"] = hash_password(data.password)
-        return await self.repo.update(id_, **payload)
+
+        objetivo = await self.repo.get_or_404(id_)
+        rol_anterior = objetivo.rol
+        usuario = await self.repo.save_changes(objetivo, **payload)
+
+        # Asignaciones huérfanas (rbac-licencias-torneos-plan.md, §3.2,
+        # hallazgo #3 de la voz externa Eng): fn_validar_asignacion_torneo_admin_rol
+        # (06_triggers.sql) solo valida al INSERT/UPDATE de la fila de
+        # asignación, no cuando el USUARIO cambia de rol después. Sin
+        # esto, degradar un TorneoAdmin deja sus filas Activo huérfanas —
+        # si se lo re-promueve más adelante, resucitan accesos que ningún
+        # AdminGeneral decidió conscientemente en ese momento.
+        if rol_anterior == "TorneoAdmin" and usuario.rol != "TorneoAdmin":
+            await self.asignacion_repo.desactivar_todas_del_usuario(id_)
+
+        return usuario
 
     async def soft_delete(self, id_: int, usuario_actual: Usuario) -> Usuario:
         if id_ == usuario_actual.id:
@@ -160,6 +177,24 @@ class UsuarioService:
                 user_agent=user_agent,
             )
             raise AuthError("El usuario está inactivo.")
+
+        # Licencia (rbac-licencias-torneos-plan.md, D2a): kill switch de
+        # nivel superior, chequeado acá igual que en get_current_user —
+        # sin este bloque, un login con licencia revocada desaparecería
+        # silenciosamente de la bitácora de ACCESOS en vez de quedar
+        # registrado como motivo='licencia_revocada' (hallazgo de la voz
+        # externa, Eng review). Mismo orden que 'inactivo': el registro
+        # de acceso se escribe ANTES de lanzar, no después.
+        if not usuario.licencia_activa:
+            await self._registrar_acceso(
+                usuario_id=usuario.id,
+                username=username,
+                exitoso=False,
+                motivo="licencia_revocada",
+                ip=ip,
+                user_agent=user_agent,
+            )
+            raise LicenseRevokedError()
 
         await self._registrar_acceso(
             usuario_id=usuario.id,

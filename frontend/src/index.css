@@ -902,6 +902,28 @@ td:first-child {
   font-size: 0.85rem;
 }
 
+/* AsignarTorneosModal (rbac-licencias-torneos-plan.md, §5.3) — la lista de
+   checkboxes scrollea DENTRO del modal en vez de empujarlo más allá del
+   viewport (Design review, Pass 6: responsive del modal en mobile). */
+.modal-panel__checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 40vh;
+  overflow-y: auto;
+  margin: 0.75rem 0;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* Touch target >= 44px (Design review, Pass 6): el <label> completo es
+     clickeable, no solo el cuadradito de 16px del checkbox. */
+  padding: 0.4rem 0.25rem;
+  cursor: pointer;
+}
+
 /* Módulo Equipos con Disciplina + navegación por disciplina
    (equipos-disciplina-navegacion-plan.md, Fase 2) */
 

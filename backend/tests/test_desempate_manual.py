@@ -212,6 +212,35 @@ async def test_definir_orden_manual_desempata_dentro_del_empate_pero_nunca_por_e
     )
 
 
+# --- require_torneo_access_de (rbac-licencias-torneos-plan.md, Fase 2) ---
+# GrupoEquipo.inscripcion_torneo_id -> InscripcionTorneo.torneo_id (1 hop).
+
+
+async def test_torneo_admin_de_otro_torneo_no_puede_definir_orden_manual(
+    client: AsyncClient,
+    torneo_admin_con_torneo_headers: dict[str, str],
+    torneo_admin_headers: dict[str, str],
+    db_session: AsyncSession,
+):
+    """torneo_admin_con_torneo_headers crea Y por lo tanto queda
+    auto-asignado (D4) a ESTE torneo nuevo — pero torneo_admin_headers es
+    una cuenta TorneoAdmin totalmente distinta, sin relación con él."""
+    torneo_id, _equipos = await _torneo_grupos_de_3(client, torneo_admin_con_torneo_headers)
+    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    p = resp.json()[0]
+    await _finalizar(db_session, p["id"], p["equipos_id_local"], p["equipos_id_visitante"], 0, 0)
+    resp = await client.get(
+        f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones", params={"grupo_id": p["grupo_id"]}
+    )
+    grupo_equipo_id = resp.json()[0]["grupo_equipo_id"]
+
+    resp = await client.patch(
+        f"/api/v1/grupos/equipos/{grupo_equipo_id}", json={"orden_manual": 1}, headers=torneo_admin_headers
+    )
+    assert resp.status_code == 403
+    assert "asignado" in resp.json()["detail"]
+
+
 async def test_orden_manual_invalido_o_de_otro_rol_es_rechazado(
     client: AsyncClient, torneo_admin_headers: dict[str, str], arbitro_headers: dict[str, str], db_session: AsyncSession
 ):

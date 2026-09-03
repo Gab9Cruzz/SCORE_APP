@@ -55,6 +55,7 @@ from app.db.database import async_session_factory
 from app.exceptions.errors import DomainRuleError
 from app.models.disciplina import Disciplina
 from app.models.modalidad import Modalidad
+from app.models.usuario import Usuario
 from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.repositories.torneo import TorneoRepository
 from app.repositories.torneo_grupo import TorneoGrupoRepository
@@ -149,7 +150,11 @@ async def obtener_o_crear_torneo(
                 torneo_grupo_nombre=nombre_grupo,
                 fecha_inicio=HOY,
                 fecha_fin=FECHA_FIN,
-            )
+            ),
+            # AdminGeneral "de mentira" (no persistido — rbac-licencias-torneos-plan.md,
+            # D4): este script de datos de prueba no tiene un actor logueado
+            # real; AdminGeneral no genera fila de asignación (bypass total).
+            Usuario(rol="AdminGeneral"),
         )
         torneo_id = torneo.id
         reporte.torneos_creados += 1

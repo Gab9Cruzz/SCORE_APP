@@ -29,6 +29,7 @@ from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.session import get_db
 from app.main import app
+from app.models.asignacion_torneo_admin import AsignacionTorneoAdmin
 from app.models.partido import Partido
 from app.models.usuario import Usuario
 
@@ -193,3 +194,18 @@ async def arbitro_no_asignado_headers(db_session: AsyncSession, client: AsyncCli
     """Árbitro válido pero sin ningún partido asignado."""
     await _crear_usuario(db_session, "arbitro_sin_asignar_test", "arbitropass123", "Arbitro")
     return await _login_headers(client, "arbitro_sin_asignar_test", "arbitropass123")
+
+
+@pytest_asyncio.fixture
+async def torneo_admin_con_torneo_headers(db_session: AsyncSession, client: AsyncClient) -> dict[str, str]:
+    """TorneoAdmin con una fila Activa en ASIGNACION_TORNEO_ADMIN sobre el
+    Torneo 1 ('Copa Ecotec 2026', 05_seed.sql — el mismo id que usan
+    test_partidos.py y otros). Precedente estructural:
+    arbitro_headers/arbitro_no_asignado_headers (rbac-licencias-torneos-plan.md).
+    Para un TorneoAdmin SIN asignación, usar torneo_admin_headers."""
+    usuario = await _crear_usuario(db_session, "torneo_admin_con_torneo_test", "torneopass123", "TorneoAdmin")
+    db_session.add(AsignacionTorneoAdmin(usuario_id=usuario.id, torneo_id=1, estado="Activo"))
+    await db_session.commit()
+    return await _login_headers(client, "torneo_admin_con_torneo_test", "torneopass123")
+
+

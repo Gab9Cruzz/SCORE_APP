@@ -26,6 +26,13 @@ export interface AuthContextValue {
   logout: () => void;
   loginError: string | null;
   loggingIn: boolean;
+  /** rbac-licencias-torneos-plan.md, §5.2: true tras un 403 con el header
+   * X-License-Revoked en CUALQUIER request — App.tsx lo chequea antes que
+   * las rutas normales y muestra LicenseRevokedScreen en vez del shell,
+   * sin importar en qué ruta estaba el usuario. `logout()`/`login()` lo
+   * limpian (un login exitoso implica que la licencia ya no está
+   * revocada, o el backend lo hubiera rechazado). */
+  licenseRevoked: boolean;
 }
 
 /** El contexto y sus tipos viven acá, separados de `AuthContext.tsx`, por

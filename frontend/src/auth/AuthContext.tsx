@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api, apiErrorMessage, getStoredToken, setOnUnauthorized, TOKEN_STORAGE_KEY } from "../api/client";
+import {
+  api,
+  apiErrorMessage,
+  getStoredToken,
+  setOnLicenseRevoked,
+  setOnUnauthorized,
+  TOKEN_STORAGE_KEY,
+} from "../api/client";
 import { AuthContext, type AuthContextValue, type Rol, type Session } from "./authContextValue";
 
 const SESSION_STORAGE_KEY = "score-app.session";
@@ -21,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(() => loadStoredSession());
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loggingIn, setLoggingIn] = useState(false);
+  const [licenseRevoked, setLicenseRevoked] = useState(false);
 
   const clearSession = useCallback(() => {
     setSession(null);
@@ -39,9 +47,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setOnUnauthorized(null);
   }, [clearSession]);
 
+  // Licencia revocada (rbac-licencias-torneos-plan.md, §5.2): mismo efecto
+  // que un 401 sobre la sesión (se limpia — el token ya no sirve para nada,
+  // la próxima request con él volvería a dar 403), más el flag que hace que
+  // App.tsx muestre LicenseRevokedScreen en vez del shell normal.
+  useEffect(() => {
+    setOnLicenseRevoked(() => {
+      clearSession();
+      setLicenseRevoked(true);
+    });
+    return () => setOnLicenseRevoked(null);
+  }, [clearSession]);
+
   const login = useCallback(async (username: string, password: string) => {
     setLoggingIn(true);
     setLoginError(null);
+    // Un login exitoso implica licencia activa (si no, el backend lo
+    // hubiera rechazado con 403 antes de llegar acá) — limpia el flag de
+    // una revocación anterior para que App.tsx vuelva a mostrar las rutas
+    // normales en vez de LicenseRevokedScreen.
+    setLicenseRevoked(false);
     try {
       const body = new URLSearchParams({ username, password });
       const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/auth/login`, {
@@ -94,11 +119,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => clearSession(), [clearSession]);
+  const logout = useCallback(() => {
+    clearSession();
+    setLicenseRevoked(false);
+  }, [clearSession]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ session, isAuthenticated: session !== null, login, logout, loginError, loggingIn }),
-    [session, login, logout, loginError, loggingIn],
+    () => ({
+      session,
+      isAuthenticated: session !== null,
+      login,
+      logout,
+      loginError,
+      loggingIn,
+      licenseRevoked,
+    }),
+    [session, login, logout, loginError, loggingIn, licenseRevoked],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

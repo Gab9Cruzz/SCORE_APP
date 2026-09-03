@@ -75,6 +75,62 @@ async def test_admin_da_de_alta_jugador_en_equipo(client: AsyncClient, admin_gen
     assert resp.json()["dorsal"] == 99
 
 
+# --- require_torneo_access_de (rbac-licencias-torneos-plan.md, Fase 2) ---
+
+
+async def test_torneo_admin_sin_asignacion_no_puede_dar_de_alta_ni_editar(
+    client: AsyncClient, admin_general_headers: dict[str, str], torneo_admin_headers: dict[str, str]
+):
+    perfil_id = await _crear_perfil(client, admin_general_headers, "Sin Asignar")
+
+    resp = await client.post(
+        "/api/v1/plantillas",
+        json={
+            "jugador_perfil_id": perfil_id,
+            "inscripcion_torneo_id": INSCRIPCION_TIBURONES_ID,
+            "dorsal": 77,
+            "fecha_inicio": "2026-02-01",
+        },
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 403
+    assert "asignado" in resp.json()["detail"]
+
+    resp = await client.patch("/api/v1/plantillas/1", json={"dorsal": 88}, headers=torneo_admin_headers)
+    assert resp.status_code == 403
+
+    resp = await client.post(
+        "/api/v1/plantillas/1/baja", params={"fecha_fin": "2026-03-01"}, headers=torneo_admin_headers
+    )
+    assert resp.status_code == 403
+
+
+async def test_torneo_admin_con_asignacion_puede_dar_de_alta_y_editar(
+    client: AsyncClient,
+    admin_general_headers: dict[str, str],
+    torneo_admin_con_torneo_headers: dict[str, str],
+):
+    perfil_id = await _crear_perfil(client, admin_general_headers, "Con Asignar")
+
+    resp = await client.post(
+        "/api/v1/plantillas",
+        json={
+            "jugador_perfil_id": perfil_id,
+            "inscripcion_torneo_id": INSCRIPCION_TIBURONES_ID,
+            "dorsal": 78,
+            "fecha_inicio": "2026-02-01",
+        },
+        headers=torneo_admin_con_torneo_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    vinculo_id = resp.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/plantillas/{vinculo_id}", json={"dorsal": 79}, headers=torneo_admin_con_torneo_headers
+    )
+    assert resp.status_code == 200, resp.text
+
+
 async def test_dorsal_repetido_en_roster_vigente_es_rechazado(
     client: AsyncClient, admin_general_headers: dict[str, str]
 ):

@@ -361,3 +361,46 @@ Para el detalle de cada decisión "en curso" (recomendación, alternativas
 consideradas, edge cases, tests) — no repetido acá para que esta lista no
 vuelva a desincronizarse del documento que sí lo mantiene — ver
 `docs/plans/cierre-backlog-todos-plan.md`.
+
+## Deferido desde el plan de RBAC — Asignación de Torneos + Licenciamiento (`docs/plans/rbac-licencias-torneos-plan.md`)
+
+Fases 1, 2 y 3 del plan **implementadas** el 2026-09-02 (320 tests backend
++ 196 frontend, todos verdes; migración 26 aplicada a `torneos_mvp`). Ver
+el plan, §12, para el detalle exacto de qué se scoped y qué quedó afuera
+a propósito.
+
+- ~~Rollout de `require_torneo_access` a los routers restantes~~ —
+  **hecho.** 8 de los 15 routers gateados a TorneoAdmin tenían un
+  `torneo_id` real resoluble (directo o vía 1-3 hops de join):
+  `inscripciones`, `partidos`, `motor_formatos`, `plantillas`,
+  `traspasos`, `registro_lote`, `grupos`, `eventos_partido` — todos
+  scoped, con test de "TorneoAdmin sin asignación recibe 403" propio.
+  **Decisión explícita del usuario:** los otros 7 (`equipos`, `jugadores`,
+  `perfiles`, `disciplinas`, `modalidades`, `eventos`-catálogo,
+  `torneo_grupos`) quedan **sin scoping, a propósito** — son catálogos
+  globales o un pool compartido sin torneo único (`equipos.py` documenta
+  esto mismo en su propio código: "pool compartido, sin dueño"); forzar
+  un `torneo_id` ahí rompería ese diseño en vez de completarlo.
+- ~~Filtrar los listados de `torneo-admin/*`~~ — **hecho** para
+  `TorneosAdminPage` (el listado principal): filtro "mis torneos" vía
+  `GET /torneos?solo_mios=true` (E1), resuelto en el cliente porque
+  `torneo_grupos.py` (el endpoint que esa pantalla consulta) queda fuera
+  del scoping por la misma razón que el punto anterior (una franquicia de
+  ediciones no tiene un `torneo_id` único — ver plan §12.3). Las
+  pantallas de sub-recursos (equipos/jugadores/partidos dentro de un
+  torneo específico) no se tocaron — heredan la protección de escritura
+  de los 8 routers ya scoped, pero sus LISTADOS siguen sin filtrar por
+  asignación (mismo criterio que el resto del pool compartido). Prioridad
+  P3 si se quiere profundizar ahí, no bloqueante.
+- **Métricas/alertas dedicadas de revocación de licencia** (contador de
+  licencias otorgadas/revocadas por día, alerta de pico anómalo de 403 por
+  licencia en una ventana corta — señal de un token comprometido siendo
+  reusado post-revocación). Hoy `AUDITORIA` cubre el "qué pasó" pero no
+  hay dashboard ni alerta activa sobre ese dato. Prioridad: P3.
+- ~~Índice compuesto `(Usuario_ID, Torneo_ID, Estado)` en
+  `ASIGNACION_TORNEO_ADMIN`~~ — **retirado**, no era un gap real: el
+  `UNIQUE(Usuario_ID, Torneo_ID)` que Fase 1 ya especifica es el índice
+  que hace falta para el lookup de `require_torneo_access` (probe de una
+  sola fila, no un scan) — verificado en la revisión de Eng (voz
+  externa), la propuesta original era ruido de proceso, no una
+  optimización real.

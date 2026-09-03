@@ -261,6 +261,41 @@ BEFORE INSERT OR UPDATE OF Disciplina_ID, Modalidad_ID ON TORNEO
 FOR EACH ROW EXECUTE FUNCTION fn_validar_torneo_modalidad();
 
 -- ------------------------------------------------------------
+-- Funcion y trigger: Usuario_ID de una fila de ASIGNACION_TORNEO_ADMIN
+-- debe ser una cuenta Rol='TorneoAdmin' (rbac-licencias-torneos-plan.md,
+-- §3.2). Red de seguridad para un INSERT crudo — el mensaje legible para
+-- el admin ya lo da AsignacionTorneoAdminService antes de llegar acá,
+-- mismo doble-cinturon que fn_validar_torneo_modalidad.
+--
+-- Valida solo en el momento de INSERT/UPDATE de ESTA fila — no revalida
+-- si el usuario cambia de Rol despues (el "catalogo" acá SI puede cambiar
+-- mid-life, a diferencia de Disciplina/Modalidad). Ese caso lo cubre
+-- UsuarioService.update() en Python, desactivando las filas Activo del
+-- usuario cuando su Rol deja de ser 'TorneoAdmin' — no un segundo trigger
+-- cruzando en la direccion opuesta.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_validar_asignacion_torneo_admin_rol()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_rol VARCHAR(20);
+BEGIN
+    SELECT Rol INTO v_rol FROM USUARIOS WHERE ID = NEW.Usuario_ID;
+    IF v_rol IS NULL THEN
+        RAISE EXCEPTION 'El usuario indicado no existe.';
+    END IF;
+    IF v_rol <> 'TorneoAdmin' THEN
+        RAISE EXCEPTION 'Solo se puede asignar torneos a cuentas con rol TorneoAdmin (esta cuenta es %).', v_rol;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_asignacion_validar_rol
+BEFORE INSERT OR UPDATE OF Usuario_ID ON ASIGNACION_TORNEO_ADMIN
+FOR EACH ROW EXECUTE FUNCTION fn_validar_asignacion_torneo_admin_rol();
+
+-- ------------------------------------------------------------
 -- Funcion y trigger: la Modalidad de un EQUIPO pertenece a su Disciplina.
 -- Espejo exacto de fn_validar_torneo_modalidad (arriba) — misma regla,
 -- otra tabla (equipos-disciplina-navegacion-plan.md, D-Eng-15). Se duplica

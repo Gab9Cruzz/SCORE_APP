@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user, require_roles, require_torneo_access, require_torneo_access_de
 from app.db.session import get_db
 from app.models.usuario import Usuario
+from app.repositories.partido import PartidoRepository
 from app.schemas.hito_partido import (
     DuracionPartidoOut,
     EstadoCronometroOut,
@@ -19,6 +20,21 @@ from app.services.hito_partido import HitoPartidoService
 from app.services.partido import PartidoService
 
 router = APIRouter(prefix="/partidos", tags=["Partidos"])
+
+
+# Resolvers de torneo_id (rbac-licencias-torneos-plan.md, Fase 2) —
+# Partido.torneo_id es directo. "Arbitro" pasa como rol sin scoping en
+# TODAS las rutas compartidas con TorneoAdmin: ya tiene su propio
+# ownership-check (verificar_arbitro_asignado, services/permisos.py) —
+# aplicarle además el scoping de TorneoAdmin sería incorrecto, no un
+# refuerzo (un Árbitro no tiene ni necesita fila en ASIGNACION_TORNEO_ADMIN).
+async def _torneo_id_del_body(data: PartidoCreate) -> int:
+    return data.torneo_id
+
+
+async def _torneo_id_de_partido(partido_id: int, session: AsyncSession = Depends(get_db)) -> int:
+    partido = await PartidoRepository(session).get_or_404(partido_id)
+    return partido.torneo_id
 
 
 @router.get("", response_model=list[PartidoOut])
@@ -49,7 +65,10 @@ async def obtener_partido(partido_id: int, session: AsyncSession = Depends(get_d
     "",
     response_model=PartidoOut,
     status_code=201,
-    dependencies=[Depends(require_roles("TorneoAdmin"))],
+    dependencies=[
+        Depends(require_roles("TorneoAdmin")),
+        Depends(require_torneo_access_de(_torneo_id_del_body)),
+    ],
 )
 async def crear_partido(data: PartidoCreate, session: AsyncSession = Depends(get_db)) -> PartidoOut:
     """Programa un partido. trg_partidos_validar_inscripcion (06_triggers.sql)
@@ -65,7 +84,10 @@ async def crear_partido(data: PartidoCreate, session: AsyncSession = Depends(get
 @router.patch(
     "/{partido_id}",
     response_model=PartidoOut,
-    dependencies=[Depends(require_roles("TorneoAdmin", "Arbitro"))],
+    dependencies=[
+        Depends(require_roles("TorneoAdmin", "Arbitro")),
+        Depends(require_torneo_access_de(_torneo_id_de_partido, "Arbitro")),
+    ],
 )
 async def actualizar_partido(
     partido_id: int,
@@ -82,7 +104,10 @@ async def actualizar_partido(
 @router.delete(
     "/{partido_id}",
     response_model=PartidoOut,
-    dependencies=[Depends(require_roles("TorneoAdmin"))],
+    dependencies=[
+        Depends(require_roles("TorneoAdmin")),
+        Depends(require_torneo_access_de(_torneo_id_de_partido)),
+    ],
 )
 async def cancelar_partido(partido_id: int, session: AsyncSession = Depends(get_db)) -> PartidoOut:
     """Borrado lógico -> Estado='Cancelado' (no 'Inactivo': no es un valor
@@ -93,7 +118,10 @@ async def cancelar_partido(partido_id: int, session: AsyncSession = Depends(get_
 @router.post(
     "/{partido_id}/walkover",
     response_model=PartidoOut,
-    dependencies=[Depends(require_roles("TorneoAdmin", "Arbitro"))],
+    dependencies=[
+        Depends(require_roles("TorneoAdmin", "Arbitro")),
+        Depends(require_torneo_access_de(_torneo_id_de_partido, "Arbitro")),
+    ],
 )
 async def marcar_walkover(
     partido_id: int,
@@ -139,7 +167,10 @@ async def obtener_estado_cronometro(
     "/{partido_id}/hitos",
     response_model=HitoPartidoOut,
     status_code=201,
-    dependencies=[Depends(require_roles("TorneoAdmin", "Arbitro"))],
+    dependencies=[
+        Depends(require_roles("TorneoAdmin", "Arbitro")),
+        Depends(require_torneo_access_de(_torneo_id_de_partido, "Arbitro")),
+    ],
 )
 async def registrar_hito_partido(
     partido_id: int,
@@ -160,7 +191,10 @@ async def registrar_hito_partido(
 @router.patch(
     "/{partido_id}/hitos/{hito_id}",
     response_model=HitoPartidoOut,
-    dependencies=[Depends(require_roles("TorneoAdmin", "Arbitro"))],
+    dependencies=[
+        Depends(require_roles("TorneoAdmin", "Arbitro")),
+        Depends(require_torneo_access_de(_torneo_id_de_partido, "Arbitro")),
+    ],
 )
 async def corregir_hito_partido(
     partido_id: int,
@@ -187,7 +221,10 @@ async def listar_convocados(partido_id: int, session: AsyncSession = Depends(get
 @router.put(
     "/{partido_id}/convocados",
     response_model=list[ConvocadoOut],
-    dependencies=[Depends(require_roles("TorneoAdmin", "Arbitro"))],
+    dependencies=[
+        Depends(require_roles("TorneoAdmin", "Arbitro")),
+        Depends(require_torneo_access_de(_torneo_id_de_partido, "Arbitro")),
+    ],
 )
 async def definir_convocados(
     partido_id: int,

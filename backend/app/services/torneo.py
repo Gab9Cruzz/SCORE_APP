@@ -2,11 +2,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import DomainRuleError
+from app.models.asignacion_torneo_admin import AsignacionTorneoAdmin
 from app.models.configuracion_tiempo_torneo import ConfiguracionTiempoTorneo
 from app.models.fase import Fase
 from app.models.partido import Partido
 from app.models.torneo import Torneo
 from app.models.torneo_grupo import TorneoGrupo
+from app.models.usuario import Usuario
 from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoRepository
 from app.repositories.fase import FaseRepository
 from app.repositories.modalidad import ModalidadRepository
@@ -59,12 +61,24 @@ class TorneoService:
         limit: int = 100,
         estado: str | None = None,
         torneo_grupo_id: int | None = None,
+        torneo_ids_permitidos: list[int] | None = None,
     ) -> list[TorneoOut]:
-        torneos = await self.repo.list(skip=skip, limit=limit, estado=estado, torneo_grupo_id=torneo_grupo_id)
+        """`torneo_ids_permitidos` (rbac-licencias-torneos-plan.md, E1):
+        restringe el listado a estos IDs — lo arma el router a partir de
+        ASIGNACION_TORNEO_ADMIN cuando `?solo_mios=true` y el caller es
+        TorneoAdmin. `None` = sin restricción (comportamiento público de
+        siempre, sin cambios)."""
+        torneos = await self.repo.list(
+            skip=skip,
+            limit=limit,
+            estado=estado,
+            torneo_grupo_id=torneo_grupo_id,
+            torneo_ids_permitidos=torneo_ids_permitidos,
+        )
         configs = await self._configs_por_torneo([t.id for t in torneos])
         return [self._a_salida(t, configs.get(t.id)) for t in torneos]
 
-    async def create(self, data: TorneoCreate) -> TorneoOut:
+    async def create(self, data: TorneoCreate, usuario_actual: Usuario) -> TorneoOut:
         """Resuelve el grupo ANTES de crear la edición
         (torneos-admin-plan.md, Fase 1/3 — TorneoCreate.exactamente_un_origen_de_grupo
         ya garantiza que vino uno solo de los dos):
@@ -101,6 +115,16 @@ class TorneoService:
         la que mande el cliente (`config_tiempo`) o, si no manda nada, un
         default derivado de Modalidad.tamano_equipo (mismo patrón que la
         FASE inicial: se crea sola, no hay que pedirla aparte).
+
+        RBAC (rbac-licencias-torneos-plan.md, D4): si el creador es
+        TorneoAdmin, se auto-asigna al torneo recién creado (ASIGNACION_TORNEO_ADMIN)
+        — si no, quedaría sin poder administrar lo que acaba de crear hasta
+        que un AdminGeneral se lo asigne a mano. Guardado a `TorneoAdmin`
+        únicamente: un AdminGeneral también puede crear torneos (bypass de
+        `require_roles`), pero no tiene fila que insertar — ya tiene acceso
+        total vía `require_torneo_access`, y
+        fn_validar_asignacion_torneo_admin_rol (06_triggers.sql) rechazaría
+        de todos modos una fila con Usuario_ID de rol distinto a TorneoAdmin.
         """
         self._validar_parametros_formato(
             data.formato, data.ida_vuelta, data.equipos_por_grupo, data.clasificados_por_grupo
@@ -133,8 +157,15 @@ class TorneoService:
 
         torneo = await self.repo.create(**datos)
         await self._crear_fase_inicial(torneo)
+        await self._auto_asignar_creador(torneo, usuario_actual)
         config = await self._crear_config_tiempo_inicial(torneo, data.config_tiempo)
         return self._a_salida(torneo, config)
+
+    async def _auto_asignar_creador(self, torneo: Torneo, usuario_actual: Usuario) -> None:
+        if usuario_actual.rol != "TorneoAdmin":
+            return
+        self.session.add(AsignacionTorneoAdmin(usuario_id=usuario_actual.id, torneo_id=torneo.id, estado="Activo"))
+        await self.session.commit()
 
     def _validar_parametros_formato(
         self,

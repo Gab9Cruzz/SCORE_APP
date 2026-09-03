@@ -21,6 +21,16 @@ export function setOnUnauthorized(handler: (() => void) | null) {
   onUnauthorized = handler;
 }
 
+// Segundo callback simétrico (rbac-licencias-torneos-plan.md, §5.1): un 403
+// con el header X-License-Revoked (backend/app/exceptions/handlers.py) es
+// distinto de un 403 genérico de rol insuficiente — el header, no un campo
+// del body, es lo que permite distinguirlos acá sin leer/clonar el stream
+// de la respuesta.
+let onLicenseRevoked: (() => void) | null = null;
+export function setOnLicenseRevoked(handler: (() => void) | null) {
+  onLicenseRevoked = handler;
+}
+
 export const api = createClient<paths>({ baseUrl: BASE_URL });
 
 api.use({
@@ -32,6 +42,15 @@ api.use({
     return request;
   },
   onResponse({ response }) {
+    // Chequeo de licencia PRIMERO y con `return` explícito: un 403 de
+    // licencia nunca debe además evaluarse como un 401 (son mutuamente
+    // excluyentes por status code, pero dejarlo explícito documenta la
+    // prioridad — mismo orden que el backend, licencia por encima de
+    // cualquier otro chequeo).
+    if (response.status === 403 && response.headers.get("X-License-Revoked") === "true") {
+      if (onLicenseRevoked) onLicenseRevoked();
+      return response;
+    }
     if (response.status === 401 && onUnauthorized) {
       onUnauthorized();
     }

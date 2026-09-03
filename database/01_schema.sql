@@ -472,7 +472,35 @@ CREATE TABLE USUARIOS (
     Rol VARCHAR(20) NOT NULL DEFAULT 'Publico',
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    Estado VARCHAR(20) DEFAULT 'Activo'
+    Estado VARCHAR(20) DEFAULT 'Activo',
+    -- Licencia de uso (rbac-licencias-torneos-plan.md, D1/D2a): kill
+    -- switch de nivel superior sobre TODA cuenta, no solo TorneoAdmin —
+    -- sin licencia, cero acceso administrativo aunque Estado='Activo'.
+    -- Se chequea fresco en cada request (get_current_user/login), nunca
+    -- vive en el JWT, para que la revocacion sea inmediata.
+    Licencia_Activa BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- Asignacion N:M Usuario (TorneoAdmin) <-> Torneo
+-- (rbac-licencias-torneos-plan.md, §3.2). Fila = "este usuario puede
+-- administrar este torneo". Estado en vez de DELETE, mismo criterio
+-- soft-delete que el resto del esquema: revocar acceso es un flip a
+-- 'Inactivo', no borrar la fila. unique_asignacion_usuario_torneo
+-- (02_constraints.sql) garantiza como mucho una fila por
+-- (Usuario_ID, Torneo_ID) — tildar/destildar el mismo torneo en el modal
+-- de asignacion reusa esa fila en vez de reinsertarla.
+--
+-- fn_validar_asignacion_torneo_admin_rol (06_triggers.sql) exige que
+-- Usuario_ID sea Rol='TorneoAdmin' al insertar/actualizar esta fila, pero
+-- NO revalida si esa cuenta cambia de rol despues — eso lo cubre
+-- UsuarioService.update() en Python, no un segundo trigger.
+CREATE TABLE ASIGNACION_TORNEO_ADMIN (
+    ID SERIAL PRIMARY KEY,
+    Usuario_ID INT NOT NULL,
+    Torneo_ID INT NOT NULL,
+    Estado VARCHAR(20) NOT NULL DEFAULT 'Activo',
+    Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Bitacora de INTENTOS de inicio de sesion (exitosos y fallidos).
@@ -495,7 +523,8 @@ CREATE TABLE ACCESOS (
     Usuario_ID INT,
     Username VARCHAR(50) NOT NULL,
     Exitoso BOOLEAN NOT NULL,
-    -- NULL si Exitoso. Si no: 'credenciales' o 'inactivo' (chk_accesos_motivo)
+    -- NULL si Exitoso. Si no: 'credenciales', 'inactivo', 'bloqueado' o
+    -- 'licencia_revocada' (chk_accesos_motivo)
     Motivo VARCHAR(30),
     -- 45 = largo maximo de una IPv6 en texto
     IP VARCHAR(45),

@@ -45,6 +45,72 @@ async def test_traspaso_normal_cierra_origen_y_abre_destino(
     assert fila_destino["dorsal"] == 99
 
 
+# --- require_torneo_access_de (rbac-licencias-torneos-plan.md, Fase 2) ---
+# El torneo relevante es el DESTINO (inscripcion_destino_id) — Águilas del
+# Sur (inscripcion 2) es del torneo 1, igual que Tiburones.
+
+
+async def test_torneo_admin_sin_asignacion_no_puede_crear_ni_anular_traspaso(
+    client: AsyncClient, admin_general_headers: dict[str, str], torneo_admin_headers: dict[str, str]
+):
+    perfil_id = await _perfil_de_carlos(client)
+
+    resp = await client.post(
+        "/api/v1/traspasos",
+        json={
+            "jugador_perfil_id": perfil_id,
+            "inscripcion_origen_id": INSCRIPCION_TIBURONES,
+            "inscripcion_destino_id": INSCRIPCION_AGUILAS,
+            "dorsal_nuevo": 44,
+        },
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 403
+    assert "asignado" in resp.json()["detail"]
+
+    # Traspaso 1 lo crea admin_general_headers como setup para probar anular.
+    resp = await client.post(
+        "/api/v1/traspasos",
+        json={
+            "jugador_perfil_id": perfil_id,
+            "inscripcion_origen_id": INSCRIPCION_TIBURONES,
+            "inscripcion_destino_id": INSCRIPCION_AGUILAS,
+            "dorsal_nuevo": 45,
+        },
+        headers=admin_general_headers,
+    )
+    traspaso_id = resp.json()["id"]
+
+    resp = await client.post(f"/api/v1/traspasos/{traspaso_id}/anular", headers=torneo_admin_headers)
+    assert resp.status_code == 403
+
+
+async def test_torneo_admin_con_asignacion_puede_crear_y_anular_traspaso(
+    client: AsyncClient,
+    admin_general_headers: dict[str, str],
+    torneo_admin_con_torneo_headers: dict[str, str],
+):
+    perfil_id = await _perfil_de_carlos(client)
+
+    resp = await client.post(
+        "/api/v1/traspasos",
+        json={
+            "jugador_perfil_id": perfil_id,
+            "inscripcion_origen_id": INSCRIPCION_TIBURONES,
+            "inscripcion_destino_id": INSCRIPCION_AGUILAS,
+            "dorsal_nuevo": 46,
+        },
+        headers=torneo_admin_con_torneo_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    traspaso_id = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/traspasos/{traspaso_id}/anular", headers=torneo_admin_con_torneo_headers
+    )
+    assert resp.status_code == 200, resp.text
+
+
 async def test_filtrar_traspasos_por_torneo(client: AsyncClient, admin_general_headers: dict[str, str]):
     # torneo_id filtra por el torneo del equipo DESTINO (D-Eng-3 del plan:
     # el GET no filtraba nada antes de esto).

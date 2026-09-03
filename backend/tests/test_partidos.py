@@ -26,10 +26,39 @@ async def test_arbitro_no_puede_crear_partido(client: AsyncClient, arbitro_heade
     assert resp.status_code == 403
 
 
-async def test_torneo_admin_puede_programar_partido_entre_inscritos(
+# --- require_torneo_access_de (rbac-licencias-torneos-plan.md, Fase 2) ---
+
+
+async def test_torneo_admin_sin_asignacion_no_puede_crear_actualizar_ni_cancelar_partido(
     client: AsyncClient, torneo_admin_headers: dict[str, str]
 ):
+    resp = await client.post(
+        "/api/v1/partidos",
+        json={
+            "torneo_id": 1,
+            "equipos_id_local": 1,
+            "equipos_id_visitante": 2,
+            "fecha_partido": "2026-02-06T16:00:00",
+            "jornada": 5,
+        },
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 403
+    assert "asignado" in resp.json()["detail"]
+
+    resp = await client.patch("/api/v1/partidos/1", json={"jornada": 2}, headers=torneo_admin_headers)
+    assert resp.status_code == 403
+
+    resp = await client.delete("/api/v1/partidos/1", headers=torneo_admin_headers)
+    assert resp.status_code == 403
+
+
+async def test_torneo_admin_puede_programar_partido_entre_inscritos(
+    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]
+):
     # Equipos 1 y 2 ya están inscritos en el torneo 1 (05_seed.sql).
+    # torneo_admin_con_torneo_headers está asignado a ese torneo
+    # (rbac-licencias-torneos-plan.md, Fase 2).
     resp = await client.post(
         "/api/v1/partidos",
         json={
@@ -39,19 +68,19 @@ async def test_torneo_admin_puede_programar_partido_entre_inscritos(
             "fecha_partido": "2026-02-05T16:00:00",
             "jornada": 4,
         },
-        headers=torneo_admin_headers,
+        headers=torneo_admin_con_torneo_headers,
     )
     assert resp.status_code == 201, resp.text
     assert resp.json()["estado"] == "Programado"
 
 
 async def test_partido_con_equipo_no_inscrito_es_rechazado(
-    client: AsyncClient, torneo_admin_headers: dict[str, str]
+    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]
 ):
     # trg_partidos_validar_inscripcion (06_triggers.sql): un equipo recién
     # creado no está inscrito en el torneo 1, así que el partido debe fallar.
     resp = await client.post(
-        "/api/v1/equipos", json={"nombre": "Equipo Sin Inscribir", "disciplina_id": 1, "modalidad_id": 1}, headers=torneo_admin_headers
+        "/api/v1/equipos", json={"nombre": "Equipo Sin Inscribir", "disciplina_id": 1, "modalidad_id": 1}, headers=torneo_admin_con_torneo_headers
     )
     equipo_id = resp.json()["id"]
 
@@ -63,7 +92,7 @@ async def test_partido_con_equipo_no_inscrito_es_rechazado(
             "equipos_id_visitante": 1,
             "fecha_partido": "2026-02-10T16:00:00",
         },
-        headers=torneo_admin_headers,
+        headers=torneo_admin_con_torneo_headers,
     )
     assert resp.status_code == 400
     assert "inscrit" in resp.json()["detail"].lower()
@@ -107,12 +136,14 @@ async def test_arbitro_no_puede_actualizar_partido_no_asignado(
 
 
 async def test_torneo_admin_puede_actualizar_cualquier_partido(
-    client: AsyncClient, torneo_admin_headers: dict[str, str]
+    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]
 ):
-    # TorneoAdmin no pasa por el ownership-check (D5) — no tiene partido
-    # "propio", administra el pool compartido (D2).
+    # TorneoAdmin no pasa por el ownership-check de Árbitro (D5) — pero SÍ
+    # necesita asignación al torneo del partido (rbac-licencias-torneos-plan.md,
+    # Fase 2); torneo_admin_con_torneo_headers está asignado al Torneo 1
+    # (partido 1 pertenece a ese torneo).
     resp = await client.patch(
-        "/api/v1/partidos/1", json={"jornada": 9}, headers=torneo_admin_headers
+        "/api/v1/partidos/1", json={"jornada": 9}, headers=torneo_admin_con_torneo_headers
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["jornada"] == 9

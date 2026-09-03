@@ -277,3 +277,174 @@ async def test_baja_logica_de_torneo(client: AsyncClient, admin_general_headers:
 async def test_torneo_inexistente_da_404(client: AsyncClient):
     resp = await client.get("/api/v1/torneos/999999")
     assert resp.status_code == 404
+
+
+# --- require_torneo_access (rbac-licencias-torneos-plan.md, §4.3/§4.6) ---
+
+
+async def test_torneo_admin_sin_asignacion_no_puede_editar_torneo_1(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    """Torneo 1 = 'Copa Ecotec 2026' (05_seed.sql). torneo_admin_headers
+    (conftest.py) es un TorneoAdmin SIN ninguna fila en
+    ASIGNACION_TORNEO_ADMIN — este es el gap que motivó todo el plan:
+    antes de require_torneo_access, esto daba 200."""
+    resp = await client.patch(
+        "/api/v1/torneos/1", json={"nombre": "Hackeado"}, headers=torneo_admin_headers
+    )
+    assert resp.status_code == 403
+    assert "asignado" in resp.json()["detail"]
+
+    resp = await client.delete("/api/v1/torneos/1", headers=torneo_admin_headers)
+    assert resp.status_code == 403
+
+
+async def test_torneo_admin_con_asignacion_puede_editar_su_torneo(
+    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]
+):
+    resp = await client.patch(
+        "/api/v1/torneos/1", json={"nombre": "Copa Ecotec 2026 Editada"}, headers=torneo_admin_con_torneo_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["nombre"] == "Copa Ecotec 2026 Editada"
+
+
+async def test_admin_general_edita_torneo_sin_asignacion_propia(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    """Bypass total, mismo criterio que require_roles — AdminGeneral no
+    necesita fila en ASIGNACION_TORNEO_ADMIN."""
+    resp = await client.patch(
+        "/api/v1/torneos/1", json={"nombre": "Editado por AdminGeneral"}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200
+
+
+async def test_torneo_admin_con_asignacion_a_otro_torneo_no_puede_editar_este(
+    client: AsyncClient,
+    admin_general_headers: dict[str, str],
+    torneo_admin_con_torneo_headers: dict[str, str],
+):
+    """Asignado al Torneo 1, no a un Torneo 2 recién creado — la
+    granularidad es por torneo, no "TorneoAdmin administra todo"."""
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "nombre": "Otro Torneo",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
+            "modalidad_id": MODALIDAD_FUTBOL_11_ID,
+            "torneo_grupo_nombre": "Otro Torneo",
+            "fecha_inicio": "2026-05-01",
+            "fecha_fin": "2026-06-01",
+        },
+        headers=admin_general_headers,
+    )
+    otro_torneo_id = resp.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/torneos/{otro_torneo_id}",
+        json={"nombre": "Hackeado"},
+        headers=torneo_admin_con_torneo_headers,
+    )
+    assert resp.status_code == 403
+
+
+# --- D4: auto-asignación del creador (rbac-licencias-torneos-plan.md, §7) ---
+
+
+async def test_torneo_admin_creador_queda_auto_asignado(
+    client: AsyncClient, admin_general_headers: dict[str, str], torneo_admin_headers: dict[str, str]
+):
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "nombre": "Torneo Creado Por TorneoAdmin",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
+            "modalidad_id": MODALIDAD_FUTBOL_11_ID,
+            "torneo_grupo_nombre": "Torneo Creado Por TorneoAdmin",
+            "fecha_inicio": "2026-05-01",
+            "fecha_fin": "2026-06-01",
+        },
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    torneo_id = resp.json()["id"]
+
+    # Sin auto-asignación, esto daría 403 (mismo test que
+    # test_torneo_admin_sin_asignacion_no_puede_editar_torneo_1).
+    resp = await client.patch(
+        f"/api/v1/torneos/{torneo_id}", json={"nombre": "Editado"}, headers=torneo_admin_headers
+    )
+    assert resp.status_code == 200, resp.text
+
+
+async def test_admin_general_creador_no_regresiona(client: AsyncClient, admin_general_headers: dict[str, str]):
+    """Corrección post outside-voice (Eng review, hallazgo #3 del plan
+    original antes de la corrección): auto-asignar sin el guard de rol
+    hacía que esto fallara con un rechazo del trigger de rol — regresión
+    sobre un flujo que hoy anda. Con el guard, AdminGeneral crea sin
+    auto-asignarse (no necesita fila, tiene bypass total)."""
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "nombre": "Torneo Creado Por AdminGeneral",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
+            "modalidad_id": MODALIDAD_FUTBOL_11_ID,
+            "torneo_grupo_nombre": "Torneo Creado Por AdminGeneral",
+            "fecha_inicio": "2026-05-01",
+            "fecha_fin": "2026-06-01",
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+
+# --- E1: GET /torneos?solo_mios=true (rbac-licencias-torneos-plan.md) ---
+
+
+async def test_solo_mios_filtra_a_los_torneos_asignados(
+    client: AsyncClient,
+    admin_general_headers: dict[str, str],
+    torneo_admin_con_torneo_headers: dict[str, str],
+):
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "nombre": "Torneo No Asignado",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
+            "modalidad_id": MODALIDAD_FUTBOL_11_ID,
+            "torneo_grupo_nombre": "Torneo No Asignado",
+            "fecha_inicio": "2026-05-01",
+            "fecha_fin": "2026-06-01",
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 201
+
+    resp = await client.get(
+        "/api/v1/torneos", params={"solo_mios": "true"}, headers=torneo_admin_con_torneo_headers
+    )
+    assert resp.status_code == 200
+    ids = [t["id"] for t in resp.json()]
+    assert ids == [1]
+
+
+async def test_solo_mios_sin_asignaciones_devuelve_lista_vacia(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    resp = await client.get("/api/v1/torneos", params={"solo_mios": "true"}, headers=torneo_admin_headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_solo_mios_sin_efecto_para_admin_general_y_anonimo(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    resp_publico = await client.get("/api/v1/torneos", params={"solo_mios": "true"})
+    resp_sin_filtro = await client.get("/api/v1/torneos")
+    assert [t["id"] for t in resp_publico.json()] == [t["id"] for t in resp_sin_filtro.json()]
+
+    resp_admin = await client.get(
+        "/api/v1/torneos", params={"solo_mios": "true"}, headers=admin_general_headers
+    )
+    assert [t["id"] for t in resp_admin.json()] == [t["id"] for t in resp_sin_filtro.json()]

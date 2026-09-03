@@ -120,9 +120,9 @@ async def test_arbitro_no_asignado_no_puede_definir_convocatoria(
     assert resp.status_code == 403, resp.text
 
 
-async def test_torneo_admin_puede_definir_convocatoria(client: AsyncClient, torneo_admin_headers: dict[str, str]):
+async def test_torneo_admin_puede_definir_convocatoria(client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]):
     resp = await client.put(
-        f"/api/v1/partidos/{PARTIDO_3}/convocados", json={"convocados": []}, headers=torneo_admin_headers
+        f"/api/v1/partidos/{PARTIDO_3}/convocados", json={"convocados": []}, headers=torneo_admin_con_torneo_headers
     )
     assert resp.status_code == 200, resp.text
 

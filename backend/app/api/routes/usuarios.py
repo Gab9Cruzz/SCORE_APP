@@ -3,8 +3,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
+from app.exceptions.errors import ForbiddenError
 from app.models.usuario import Usuario
-from app.schemas.usuario import RolUsuario, UsuarioCreate, UsuarioOut, UsuarioUpdate
+from app.schemas.usuario import (
+    AsignacionTorneosUpdate,
+    LicenciaUpdate,
+    RolUsuario,
+    UsuarioCreate,
+    UsuarioOut,
+    UsuarioUpdate,
+)
+from app.services.asignacion_torneo_admin import AsignacionTorneoAdminService
 from app.services.usuario import UsuarioService
 
 # Gestión de cuentas (AdminGeneral, TorneoAdmin, Arbitro, Publico).
@@ -82,3 +91,60 @@ async def dar_de_baja_usuario(
     """Rechaza que un AdminGeneral se desactive a sí mismo — chequeo en
     UsuarioService.soft_delete() (T6)."""
     return await UsuarioService(session).soft_delete(usuario_id, usuario_actual)
+
+
+# --- Licencia + asignación de torneos (rbac-licencias-torneos-plan.md, §4.5) ---
+#
+# Mismo criterio que el resto de la escritura de este router: AdminGeneral
+# LITERAL, sin el bypass uniforme de require_roles que sí tienen los demás
+# routers — otorgar/revocar licencia y reasignar torneos es tan sensible
+# como crear/editar cuentas, así que se gatea igual.
+
+
+@router.patch(
+    "/{usuario_id}/licencia",
+    response_model=UsuarioOut,
+    dependencies=[Depends(require_roles("AdminGeneral"))],
+)
+async def actualizar_licencia(
+    usuario_id: int,
+    data: LicenciaUpdate,
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+) -> UsuarioOut:
+    """Rechaza que un AdminGeneral se revoque su propia licencia — chequeo
+    en AsignacionTorneoAdminService.set_licencia (clon de T6)."""
+    return await AsignacionTorneoAdminService(session).set_licencia(usuario_id, data.activa, usuario_actual)
+
+
+@router.get("/{usuario_id}/torneos", response_model=list[int])
+async def obtener_torneos_asignados(
+    usuario_id: int,
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+) -> list[int]:
+    """AdminGeneral ve cualquier cuenta; TorneoAdmin solo puede consultar
+    su PROPIO set (precarga del modal "Gestionar torneos" que él mismo no
+    puede abrir para sí — hoy el panel es exclusivo de AdminGeneral, pero
+    el endpoint de lectura queda abierto a self por si un TorneoAdmin
+    necesita confirmar sus propios torneos desde otra pantalla)."""
+    if usuario_actual.rol != "AdminGeneral" and usuario_actual.id != usuario_id:
+        raise ForbiddenError("Solo podés consultar tus propios torneos asignados.")
+    return await AsignacionTorneoAdminService(session).listar_torneos_asignados(usuario_id)
+
+
+@router.patch(
+    "/{usuario_id}/torneos",
+    response_model=list[int],
+    dependencies=[Depends(require_roles("AdminGeneral"))],
+)
+async def actualizar_torneos_asignados(
+    usuario_id: int,
+    data: AsignacionTorneosUpdate,
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+) -> list[int]:
+    """Reemplaza el set completo de torneos asignados a `usuario_id`. Sin
+    bypass de "self" — solo AdminGeneral, igual que el resto de la
+    escritura de este router (comentario del header del archivo)."""
+    return await AsignacionTorneoAdminService(session).set_torneos_asignados(usuario_id, data.torneo_ids, usuario_actual)

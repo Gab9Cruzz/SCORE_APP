@@ -52,6 +52,20 @@ class ForbiddenError(Exception):
         super().__init__(self.detail)
 
 
+class LicenseRevokedError(ForbiddenError):
+    """Usuario autenticado, credenciales válidas, pero sin licencia activa
+    (rbac-licencias-torneos-plan.md). 403 (no 401): la identidad SÍ es
+    válida, lo que falta es autorización de nivel superior — mismo
+    criterio que separa AuthError de ForbiddenError en este archivo.
+
+    Handler (`exceptions/handlers.py`) agrega el header `X-License-Revoked`
+    para que el frontend distinga esto de un 403 genérico sin parsear el
+    body — mismo patrón que RateLimitError usa `Retry-After` más abajo."""
+
+    def __init__(self, detail: str = "Licencia inactiva o revocada. Contactá al administrador."):
+        super().__init__(detail)
+
+
 class RateLimitError(Exception):
     """3B-14 (docs/plans/cierre-backlog-todos-plan.md): demasiados intentos
     de login fallidos en la ventana reciente. Distinta de AuthError (401)
