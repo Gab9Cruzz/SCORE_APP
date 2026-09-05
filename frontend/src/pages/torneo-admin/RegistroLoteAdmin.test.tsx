@@ -237,6 +237,26 @@ describe("RegistroLoteAdminPage", () => {
     expect(await screen.findByRole("button", { name: "Volver al Torneo" })).toBeInTheDocument();
   });
 
+  // Bug 1 (fixes-datos-traspasos-control-mesa-plan.md, D1): la plantilla
+  // que el admin tipeó en el modal "Crear equipo nuevo" viaja acá y se ve
+  // precargada, en vez de perderse en silencio.
+  it("con filasIniciales: arranca con esas filas ya cargadas, sin una vacía extra", async () => {
+    renderPreResuelto({
+      inscripcionTorneoId: 5,
+      contexto: "Halcones FC — Liga Relámpago Ed. 2",
+      volverA: "/torneo-admin/torneos/2",
+      filasIniciales: [
+        { cedula: "0102030405", nombre: "Micky Fernández", correo_electronico: "micky@example.com", dorsal: "" },
+      ],
+    });
+
+    await screen.findByText("Halcones FC — Liga Relámpago Ed. 2");
+    expect(screen.getByLabelText("Cédula fila 1")).toHaveValue("0102030405");
+    expect(screen.getByLabelText("Nombre fila 1")).toHaveValue("Micky Fernández");
+    expect(screen.getByLabelText("Correo fila 1")).toHaveValue("micky@example.com");
+    expect(screen.queryByLabelText("Cédula fila 2")).not.toBeInTheDocument();
+  });
+
   it("con alcance de torneo (sin equipo pre-resuelto): pide solo Equipo, ya filtrado por torneo_id", async () => {
     server.use(
       http.get(INSCRIPCIONES, ({ request }) => {

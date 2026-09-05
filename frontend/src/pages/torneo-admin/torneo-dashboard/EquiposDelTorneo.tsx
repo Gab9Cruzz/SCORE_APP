@@ -3,6 +3,8 @@ import { useNavigate, useOutletContext } from "react-router-dom";
 import type { Equipo as EquipoRow, Modalidad as ModalidadRow } from "../../../api/types";
 import { ResourceTable } from "../../../components/admin/ResourceTable";
 import { LIMITE_LISTA, useResourceCrud } from "../../../hooks/useResourceCrud";
+import { useEtiquetaJugadorPorPerfil } from "../../../hooks/useEtiquetaJugadorPorPerfil";
+import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
 import type { RegistroLotePreResuelto } from "../RegistroLoteAdmin";
 import { ModalAgregarInscripcion } from "./ModalAgregarInscripcion";
 import { ModalGestionarPlantilla } from "./ModalGestionarPlantilla";
@@ -106,11 +108,21 @@ function VistaIndividual(props: {
     () => new Map((jugadores.listQuery.data ?? []).map((j) => [j.id, j.nombre])),
     [jugadores.listQuery.data],
   );
+  const perfilPorId = useMemo(
+    () => new Map((perfiles.listQuery.data ?? []).map((p) => [p.id, p])),
+    [perfiles.listQuery.data],
+  );
+  // Bug 2 (D2, parte B): resolución dirigida — un perfil/jugador fuera de
+  // la ventana de LIMITE_LISTA se pedía individual antes de caer al
+  // fallback "Perfil #ID" (P3 del plan).
+  const etiquetaPorPerfil = useEtiquetaJugadorPorPerfil(
+    (inscripciones.listQuery.data ?? []).map((i) => i.jugador_perfil_id),
+    perfilPorId,
+    nombreJugador,
+  );
   const nombrePorPerfilId = useMemo(() => {
-    const jugadorIdPorPerfil = new Map((perfiles.listQuery.data ?? []).map((p) => [p.id, p.jugador_id]));
-    return (perfilId: number | null) =>
-      perfilId != null ? (nombreJugador.get(jugadorIdPorPerfil.get(perfilId) ?? -1) ?? `Perfil #${perfilId}`) : "—";
-  }, [perfiles.listQuery.data, nombreJugador]);
+    return (perfilId: number | null) => (perfilId != null ? etiquetaPorPerfil(perfilId) : "—");
+  }, [etiquetaPorPerfil]);
 
   return (
     <div>
@@ -188,9 +200,18 @@ function VistaEquipo(props: {
     listParams: { torneo_id: torneoId },
   });
 
-  const nombreEquipo = useMemo(
+  const nombreEquipoBase = useMemo(
     () => new Map((equipos.listQuery.data ?? []).map((e) => [e.id, e.nombre])),
     [equipos.listQuery.data],
+  );
+  // Bug 2 (D2, parte B): resolución dirigida — mismo criterio que arriba,
+  // para equipos con ID fuera de la ventana de LIMITE_LISTA (aun ya
+  // filtrados por disciplina, EC-B2 del plan: un torneo con más de 200
+  // equipos de la MISMA disciplina).
+  const nombreEquipo = useNombrePorIdConFaltantes(
+    "/api/v1/equipos",
+    nombreEquipoBase,
+    (inscripciones.listQuery.data ?? []).map((i) => i.equipo_id),
   );
   const rosterCount = useMemo(() => {
     const m = new Map<number, number>();

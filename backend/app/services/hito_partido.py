@@ -6,8 +6,14 @@ from app.models.hito_partido import HitoPartido
 from app.models.partido import Partido
 from app.models.usuario import Usuario
 from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoRepository
+from app.repositories.convocado_a_partido import ConvocadoAPartidoRepository
+from app.repositories.equipo import EquipoRepository
 from app.repositories.hito_partido import HitoPartidoRepository
+from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
+from app.repositories.jugador_equipo import JugadorEquipoRepository
+from app.repositories.modalidad import ModalidadRepository
 from app.repositories.partido import PartidoRepository
+from app.repositories.torneo import TorneoRepository
 from app.schemas.hito_partido import EstadoCronometroOut, HitoPartidoCreate, HitoPartidoOut, HitoPartidoUpdate
 from app.services.permisos import verificar_arbitro_asignado
 
@@ -26,6 +32,14 @@ class HitoPartidoService:
         self.repo = HitoPartidoRepository(session)
         self.partido_repo = PartidoRepository(session)
         self.config_repo = ConfiguracionTiempoTorneoRepository(session)
+        # B.2 (fixes-datos-traspasos-control-mesa-plan.md, D4): validación
+        # de titulares antes de Inicio_Partido — ver _validar_titulares.
+        self.torneo_repo = TorneoRepository(session)
+        self.modalidad_repo = ModalidadRepository(session)
+        self.equipo_repo = EquipoRepository(session)
+        self.inscripcion_repo = InscripcionTorneoRepository(session)
+        self.jugador_equipo_repo = JugadorEquipoRepository(session)
+        self.convocado_repo = ConvocadoAPartidoRepository(session)
 
     async def _cargar_contexto(self, partido_id: int) -> tuple[Partido, ConfiguracionTiempoTorneo, list[HitoPartido]]:
         partido = await self.partido_repo.get_or_404(partido_id)
@@ -103,6 +117,59 @@ class HitoPartidoService:
             "acciones_permitidas": acciones,
         }
 
+    async def _validar_titulares(self, partido: Partido) -> None:
+        """B.2 (fixes-datos-traspasos-control-mesa-plan.md, D4/P10): antes
+        de esto, "Empezar Partido" no validaba nada de la convocatoria — el
+        partido arrancaba aunque nadie hubiera tocado "Convocados".
+
+        `Modalidad.tamano_equipo` ya significa "cuántos juegan a la vez"
+        (P11 del plan, mismo sentido que usa RegistroLoteService para el
+        cupo) — es la fuente de verdad de cuántos titulares exige esta
+        modalidad, sin inventar un catálogo nuevo de reglas por disciplina.
+        Un `ConvocadoAPartido.titular=True` de un jugador que ya no está en
+        el roster activo del equipo (dado de baja después de convocarlo) no
+        cuenta — se intersecta contra el roster vigente, no se confía en la
+        convocatoria sola."""
+        if partido.equipos_id_local is None or partido.equipos_id_visitante is None:
+            # P12: todo PARTIDOS de Equipo/Pareja nace de un bracket o de un
+            # fixture ya armado — este caso es "todavía no se sabe quién
+            # juega" (bracket en curso), no un partido con titulares
+            # pendientes de definir.
+            raise DomainRuleError(
+                "Este partido todavía no tiene los dos equipos definidos — esperá a que termine "
+                "el partido anterior del bracket."
+            )
+
+        torneo = await self.torneo_repo.get_or_404(partido.torneo_id)
+        modalidad = await self.modalidad_repo.get_or_404(torneo.modalidad_id)
+        requeridos = modalidad.tamano_equipo
+
+        convocados = await self.convocado_repo.listar_por_partido(partido.id)
+        titulares_convocados = {c.jugador_perfil_id for c in convocados if c.titular}
+
+        for equipo_id in (partido.equipos_id_local, partido.equipos_id_visitante):
+            inscripciones = await self.inscripcion_repo.list(torneo_id=torneo.id, equipo_id=equipo_id, limit=1)
+            if inscripciones:
+                roster_activo = await self.jugador_equipo_repo.list(
+                    inscripcion_torneo_id=inscripciones[0].id, estado="Activo", limit=10_000
+                )
+                perfiles_roster = {j.jugador_perfil_id for j in roster_activo}
+                n = len(titulares_convocados & perfiles_roster)
+            else:
+                # No debería pasar (P12: todo Partido con equipo_id sale de
+                # una inscripción real) — se trata como 0 titulares, no
+                # como un 500 sin explicación.
+                n = 0
+
+            if n < requeridos:
+                equipo = await self.equipo_repo.get_or_404(equipo_id)
+                titular_plural = "es" if n != 1 else ""
+                marcado_plural = "s" if n != 1 else ""
+                raise DomainRuleError(
+                    f"{equipo.nombre} tiene {n} titular{titular_plural} marcado{marcado_plural}, esta "
+                    f"modalidad exige {requeridos}. Definí la convocatoria antes de empezar el partido."
+                )
+
     async def registrar(self, partido_id: int, data: HitoPartidoCreate, usuario_actual: Usuario) -> HitoPartidoOut:
         partido, config, hitos = await self._cargar_contexto(partido_id)
         verificar_arbitro_asignado(partido, usuario_actual)
@@ -113,6 +180,9 @@ class HitoPartidoService:
                 f"No se puede registrar '{data.tipo_hito}' en el estado actual del partido "
                 f"(hitos válidos ahora: {', '.join(estado['acciones_permitidas']) or 'ninguno'})."
             )
+
+        if data.tipo_hito == "Inicio_Partido":
+            await self._validar_titulares(partido)
 
         numero_periodo = data.numero_periodo
         if data.tipo_hito == "Inicio_Periodo" and numero_periodo is None:

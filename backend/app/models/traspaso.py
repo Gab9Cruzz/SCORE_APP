@@ -7,11 +7,14 @@ from app.db.database import Base
 
 
 class Traspaso(Base):
-    """Trayectoria de traspasos, append-only (equipos-jugadores-plan.md,
-    Fase 1). Nunca se edita ni se borra una fila — "anular" (Fase 2, Etapa
-    C) solo cambia Estado a 'Anulado' como anotación visual, no toca
-    JUGADOR_EQUIPO ni esta fila de ninguna otra forma. Corregir un
-    traspaso mal hecho es un traspaso nuevo en sentido inverso (EC-20).
+    """Trayectoria de traspasos (equipos-jugadores-plan.md, Fase 1). Esta
+    fila nunca se borra — "anular" (fixes-datos-traspasos-control-mesa-
+    plan.md, decisión explícita del usuario) cambia Estado a 'Anulado' Y
+    revierte de verdad JUGADOR_EQUIPO: reactiva la membresía de origen (si
+    había) y da de baja la de destino, como si el traspaso no hubiera
+    pasado — ver TraspasoService.anular. Deja de ser posible en cuanto el
+    club DESTINO ya arrancó un partido desde este traspaso; a partir de
+    ahí, corregir el roster es un traspaso nuevo en sentido inverso.
 
     Sin TimestampMixin: la tabla solo tiene Fecha_Traspaso, no
     fecha_modificacion (01_schema.sql) — mismo criterio que Disciplina/Modalidad.

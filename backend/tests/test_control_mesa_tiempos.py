@@ -157,7 +157,7 @@ async def test_estado_cronometro_inicial_solo_permite_inicio_partido(
 
 
 async def test_secuencia_completa_de_periodos_sincroniza_estado_del_partido(
-    client: AsyncClient, arbitro_headers: dict[str, str]
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares
 ):
     async def _registrar(tipo_hito: str, **extra) -> dict:
         resp = await client.post(
@@ -166,6 +166,9 @@ async def test_secuencia_completa_de_periodos_sincroniza_estado_del_partido(
         assert resp.status_code == 201, resp.text
         return resp.json()
 
+    # B.2 (fixes-datos-traspasos-control-mesa-plan.md, D4): Inicio_Partido
+    # ahora exige titulares completos — no es el foco de este test.
+    await convocar_titulares(3)
     await _registrar("Inicio_Partido")
     resp = await client.get("/api/v1/partidos/3", headers=arbitro_headers)
     assert resp.json()["estado"] == "En curso"
@@ -207,7 +210,10 @@ async def test_secuencia_completa_de_periodos_sincroniza_estado_del_partido(
 
 # EC-9: doble tap del mismo hito — el segundo se rechaza (server-side,
 # antes incluso de llegar al trigger de duplicados de la base).
-async def test_hito_duplicado_es_rechazado(client: AsyncClient, arbitro_headers: dict[str, str]):
+async def test_hito_duplicado_es_rechazado(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares
+):
+    await convocar_titulares(3)
     resp = await client.post(
         "/api/v1/partidos/3/hitos", json={"tipo_hito": "Inicio_Partido"}, headers=arbitro_headers
     )
@@ -225,7 +231,10 @@ async def test_pausar_sin_iniciar_es_rechazado(client: AsyncClient, arbitro_head
     assert resp.status_code == 400
 
 
-async def test_reanudar_sin_pausar_es_rechazado(client: AsyncClient, arbitro_headers: dict[str, str]):
+async def test_reanudar_sin_pausar_es_rechazado(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares
+):
+    await convocar_titulares(3)
     resp = await client.post(
         "/api/v1/partidos/3/hitos", json={"tipo_hito": "Inicio_Partido"}, headers=arbitro_headers
     )
@@ -236,7 +245,10 @@ async def test_reanudar_sin_pausar_es_rechazado(client: AsyncClient, arbitro_hea
     assert resp.status_code == 400
 
 
-async def test_corregir_minuto_de_un_hito(client: AsyncClient, arbitro_headers: dict[str, str]):
+async def test_corregir_minuto_de_un_hito(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares
+):
+    await convocar_titulares(3)
     resp = await client.post(
         "/api/v1/partidos/3/hitos",
         json={"tipo_hito": "Inicio_Partido", "minuto_reloj": 0},
@@ -305,7 +317,7 @@ async def test_duracion_partido_sin_finalizar_no_tiene_dato(client: AsyncClient)
 # EC-12: finalizar un partido Corrido sin elegir ganador se bloquea
 # (fn_validar_ganador_corrido, defensa de última línea).
 async def test_finalizar_corrido_sin_ganador_es_rechazado(
-    client: AsyncClient, db_session: AsyncSession, admin_general_headers: dict[str, str]
+    client: AsyncClient, db_session: AsyncSession, admin_general_headers: dict[str, str], convocar_titulares
 ):
     from datetime import date
 
@@ -359,6 +371,10 @@ async def test_finalizar_corrido_sin_ganador_es_rechazado(
     # (MissingGreenlet).
     partido_id, equipo_a_id = partido.id, equipo_a.id
 
+    # B.2 (fixes-datos-traspasos-control-mesa-plan.md, D4): Inicio_Partido
+    # ahora exige titulares completos — no es el foco de este test.
+    await convocar_titulares(partido_id)
+
     resp = await client.post(
         f"/api/v1/partidos/{partido_id}/hitos", json={"tipo_hito": "Inicio_Partido"}, headers=admin_general_headers
     )
@@ -392,9 +408,12 @@ async def test_finalizar_corrido_sin_ganador_es_rechazado(
     assert resp.json()["ganador_corrido_id"] == equipo_a_id
 
 
-async def test_patch_eventos_partido_corrige_minuto(client: AsyncClient, arbitro_headers: dict[str, str]):
+async def test_patch_eventos_partido_corrige_minuto(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares
+):
     # 3A-8: registrar el evento exige el partido 'En curso' — "Empezar
     # Partido" primero, mismo paso que el flujo real (botón del dashboard).
+    await convocar_titulares(3)
     resp = await client.post(
         "/api/v1/partidos/3/hitos", json={"tipo_hito": "Inicio_Partido"}, headers=arbitro_headers
     )
@@ -416,8 +435,12 @@ async def test_patch_eventos_partido_corrige_minuto(client: AsyncClient, arbitro
 
 
 async def test_patch_eventos_partido_arbitro_no_asignado_rechazado(
-    client: AsyncClient, arbitro_headers: dict[str, str], arbitro_no_asignado_headers: dict[str, str]
+    client: AsyncClient,
+    arbitro_headers: dict[str, str],
+    arbitro_no_asignado_headers: dict[str, str],
+    convocar_titulares,
 ):
+    await convocar_titulares(3)
     resp = await client.post(
         "/api/v1/partidos/3/hitos", json={"tipo_hito": "Inicio_Partido"}, headers=arbitro_headers
     )

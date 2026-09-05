@@ -122,12 +122,17 @@ describe("ModalAgregarInscripcion — Conjunto (tamano_equipo > 2)", () => {
     await waitFor(() =>
       expect(bodyEquipo).toEqual({ nombre: "Halcones FC", disciplina_id: 1, modalidad_id: MODALIDAD_CONJUNTO.id }),
     );
+    // Bug 1 (fixes-datos-traspasos-control-mesa-plan.md, D1): la fila que
+    // el admin acaba de tipear viaja con la navegación — ya no se pierde.
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/torneo-admin/plantillas/lote", {
         state: {
           inscripcionTorneoId: 77,
           contexto: "Halcones FC — Liga Relámpago — Edición 2",
           volverA: "/torneo-admin/torneos/20/equipos",
+          filasIniciales: [
+            { cedula: "0102030405", nombre: "Micky Fernández", correo_electronico: "micky@example.com", dorsal: "" },
+          ],
         },
       }),
     );

@@ -1,8 +1,15 @@
-from httpx import AsyncClient
+from datetime import datetime
 
-# 05_seed.sql: inscripcion 1 = Tiburones FC (torneo 1), inscripcion 2 =
-# Águilas del Sur (torneo 1). Carlos Pérez (perfil 1, jugador 1) está
-# Activo en la inscripcion 1, dorsal 10.
+from httpx import AsyncClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.hito_partido import HitoPartido
+
+# 05_seed.sql: inscripcion 1 = Tiburones FC (torneo 1, equipo 1), inscripcion
+# 2 = Águilas del Sur (torneo 1, equipo 2). Carlos Pérez (perfil 1, jugador 1)
+# está Activo en la inscripcion 1, dorsal 10. Partido 1 (Torneo_ID=1) es
+# Tiburones(1) vs Águilas(2).
 INSCRIPCION_TIBURONES = 1
 INSCRIPCION_AGUILAS = 2
 
@@ -206,7 +213,10 @@ async def test_fichaje_desde_libre_con_membresia_activa_es_rechazado(
     assert "ya tiene una membresía activa" in resp.json()["detail"]
 
 
-async def test_anular_no_toca_jugador_equipo(client: AsyncClient, admin_general_headers: dict[str, str]):
+async def test_anular_revierte_jugador_equipo(client: AsyncClient, admin_general_headers: dict[str, str]):
+    """fixes-datos-traspasos-control-mesa-plan.md: anular ya NO es solo
+    una anotación (EC-20 anterior) — reactiva el origen y da de baja el
+    destino, el jugador vuelve al club donde estaba."""
     perfil_id = await _perfil_de_carlos(client)
     resp = await client.post(
         "/api/v1/traspasos",
@@ -217,14 +227,97 @@ async def test_anular_no_toca_jugador_equipo(client: AsyncClient, admin_general_
         },
         headers=admin_general_headers,
     )
+    assert resp.json()["puede_anularse"] is True
     traspaso_id = resp.json()["id"]
 
     resp = await client.post(f"/api/v1/traspasos/{traspaso_id}/anular", headers=admin_general_headers)
     assert resp.status_code == 200, resp.text
     assert resp.json()["estado"] == "Anulado"
 
-    # El roster sigue reflejando el traspaso real — anular es solo una
-    # anotación (EC-20), no revierte nada.
+    resp = await client.get("/api/v1/plantillas", params={"inscripcion_torneo_id": INSCRIPCION_AGUILAS})
+    fila_destino = next(f for f in resp.json() if f["jugador_perfil_id"] == perfil_id)
+    assert fila_destino["estado"] == "Inactivo"
+    assert fila_destino["fecha_fin"] is not None
+
+    resp = await client.get("/api/v1/plantillas", params={"inscripcion_torneo_id": INSCRIPCION_TIBURONES})
+    fila_origen = next(f for f in resp.json() if f["jugador_perfil_id"] == perfil_id)
+    assert fila_origen["estado"] == "Activo"
+    assert fila_origen["fecha_fin"] is None
+
+
+async def test_anular_fichaje_desde_libre_deja_al_jugador_libre_otra_vez(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    resp = await client.post(
+        "/api/v1/jugadores",
+        json={"nombre": "Libre Anulado", "cedula": "0966000002", "correo_electronico": "la@example.com"},
+        headers=admin_general_headers,
+    )
+    jugador_id = resp.json()["id"]
+    resp = await client.post(
+        "/api/v1/perfiles", json={"jugador_id": jugador_id, "disciplina_id": 1}, headers=admin_general_headers
+    )
+    perfil_id = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/traspasos",
+        json={
+            "jugador_perfil_id": perfil_id,
+            "inscripcion_origen_id": None,
+            "inscripcion_destino_id": INSCRIPCION_AGUILAS,
+        },
+        headers=admin_general_headers,
+    )
+    traspaso_id = resp.json()["id"]
+
+    resp = await client.post(f"/api/v1/traspasos/{traspaso_id}/anular", headers=admin_general_headers)
+    assert resp.status_code == 200, resp.text
+
+    resp = await client.get("/api/v1/plantillas", params={"jugador_perfil_id": perfil_id})
+    assert all(f["estado"] != "Activo" for f in resp.json())
+
+
+async def test_anular_bloqueado_si_el_club_destino_ya_jugo(
+    client: AsyncClient, db_session: AsyncSession, admin_general_headers: dict[str, str]
+):
+    """Decisión explícita del usuario: el botón deja de ofrecerse en
+    cuanto el equipo DESTINO ya arrancó un partido, sin importar si ESTE
+    jugador puntualmente participó."""
+    perfil_id = await _perfil_de_carlos(client)
+    resp = await client.post(
+        "/api/v1/traspasos",
+        json={
+            "jugador_perfil_id": perfil_id,
+            "inscripcion_origen_id": INSCRIPCION_TIBURONES,
+            "inscripcion_destino_id": INSCRIPCION_AGUILAS,
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.json()["puede_anularse"] is True
+    traspaso_id = resp.json()["id"]
+
+    # Águilas del Sur (equipo 2) arranca un partido DESPUÉS del traspaso.
+    resp = await db_session.execute(text("SELECT id FROM usuarios WHERE username = 'admin_general_test'"))
+    usuario_id = resp.scalar_one()
+    db_session.add(
+        HitoPartido(
+            partido_id=1,  # Tiburones(1) vs Águilas(2), torneo 1 — 05_seed.sql
+            tipo_hito="Inicio_Partido",
+            timestamp_real=datetime.now(),
+            registrado_por=usuario_id,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.get(f"/api/v1/traspasos/{traspaso_id}", headers=admin_general_headers)
+    assert resp.json()["puede_anularse"] is False
+
+    resp = await client.post(f"/api/v1/traspasos/{traspaso_id}/anular", headers=admin_general_headers)
+    assert resp.status_code == 400, resp.text
+    assert "Águilas del Sur" in resp.json()["detail"]
+    assert "ya arrancó un partido" in resp.json()["detail"]
+
+    # No revirtió nada — el jugador sigue en destino.
     resp = await client.get("/api/v1/plantillas", params={"inscripcion_torneo_id": INSCRIPCION_AGUILAS})
     fila_destino = next(f for f in resp.json() if f["jugador_perfil_id"] == perfil_id)
     assert fila_destino["estado"] == "Activo"

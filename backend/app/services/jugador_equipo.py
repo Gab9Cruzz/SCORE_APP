@@ -31,9 +31,18 @@ class JugadorEquipoService:
         # torneo_id necesita un join (no vive directo en la fila, ver
         # JugadorEquipoRepository.listar_por_torneo) — no se puede combinar
         # con el filtro genérico de BaseRepository.list en la misma
-        # consulta, así que es una rama aparte (D-Eng-3 del plan).
+        # consulta, así que es una rama aparte (D-Eng-3 del plan). Los
+        # otros dos filtros SÍ se combinan con torneo_id en la misma
+        # consulta (bug corregido en fixes-datos-traspasos-control-mesa-
+        # plan.md: antes se descartaban en cuanto torneo_id venía seteado).
         if torneo_id is not None:
-            return await self.repo.listar_por_torneo(torneo_id, skip=skip, limit=limit)
+            return await self.repo.listar_por_torneo(
+                torneo_id,
+                skip=skip,
+                limit=limit,
+                jugador_perfil_id=jugador_perfil_id,
+                inscripcion_torneo_id=inscripcion_torneo_id,
+            )
         return await self.repo.list(
             skip=skip,
             limit=limit,

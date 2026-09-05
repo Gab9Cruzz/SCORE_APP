@@ -30,20 +30,38 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
             {"jugador_perfil_id": jugador_perfil_id, "torneo_id": torneo_id},
         )
 
-    async def listar_por_torneo(self, torneo_id: int, skip: int = 0, limit: int = 100) -> list[JugadorEquipo]:
+    async def listar_por_torneo(
+        self,
+        torneo_id: int,
+        skip: int = 0,
+        limit: int = 100,
+        jugador_perfil_id: int | None = None,
+        inscripcion_torneo_id: int | None = None,
+    ) -> list[JugadorEquipo]:
         """Torneo_ID no vive directo en esta tabla (Fase 1) — mismo join que
         get_activo_en_torneo. Usado por el dashboard scoped de
         torneos-admin-plan.md (D-Eng-3): sin este filtro, la sub-pestaña
         "Plantillas" del panel de un torneo mostraba TODO el sistema, no
-        solo lo de ese torneo."""
+        solo lo de ese torneo.
+
+        `jugador_perfil_id`/`inscripcion_torneo_id` (fixes-datos-traspasos-
+        control-mesa-plan.md): antes de esto, `JugadorEquipoService.list`
+        los descartaba en silencio en cuanto se pasaba `torneo_id` junto
+        con cualquiera de los dos — GET /plantillas?jugador_perfil_id=X&
+        torneo_id=Y devolvía TODO el roster del torneo, no solo lo del
+        perfil pedido (bug real, encontrado en producción: Traspasos
+        mostraba siempre el mismo equipo de origen — el primero de la
+        lista sin filtrar — para cualquier jugador)."""
         stmt = (
             select(JugadorEquipo)
             .join(InscripcionTorneo, InscripcionTorneo.id == JugadorEquipo.inscripcion_torneo_id)
             .where(InscripcionTorneo.torneo_id == torneo_id)
-            .order_by(JugadorEquipo.id)
-            .offset(skip)
-            .limit(limit)
         )
+        if jugador_perfil_id is not None:
+            stmt = stmt.where(JugadorEquipo.jugador_perfil_id == jugador_perfil_id)
+        if inscripcion_torneo_id is not None:
+            stmt = stmt.where(JugadorEquipo.inscripcion_torneo_id == inscripcion_torneo_id)
+        stmt = stmt.order_by(JugadorEquipo.id).offset(skip).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
@@ -61,6 +79,28 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
                 JugadorEquipo.estado == "Activo",
                 InscripcionTorneo.torneo_id == torneo_id,
             )
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
+    async def get_ultima_traspasada_en_inscripcion(
+        self, jugador_perfil_id: int, inscripcion_torneo_id: int
+    ) -> JugadorEquipo | None:
+        """Anular un traspaso (fixes-datos-traspasos-control-mesa-plan.md):
+        la fila 'Traspasado' MÁS RECIENTE de este perfil en esta
+        inscripción — la que el traspaso que se está anulando cerró. LIFO:
+        si hubo más de un ida-y-vuelta entre los mismos dos equipos, la
+        más reciente es la relevante para revertir el traspaso más
+        reciente (no hay un FK directo entre TRASPASOS y la fila que
+        cerró, así que se correlaciona por ser la última)."""
+        stmt = (
+            select(JugadorEquipo)
+            .where(
+                JugadorEquipo.jugador_perfil_id == jugador_perfil_id,
+                JugadorEquipo.inscripcion_torneo_id == inscripcion_torneo_id,
+                JugadorEquipo.estado == "Traspasado",
+            )
+            .order_by(JugadorEquipo.id.desc())
         )
         result = await self.session.execute(stmt)
         return result.scalars().first()

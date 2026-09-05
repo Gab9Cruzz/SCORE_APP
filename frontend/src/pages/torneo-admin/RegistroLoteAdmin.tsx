@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import type { Equipo as EquipoRow } from "../../api/types";
 import { api, apiErrorMessage } from "../../api/client";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
+import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
 
 /** Contexto que llega desde el modal "Agregar Equipo" (torneos-admin-plan.md,
  * Fase 2, journey paso 5): el torneo/equipo ya se resolvieron ahí (se creó
@@ -19,6 +20,12 @@ export interface RegistroLotePreResuelto {
   /** A dónde vuelven los botones "Cancelar"/"Volver" — el dashboard del
    * torneo en vez de la pestaña global de Plantillas. */
   volverA: string;
+  /** Bug 1 (fixes-datos-traspasos-control-mesa-plan.md, D1): la plantilla
+   * que el admin ya tipeó en el modal "Crear equipo nuevo" — evita que
+   * esos datos se descarten en silencio al llegar a esta pantalla.
+   * Opcional: sin este campo (navegación directa, o equipo sin plantilla
+   * inicial) el formulario arranca con una fila vacía, igual que antes. */
+  filasIniciales?: Fila[];
 }
 
 /** A mitad de camino entre el pre-resuelto de arriba y el formulario
@@ -99,7 +106,9 @@ export function RegistroLoteAdminPage() {
   const alcanceTorneo = esAlcanceTorneo(location.state) ? location.state : null;
 
   const [modo, setModo] = useState<Modo>({ tipo: "formulario" });
-  const [filas, setFilas] = useState<Fila[]>([{ ...FILA_VACIA }]);
+  const [filas, setFilas] = useState<Fila[]>(
+    preResuelto?.filasIniciales?.length ? preResuelto.filasIniciales : [{ ...FILA_VACIA }],
+  );
   const [inscripcionTorneoId, setInscripcionTorneoId] = useState<number | null>(
     preResuelto?.inscripcionTorneoId ?? null,
   );
@@ -129,13 +138,26 @@ export function RegistroLoteAdminPage() {
     enabled: !preResuelto,
   });
 
-  const nombreEquipo = useMemo(
+  const nombreEquipoBase = useMemo(
     () => new Map((equipos.listQuery.data ?? []).map((e) => [e.id, e.nombre])),
     [equipos.listQuery.data],
   );
-  const nombreTorneo = useMemo(
+  const nombreTorneoBase = useMemo(
     () => new Map((torneos.listQuery.data ?? []).map((t) => [t.id, t.nombre])),
     [torneos.listQuery.data],
+  );
+  // Bug 2 (D2, parte B): resolución dirigida — un equipo/torneo fuera de
+  // la ventana de LIMITE_LISTA se pedía individual antes de caer al
+  // fallback "#ID" en este selector (P3 del plan).
+  const nombreEquipo = useNombrePorIdConFaltantes(
+    "/api/v1/equipos",
+    nombreEquipoBase,
+    (inscripciones.listQuery.data ?? []).map((i) => i.equipo_id),
+  );
+  const nombreTorneo = useNombrePorIdConFaltantes(
+    "/api/v1/torneos",
+    nombreTorneoBase,
+    (inscripciones.listQuery.data ?? []).map((i) => i.torneo_id),
   );
   function etiquetaInscripcion(i: InscripcionRow): string {
     // alcanceTorneo: el torneo ya se sabe (viene en el contexto de la

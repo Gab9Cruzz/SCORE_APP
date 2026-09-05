@@ -1,25 +1,31 @@
 from httpx import AsyncClient
 
 
-async def _empezar_partido(client: AsyncClient, headers: dict[str, str], partido_id: int = 3) -> None:
+async def _empezar_partido(client: AsyncClient, headers: dict[str, str], convocar_titulares, partido_id: int = 3) -> None:
     """3A-8 (docs/plans/cierre-backlog-todos-plan.md): EventoPartidoService.create
     ahora exige partido.estado == 'En curso' (antes, el único guard vivía en
     el filtro de la lista de ControlDeMesaPage, no en el service — ver el
     comentario de _verificar_partido_en_curso). El partido 3 nace
     'Programado' en 05_seed.sql, así que todo test de este archivo que
     registra un evento nuevo necesita este paso primero, igual que el flujo
-    real (botón "Empezar Partido" antes de poder cargar nada)."""
+    real (botón "Empezar Partido" antes de poder cargar nada).
+
+    B.2 (fixes-datos-traspasos-control-mesa-plan.md, D4): "Inicio_Partido"
+    ahora exige titulares completos en ambos equipos — `convocar_titulares`
+    (conftest.py) completa el roster/convocatoria de este partido antes de
+    intentarlo, no es el foco de los tests de este archivo."""
+    await convocar_titulares(partido_id)
     resp = await client.post(
         f"/api/v1/partidos/{partido_id}/hitos", json={"tipo_hito": "Inicio_Partido"}, headers=headers
     )
     assert resp.status_code == 201, resp.text
 
 
-async def test_registrar_gol_valido(client: AsyncClient, arbitro_headers: dict[str, str]):
+async def test_registrar_gol_valido(client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares):
     # Partido 3 (05_seed.sql): torneo 1, Halcones(3) vs Tiburones(1), sin
     # eventos aún. Andrés Vera (jugador 5) pertenece al equipo 3 desde
     # 2026-01-01 (jugador_equipo), fecha del partido 2026-01-29.
-    await _empezar_partido(client, arbitro_headers)
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
     resp = await client.post(
         "/api/v1/eventos-partido",
         json={
@@ -35,10 +41,12 @@ async def test_registrar_gol_valido(client: AsyncClient, arbitro_headers: dict[s
     assert resp.json()["estado"] == "Registrado"
 
 
-async def test_jugador_ajeno_al_equipo_es_rechazado(client: AsyncClient, arbitro_headers: dict[str, str]):
+async def test_jugador_ajeno_al_equipo_es_rechazado(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares
+):
     # fn_validar_jugador_partido (06_triggers.sql): Carlos Pérez (jugador 1)
     # pertenece al equipo 1, no al 3.
-    await _empezar_partido(client, arbitro_headers)
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
     resp = await client.post(
         "/api/v1/eventos-partido",
         json={"partidos_id": 3, "jugador_id": 1, "equipo_id": 3, "eventos_id": 1, "minuto": 40},
@@ -47,8 +55,10 @@ async def test_jugador_ajeno_al_equipo_es_rechazado(client: AsyncClient, arbitro
     assert resp.status_code == 400
 
 
-async def test_minuto_fuera_de_rango_es_rechazado(client: AsyncClient, arbitro_headers: dict[str, str]):
-    await _empezar_partido(client, arbitro_headers)
+async def test_minuto_fuera_de_rango_es_rechazado(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares
+):
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
     resp = await client.post(
         "/api/v1/eventos-partido",
         json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 200},
@@ -57,8 +67,8 @@ async def test_minuto_fuera_de_rango_es_rechazado(client: AsyncClient, arbitro_h
     assert resp.status_code == 422
 
 
-async def test_anular_evento(client: AsyncClient, arbitro_headers: dict[str, str]):
-    await _empezar_partido(client, arbitro_headers)
+async def test_anular_evento(client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares):
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
     resp = await client.post(
         "/api/v1/eventos-partido",
         json={"partidos_id": 3, "jugador_id": 6, "equipo_id": 3, "eventos_id": 3, "minuto": 60},
@@ -72,14 +82,17 @@ async def test_anular_evento(client: AsyncClient, arbitro_headers: dict[str, str
 
 
 async def test_arbitro_no_asignado_no_puede_registrar_evento(
-    client: AsyncClient, arbitro_headers: dict[str, str], arbitro_no_asignado_headers: dict[str, str]
+    client: AsyncClient,
+    arbitro_headers: dict[str, str],
+    arbitro_no_asignado_headers: dict[str, str],
+    convocar_titulares,
 ):
     # D5/D6 (roles-3-modulos-plan.md, Fase 1): el ownership-check rechaza a
     # un Árbitro válido que no es el asignado al partido 3. "Empezar
     # Partido" lo hace el árbitro asignado (el no asignado no podría ni
     # eso) — el 403 de ownership debe ganarle al guard de estado igual, así
     # que el partido queda 'En curso' antes de este intento.
-    await _empezar_partido(client, arbitro_headers)
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
     resp = await client.post(
         "/api/v1/eventos-partido",
         json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 30},
@@ -90,11 +103,14 @@ async def test_arbitro_no_asignado_no_puede_registrar_evento(
 
 
 async def test_arbitro_no_asignado_no_puede_anular_evento(
-    client: AsyncClient, arbitro_headers: dict[str, str], arbitro_no_asignado_headers: dict[str, str]
+    client: AsyncClient,
+    arbitro_headers: dict[str, str],
+    arbitro_no_asignado_headers: dict[str, str],
+    convocar_titulares,
 ):
     # El evento lo carga el árbitro asignado; el intento de anularlo viene
     # de un árbitro distinto, sin asignación al partido 3.
-    await _empezar_partido(client, arbitro_headers)
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
     resp = await client.post(
         "/api/v1/eventos-partido",
         json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 15},
@@ -110,12 +126,15 @@ async def test_arbitro_no_asignado_no_puede_anular_evento(
 
 
 async def test_torneo_admin_sin_asignacion_no_puede_registrar_ni_anular_evento(
-    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str], torneo_admin_headers: dict[str, str]
+    client: AsyncClient,
+    torneo_admin_con_torneo_headers: dict[str, str],
+    torneo_admin_headers: dict[str, str],
+    convocar_titulares,
 ):
     """rbac-licencias-torneos-plan.md, Fase 2 — distinto del
     ownership-check de Árbitro (D5): acá el chequeo es de TorneoAdmin
     contra ASIGNACION_TORNEO_ADMIN, resuelto vía partidos_id -> Partido.torneo_id."""
-    await _empezar_partido(client, torneo_admin_con_torneo_headers)
+    await _empezar_partido(client, torneo_admin_con_torneo_headers, convocar_titulares)
     resp = await client.post(
         "/api/v1/eventos-partido",
         json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 20},
@@ -137,13 +156,13 @@ async def test_torneo_admin_sin_asignacion_no_puede_registrar_ni_anular_evento(
 
 
 async def test_torneo_admin_puede_registrar_y_anular_evento(
-    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]
+    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str], convocar_titulares
 ):
     # TorneoAdmin no pasa por el ownership-check de Árbitro (D5) — pero SÍ
     # necesita asignación al torneo del partido (rbac-licencias-torneos-plan.md,
     # Fase 2) — torneo_admin_con_torneo_headers está asignado al Torneo 1
     # (partido 3 pertenece a ese torneo, 05_seed.sql).
-    await _empezar_partido(client, torneo_admin_con_torneo_headers)
+    await _empezar_partido(client, torneo_admin_con_torneo_headers, convocar_titulares)
     resp = await client.post(
         "/api/v1/eventos-partido",
         json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 45},

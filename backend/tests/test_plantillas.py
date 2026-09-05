@@ -58,6 +58,37 @@ async def test_filtrar_plantilla_por_torneo(client: AsyncClient):
     assert resp.json() == []
 
 
+# Bug real encontrado en producción (fixes-datos-traspasos-control-mesa-
+# plan.md): JugadorEquipoService.list, en cuanto recibía torneo_id, tiraba
+# jugador_perfil_id/inscripcion_torneo_id al piso — GET /plantillas?
+# jugador_perfil_id=X&torneo_id=Y devolvía TODO el roster del torneo, no
+# solo el vínculo de X. Traspasos (useOrigenActualDelPerfil) hace
+# exactamente esa combinación para autocompletar "Equipo de origen" —
+# con el bug, mostraba siempre el mismo equipo (el primero de la lista sin
+# filtrar) para cualquier jugador que se buscara.
+async def test_filtrar_plantilla_por_torneo_y_jugador_perfil_combinados(client: AsyncClient):
+    # 05_seed.sql: jugador_perfil_id=1 (Jugador 1) está en inscripcion_torneo_id=1
+    # (Tiburones FC), torneo 1 — jugador_perfil_id=3 está en inscripcion 2
+    # (Águilas del Sur), mismo torneo.
+    resp = await client.get(
+        "/api/v1/plantillas", params={"torneo_id": 1, "jugador_perfil_id": 1}
+    )
+    assert resp.status_code == 200
+    filas = resp.json()
+    assert len(filas) == 1
+    assert filas[0]["jugador_perfil_id"] == 1
+    assert filas[0]["inscripcion_torneo_id"] == 1
+
+    # Combinado con inscripcion_torneo_id también filtra correctamente —
+    # jugador_perfil_id=1 NO está en la inscripción de Águilas del Sur.
+    resp = await client.get(
+        "/api/v1/plantillas",
+        params={"torneo_id": 1, "jugador_perfil_id": 1, "inscripcion_torneo_id": 2},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 async def test_admin_da_de_alta_jugador_en_equipo(client: AsyncClient, admin_general_headers: dict[str, str]):
     perfil_id = await _crear_perfil(client, admin_general_headers, "Fichaje Nuevo")
 

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { api, apiErrorMessage } from "../api/client";
 import { useAuth } from "../auth/useAuth";
+import { useNombrePorIdConFaltantes } from "../hooks/useFetchFaltantes";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import {
   type EventoPendiente,
@@ -48,6 +49,181 @@ const TIPO_ICONO: Record<TipoEvento, string> = {
   Cambio: "🔄",
 };
 
+interface PartidoParaTitulares {
+  id: number;
+  torneo_id: number;
+  equipos_id_local: number | null;
+  equipos_id_visitante: number | null;
+}
+
+/** B.2 (fixes-datos-traspasos-control-mesa-plan.md, D4) — réplica
+ * client-side de `HitoPartidoService._validar_titulares`, solo para UX:
+ * deshabilita "Empezar Partido" ANTES de que el admin lo intente, en vez
+ * de que se entere recién con el 400 del backend (que sigue siendo la
+ * fuente de verdad — ver EC-CM3, la carrera entre dos pestañas la resuelve
+ * el 400 real, no este cálculo). */
+function useTitularesCompletos(
+  partido: PartidoParaTitulares | null,
+  nombreEquipo: Map<number, string>,
+): {
+  cargando: boolean;
+  completos: boolean;
+  detalle: string | null;
+} {
+  const torneoQuery = useQuery({
+    queryKey: ["torneo", partido?.torneo_id],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}", {
+        params: { path: { torneo_id: partido!.torneo_id } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: partido != null,
+    staleTime: 5 * 60 * 1000,
+  });
+  const modalidadId = torneoQuery.data?.modalidad_id;
+  const modalidadQuery = useQuery({
+    queryKey: ["modalidad", modalidadId],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/modalidades/{modalidad_id}", {
+        params: { path: { modalidad_id: modalidadId as number } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: modalidadId != null,
+    staleTime: 5 * 60 * 1000,
+  });
+  const inscripcionesQuery = useQuery({
+    queryKey: ["inscripciones", { torneo_id: partido?.torneo_id }],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/inscripciones", {
+        params: { query: { torneo_id: partido!.torneo_id } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: partido != null,
+  });
+  const convocadosQuery = useQuery({
+    queryKey: ["convocados", partido?.id],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/partidos/{partido_id}/convocados", {
+        params: { path: { partido_id: partido!.id } },
+      });
+      if (error) throw error;
+      return data as { jugador_perfil_id: number; titular: boolean }[];
+    },
+    enabled: partido != null,
+  });
+
+  const inscripcionIdPorEquipo = useMemo(
+    () => new Map((inscripcionesQuery.data ?? []).map((i) => [i.equipo_id, i.id])),
+    [inscripcionesQuery.data],
+  );
+  const equipoLocalId = partido?.equipos_id_local ?? null;
+  const equipoVisitanteId = partido?.equipos_id_visitante ?? null;
+  const inscripcionLocalId = equipoLocalId != null ? inscripcionIdPorEquipo.get(equipoLocalId) : undefined;
+  const inscripcionVisitanteId = equipoVisitanteId != null ? inscripcionIdPorEquipo.get(equipoVisitanteId) : undefined;
+
+  const rosterLocalQuery = useQuery({
+    queryKey: ["plantillas", { inscripcion_torneo_id: inscripcionLocalId }],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/plantillas", {
+        params: { query: { inscripcion_torneo_id: inscripcionLocalId as number } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: inscripcionLocalId != null,
+  });
+  const rosterVisitanteQuery = useQuery({
+    queryKey: ["plantillas", { inscripcion_torneo_id: inscripcionVisitanteId }],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/plantillas", {
+        params: { query: { inscripcion_torneo_id: inscripcionVisitanteId as number } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: inscripcionVisitanteId != null,
+  });
+
+  if (partido == null) return { cargando: false, completos: true, detalle: null };
+
+  const cargando =
+    torneoQuery.isLoading ||
+    modalidadQuery.isLoading ||
+    inscripcionesQuery.isLoading ||
+    convocadosQuery.isLoading ||
+    (inscripcionLocalId != null && rosterLocalQuery.isLoading) ||
+    (inscripcionVisitanteId != null && rosterVisitanteQuery.isLoading);
+
+  const requeridos = modalidadQuery.data?.tamano_equipo;
+  if (cargando || requeridos == null) return { cargando: true, completos: false, detalle: null };
+
+  const titularesConvocados = new Set(
+    (convocadosQuery.data ?? []).filter((c) => c.titular).map((c) => c.jugador_perfil_id),
+  );
+  const rosterLocalActivo = new Set(
+    (rosterLocalQuery.data ?? []).filter((j) => j.estado === "Activo").map((j) => j.jugador_perfil_id),
+  );
+  const rosterVisitanteActivo = new Set(
+    (rosterVisitanteQuery.data ?? []).filter((j) => j.estado === "Activo").map((j) => j.jugador_perfil_id),
+  );
+  const nLocal = [...titularesConvocados].filter((id) => rosterLocalActivo.has(id)).length;
+  const nVisitante = [...titularesConvocados].filter((id) => rosterVisitanteActivo.has(id)).length;
+
+  if (nLocal < requeridos) {
+    const nombre = equipoLocalId != null ? (nombreEquipo.get(equipoLocalId) ?? "Local") : "Local";
+    return { cargando: false, completos: false, detalle: `${nombre}: ${nLocal}/${requeridos} titulares` };
+  }
+  if (nVisitante < requeridos) {
+    const nombre = equipoVisitanteId != null ? (nombreEquipo.get(equipoVisitanteId) ?? "Visitante") : "Visitante";
+    return { cargando: false, completos: false, detalle: `${nombre}: ${nVisitante}/${requeridos} titulares` };
+  }
+  return { cargando: false, completos: true, detalle: null };
+}
+
+/** Flujo 3 del plan (Design): botón deshabilitado de entrada — con el
+ * detalle de "{equipo}: N/M titulares" — en vez de un botón habilitado que
+ * falla recién al hacer click. Componente propio (no inline en el `.map`
+ * de la lista) porque `useTitularesCompletos` es un hook — no puede
+ * llamarse condicionalmente ni dentro de un callback de array. */
+function BotonEmpezarPartido(props: {
+  partido: PartidoParaTitulares;
+  nombreEquipo: Map<number, string>;
+  pendiente: boolean;
+  onEmpezar: () => void;
+}) {
+  const { partido, nombreEquipo, pendiente, onEmpezar } = props;
+  const titulares = useTitularesCompletos(partido, nombreEquipo);
+
+  if (titulares.cargando) {
+    return (
+      <button type="button" disabled>
+        ▶ Empezar Partido
+      </button>
+    );
+  }
+  if (!titulares.completos) {
+    return (
+      <span className="boton-empezar-partido--bloqueado">
+        <button type="button" disabled title={`Definí la convocatoria — ${titulares.detalle}`}>
+          ▶ Empezar Partido
+        </button>
+        <span className="muted boton-empezar-partido__detalle">{titulares.detalle}</span>
+      </span>
+    );
+  }
+  return (
+    <button type="button" disabled={pendiente} onClick={onEmpezar}>
+      {pendiente ? "Iniciando..." : "▶ Empezar Partido"}
+    </button>
+  );
+}
+
 export function ControlDeMesaPage() {
   const [partidoId, setPartidoId] = useState<number | null>(null);
   const queryClient = useQueryClient();
@@ -70,9 +246,17 @@ export function ControlDeMesaPage() {
     },
     staleTime: 5 * 60 * 1000,
   });
-  const nombreEquipo = useMemo(
+  const nombreEquipoBase = useMemo(
     () => new Map((equiposQuery.data ?? []).map((e) => [e.id, e.nombre])),
     [equiposQuery.data],
+  );
+  // Bug 2 (D2, parte B): resolución dirigida — un equipo fuera de la
+  // ventana de LIMITE_LISTA se pedía individual antes de caer al fallback
+  // "#ID" en esta lista (P3 del plan).
+  const nombreEquipo = useNombrePorIdConFaltantes(
+    "/api/v1/equipos",
+    nombreEquipoBase,
+    (partidosQuery.data ?? []).flatMap((p) => [p.equipos_id_local, p.equipos_id_visitante]),
   );
 
   const editarFecha = useMutation({
@@ -143,9 +327,12 @@ export function ControlDeMesaPage() {
                 botón cambia a "Ir al partido en vivo" — mismo lugar,
                 mismo peso visual, para no reflowar la fila (Flujo 4). */}
             {p.estado === "Programado" ? (
-              <button type="button" disabled={empezarPartido.isPending} onClick={() => empezarPartido.mutate(p.id)}>
-                {empezarPartido.isPending ? "Iniciando..." : "▶ Empezar Partido"}
-              </button>
+              <BotonEmpezarPartido
+                partido={p}
+                nombreEquipo={nombreEquipo}
+                pendiente={empezarPartido.isPending}
+                onEmpezar={() => empezarPartido.mutate(p.id)}
+              />
             ) : (
               <button type="button" onClick={() => setPartidoId(p.id)}>
                 Ir al partido en vivo
@@ -324,10 +511,13 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
     [plantillaVisitanteQuery.data, perfilesConvocados],
   );
 
-  const equipoNombre = useMemo(
+  const equipoNombreBase = useMemo(
     () => new Map((equiposQuery.data ?? []).map((e) => [e.id, e.nombre])),
     [equiposQuery.data],
   );
+  // Bug 2 (D2, parte B): resolución dirigida — mismo criterio que
+  // ControlDeMesaPage, para el equipo local/visitante de este partido.
+  const equipoNombre = useNombrePorIdConFaltantes("/api/v1/equipos", equipoNombreBase, [equipoLocalId, equipoVisitanteId]);
   const eventoIdPorNombre = useMemo(
     () => new Map((eventosCatalogoQuery.data ?? []).map((e) => [e.nombre, e.id])),
     [eventosCatalogoQuery.data],

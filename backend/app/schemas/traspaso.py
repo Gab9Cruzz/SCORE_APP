@@ -27,3 +27,8 @@ class TraspasoOut(BaseModel):
     motivo: str | None
     fecha_traspaso: datetime
     estado: EstadoTraspaso
+    # fixes-datos-traspasos-control-mesa-plan.md: computado por
+    # TraspasoService, no una columna — le dice al frontend si "Anular"
+    # todavía puede ofrecerse (False una vez que el club destino ya
+    # arrancó un partido desde este traspaso, o si ya está Anulado).
+    puede_anularse: bool = False

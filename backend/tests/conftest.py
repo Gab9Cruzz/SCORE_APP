@@ -209,3 +209,87 @@ async def torneo_admin_con_torneo_headers(db_session: AsyncSession, client: Asyn
     return await _login_headers(client, "torneo_admin_con_torneo_test", "torneopass123")
 
 
+@pytest_asyncio.fixture
+async def convocar_titulares(db_session: AsyncSession):
+    """B.2 (fixes-datos-traspasos-control-mesa-plan.md, D4):
+    HitoPartidoService.registrar ahora exige, para registrar
+    'Inicio_Partido', que cada equipo tenga al menos Modalidad.tamano_equipo
+    titulares convocados y vigentes en el roster de ESE torneo — antes de
+    este plan cualquier partido arrancaba sin convocatoria.
+
+    05_seed.sql deja Halcones/Tiburones (partido 3, Fútbol 11 →
+    tamano_equipo=11) con solo 2 jugadores activos cada uno a propósito, de
+    mínimo — insuficiente para la nueva validación. Esta fixture completa
+    lo que le falte al roster (jugadores/perfiles/vínculos nuevos, mismo
+    patrón ad-hoc que ya usa test_finalizar_corrido_sin_ganador_es_rechazado)
+    y convoca de titular a TODOS los jugadores activos resultantes de
+    ambos equipos, para que 'Inicio_Partido' tenga éxito en los tests que
+    lo necesitan como paso previo (no es el foco de esos tests).
+
+    Devuelve una función async `completar(partido_id)` en vez de actuar
+    sola — cada test decide sobre qué partido (normalmente el 3 del seed,
+    default acá)."""
+    from datetime import date
+
+    from sqlalchemy import select
+
+    from app.models.convocado_a_partido import ConvocadoAPartido
+    from app.models.inscripcion_torneo import InscripcionTorneo
+    from app.models.jugador import Jugador
+    from app.models.jugador_equipo import JugadorEquipo
+    from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
+    from app.models.modalidad import Modalidad
+    from app.models.torneo import Torneo
+
+    contador = {"n": 0}
+
+    async def completar(partido_id: int = 3) -> None:
+        partido = await db_session.get(Partido, partido_id)
+        torneo = await db_session.get(Torneo, partido.torneo_id)
+        modalidad = await db_session.get(Modalidad, torneo.modalidad_id)
+        requeridos = modalidad.tamano_equipo
+
+        perfiles_titulares: list[int] = []
+        for equipo_id in (partido.equipos_id_local, partido.equipos_id_visitante):
+            stmt = select(InscripcionTorneo).where(
+                InscripcionTorneo.torneo_id == torneo.id, InscripcionTorneo.equipo_id == equipo_id
+            )
+            inscripcion = (await db_session.execute(stmt)).scalars().first()
+
+            stmt = select(JugadorEquipo).where(
+                JugadorEquipo.inscripcion_torneo_id == inscripcion.id, JugadorEquipo.estado == "Activo"
+            )
+            roster = list((await db_session.execute(stmt)).scalars().all())
+
+            for _ in range(max(requeridos - len(roster), 0)):
+                contador["n"] += 1
+                n = contador["n"]
+                jugador = Jugador(
+                    nombre=f"Titular Relleno {n}",
+                    cedula=f"9999{n:06d}",
+                    correo_electronico=f"titular.relleno.{n}@example.com",
+                )
+                db_session.add(jugador)
+                await db_session.flush()
+                perfil = JugadorPerfilDisciplina(jugador_id=jugador.id, disciplina_id=torneo.disciplina_id)
+                db_session.add(perfil)
+                await db_session.flush()
+                vinculo = JugadorEquipo(
+                    jugador_perfil_id=perfil.id,
+                    inscripcion_torneo_id=inscripcion.id,
+                    fecha_inicio=date(2026, 1, 1),
+                    estado="Activo",
+                )
+                db_session.add(vinculo)
+                roster.append(vinculo)
+
+            await db_session.flush()
+            perfiles_titulares.extend(v.jugador_perfil_id for v in roster)
+
+        for perfil_id in perfiles_titulares:
+            db_session.add(ConvocadoAPartido(partido_id=partido_id, jugador_perfil_id=perfil_id, titular=True))
+        await db_session.commit()
+
+    return completar
+
+

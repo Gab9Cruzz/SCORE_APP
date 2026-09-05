@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import type { Equipo as EquipoRow } from "../../../api/types";
 import { api, apiErrorMessage } from "../../../api/client";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
+import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
 
 interface PartidoBracket {
   id: number;
@@ -161,10 +162,18 @@ function BracketView({ torneoId }: { torneoId: number }) {
     },
   });
   const equipos = useResourceCrud<EquipoRow>({ resourceKey: "equipos", basePath: "/api/v1/equipos" });
-  const nombreEquipo = useMemo(
+  const nombreEquipoBase = useMemo(
     () => new Map((equipos.listQuery.data ?? []).map((e) => [e.id, e.nombre])),
     [equipos.listQuery.data],
   );
+  // Bug 2 (D2, parte B): resolución dirigida — un equipo fuera de la
+  // ventana de LIMITE_LISTA se pedía individual antes de caer al fallback
+  // "Equipo #ID" en el bracket (P3 del plan).
+  const idsEquiposBracket = useMemo(
+    () => (query.data ?? []).flatMap((p) => [p.equipos_id_local, p.equipos_id_visitante]),
+    [query.data],
+  );
+  const nombreEquipo = useNombrePorIdConFaltantes("/api/v1/equipos", nombreEquipoBase, idsEquiposBracket);
 
   if (query.isLoading) return <p>Cargando bracket...</p>;
   if (query.isError) return <p className="error-text">{apiErrorMessage(query.error)}</p>;

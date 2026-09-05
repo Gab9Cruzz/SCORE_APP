@@ -30,6 +30,11 @@ interface ResourceTableProps<T extends RowConEstado> {
    * más probable de auto-lockout (el backend ya lo rechaza con 403, esto
    * evita el viaje redondo). Opcional: solo lo usa UsuariosAdmin.tsx. */
   isSelf?: (row: T) => boolean;
+  /** Gate adicional para el botón de baja, más allá de estadosDeBaja/isSelf
+   * — ej. Traspasos: "Anular" desaparece si el club destino ya jugó desde
+   * el traspaso (fixes-datos-traspasos-control-mesa-plan.md), sin que eso
+   * dependa del estado de la fila. Default: siempre permitido. */
+  puedeSoftDelete?: (row: T) => boolean;
   /** Acciones extra por fila, además de Editar/Dar de baja — ej. un link
    * "Ver perfil" (equipos-jugadores-plan.md, Fase 2, Etapa D). Se
    * renderiza en la misma celda de acciones. */
@@ -53,6 +58,7 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
     softDeletePending = false,
     estadosDeBaja = ["Inactivo", "Cancelado"],
     isSelf,
+    puedeSoftDelete,
     extraActions,
   } = props;
 
@@ -86,11 +92,14 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
                       Editar
                     </button>
                   )}
-                  {onSoftDelete && !estadosDeBaja.includes(row.estado ?? "") && !isSelf?.(row) && (
-                    <button type="button" onClick={() => onSoftDelete(row)} disabled={softDeletePending}>
-                      {softDeleteLabel}
-                    </button>
-                  )}
+                  {onSoftDelete &&
+                    !estadosDeBaja.includes(row.estado ?? "") &&
+                    !isSelf?.(row) &&
+                    (puedeSoftDelete?.(row) ?? true) && (
+                      <button type="button" onClick={() => onSoftDelete(row)} disabled={softDeletePending}>
+                        {softDeleteLabel}
+                      </button>
+                    )}
                   {extraActions?.(row)}
                 </td>
               )}

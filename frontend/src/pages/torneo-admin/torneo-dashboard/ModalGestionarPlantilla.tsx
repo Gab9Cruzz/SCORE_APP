@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiErrorMessage } from "../../../api/client";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
+import { useEtiquetaJugadorPorPerfil } from "../../../hooks/useEtiquetaJugadorPorPerfil";
 import type { RegistroLotePreResuelto } from "../RegistroLoteAdmin";
 
 interface PlantillaRow {
@@ -79,10 +80,14 @@ export function ModalGestionarPlantilla(props: ModalGestionarPlantillaProps) {
     () => new Map((perfiles.listQuery.data ?? []).map((p) => [p.id, p])),
     [perfiles.listQuery.data],
   );
-  function etiquetaJugador(perfilId: number): string {
-    const p = perfilPorId.get(perfilId);
-    return p ? (nombreJugador.get(p.jugador_id) ?? `Jugador #${p.jugador_id}`) : `Perfil #${perfilId}`;
-  }
+  // Bug 2 (D2, parte B): resolución dirigida — un perfil/jugador fuera de
+  // la ventana de LIMITE_LISTA se pedía individual antes de caer al
+  // fallback "Perfil #ID" (P3 del plan).
+  const etiquetaJugador = useEtiquetaJugadorPorPerfil(
+    (plantillas.listQuery.data ?? []).map((p) => p.jugador_perfil_id),
+    perfilPorId,
+    nombreJugador,
+  );
 
   // Roster VIGENTE — mismo criterio que rosterCount en EquiposDelTorneo.tsx
   // (solo cuenta/lista Activo). Un jugador dado de baja sale de la vista

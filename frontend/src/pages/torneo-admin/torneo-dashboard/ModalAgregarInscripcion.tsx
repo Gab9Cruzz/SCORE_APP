@@ -372,10 +372,16 @@ function ModalEquipo(props: {
     onSuccess: ({ inscripcionTorneoId, equipoNombre }) => {
       queryClient.invalidateQueries({ queryKey: ["inscripciones"] });
       queryClient.invalidateQueries({ queryKey: ["equipos"] });
+      // Bug 1 (fixes-datos-traspasos-control-mesa-plan.md, D1): la
+      // plantilla que el admin ya tipeó acá viaja a Registro por Lote en
+      // vez de perderse — mismas filas con dato que habilitaban "Validar y
+      // crear" (EC-A2), filas totalmente vacías no viajan.
+      const filasIniciales = filas.filter((f) => f.cedula.trim() !== "" || f.nombre.trim() !== "");
       const preResuelto: RegistroLotePreResuelto = {
         inscripcionTorneoId,
         contexto: `${equipoNombre} — ${torneoContexto}`,
         volverA: `/torneo-admin/torneos/${torneoId}/equipos`,
+        filasIniciales,
       };
       navigate("/torneo-admin/plantillas/lote", { state: preResuelto });
     },

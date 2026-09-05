@@ -6,10 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.exceptions.errors import DomainRuleError
 from app.models.jugador_equipo import JugadorEquipo
 from app.models.traspaso import Traspaso
+from app.repositories.equipo import EquipoRepository
+from app.repositories.hito_partido import HitoPartidoRepository
 from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.repositories.jugador_equipo import JugadorEquipoRepository
 from app.repositories.traspaso import TraspasoRepository
-from app.schemas.traspaso import TraspasoCreate
+from app.schemas.traspaso import TraspasoCreate, TraspasoOut
 
 
 class TraspasoService:
@@ -18,9 +20,13 @@ class TraspasoService:
         self.repo = TraspasoRepository(session)
         self.jugador_equipo_repo = JugadorEquipoRepository(session)
         self.inscripcion_repo = InscripcionTorneoRepository(session)
+        # fixes-datos-traspasos-control-mesa-plan.md: anular ahora revierte
+        # de verdad y necesita saber si el club destino ya jugó.
+        self.equipo_repo = EquipoRepository(session)
+        self.hito_repo = HitoPartidoRepository(session)
 
-    async def get(self, id_: int) -> Traspaso:
-        return await self.repo.get_or_404(id_)
+    async def get(self, id_: int) -> TraspasoOut:
+        return await self._a_salida(await self.repo.get_or_404(id_))
 
     async def list(
         self,
@@ -28,14 +34,32 @@ class TraspasoService:
         limit: int = 100,
         jugador_perfil_id: int | None = None,
         torneo_id: int | None = None,
-    ) -> list[Traspaso]:
+    ) -> list[TraspasoOut]:
         # Mismo criterio que JugadorEquipoService.list: torneo_id necesita
         # un join, rama aparte del filtro genérico (D-Eng-3 del plan).
         if torneo_id is not None:
-            return await self.repo.listar_por_torneo(torneo_id, skip=skip, limit=limit)
-        return await self.repo.list(skip=skip, limit=limit, jugador_perfil_id=jugador_perfil_id)
+            traspasos = await self.repo.listar_por_torneo(torneo_id, skip=skip, limit=limit)
+        else:
+            traspasos = await self.repo.list(skip=skip, limit=limit, jugador_perfil_id=jugador_perfil_id)
+        return [await self._a_salida(t) for t in traspasos]
 
-    async def crear(self, data: TraspasoCreate, usuario_actual_id: int) -> Traspaso:
+    async def _puede_anularse(self, traspaso: Traspaso) -> bool:
+        """fixes-datos-traspasos-control-mesa-plan.md: False si ya está
+        Anulado, o si el club DESTINO ya arrancó un partido desde este
+        traspaso (decisión explícita del usuario — no depende de si ESTE
+        jugador puntualmente participó, solo de si el club ya compitió)."""
+        if traspaso.estado == "Anulado":
+            return False
+        inscripcion_destino = await self.inscripcion_repo.get_or_404(traspaso.inscripcion_destino_id)
+        ya_jugo = await self.hito_repo.existe_inicio_desde(inscripcion_destino.equipo_id, traspaso.fecha_traspaso)
+        return not ya_jugo
+
+    async def _a_salida(self, traspaso: Traspaso) -> TraspasoOut:
+        salida = TraspasoOut.model_validate(traspaso)
+        salida.puede_anularse = await self._puede_anularse(traspaso)
+        return salida
+
+    async def crear(self, data: TraspasoCreate, usuario_actual_id: int) -> TraspasoOut:
         """Cierra el origen (si hay), abre el destino y registra el
         traspaso — las tres escrituras van en un solo `commit()`, no tres
         llamadas separadas a `BaseRepository.create()`: si el alta del
@@ -122,13 +146,76 @@ class TraspasoService:
 
         await self.session.commit()
         await self.session.refresh(traspaso)
-        return traspaso
+        return await self._a_salida(traspaso)
 
-    async def anular(self, id_: int) -> Traspaso:
-        """EC-20: anotación visual, nunca toca JUGADOR_EQUIPO. Corregir el
-        roster de verdad es un traspaso nuevo en sentido inverso — una
-        llamada normal a `crear`."""
+    async def anular(self, id_: int) -> TraspasoOut:
+        """Revierte el traspaso de verdad (fixes-datos-traspasos-control-
+        mesa-plan.md, decisión explícita del usuario — reemplaza el
+        criterio anterior de "anotación visual" de EC-20): el jugador
+        vuelve al equipo donde estaba, como si el traspaso no hubiera
+        pasado.
+
+        - Da de baja la membresía que este traspaso abrió en el destino
+          (estado='Inactivo', fecha_fin=hoy) — simétrico con una baja
+          normal.
+        - Si había origen, reactiva esa membresía (estado='Activo',
+          fecha_fin=None) — el jugador sigue su tenencia ahí sin
+          interrupción, como si el traspaso nunca hubiera pasado. Un
+          fichaje desde agencia libre no tiene membresía que reactivar: el
+          jugador simplemente vuelve a estar libre.
+        - Deja de ofrecerse en cuanto el club DESTINO ya arrancó un
+          partido desde este traspaso (`_puede_anularse`) — a partir de
+          ahí, corregir el roster es un traspaso nuevo en sentido inverso,
+          no un "deshacer" (el club ya compitió con ese jugador en su
+          plantilla, aunque no haya generado un evento personal).
+        """
         traspaso = await self.repo.get_or_404(id_)
         if traspaso.estado == "Anulado":
             raise DomainRuleError("Este traspaso ya está anulado.")
-        return await self.repo.save_changes(traspaso, estado="Anulado")
+
+        inscripcion_destino = await self.inscripcion_repo.get_or_404(traspaso.inscripcion_destino_id)
+        if await self.hito_repo.existe_inicio_desde(inscripcion_destino.equipo_id, traspaso.fecha_traspaso):
+            equipo_destino = await self.equipo_repo.get_or_404(inscripcion_destino.equipo_id)
+            raise DomainRuleError(
+                f"No se puede anular: {equipo_destino.nombre} ya arrancó un partido desde este "
+                "traspaso. Cargá un traspaso en sentido inverso para corregirlo."
+            )
+
+        # Mismo lock que crear() — serializa contra otro movimiento
+        # concurrente del mismo perfil en el mismo torneo mientras se
+        # reactiva el origen.
+        await self.jugador_equipo_repo.lock_exclusividad_torneo(
+            traspaso.jugador_perfil_id, inscripcion_destino.torneo_id
+        )
+
+        destino_activo = await self.jugador_equipo_repo.get_activo_en_inscripcion(
+            traspaso.jugador_perfil_id, traspaso.inscripcion_destino_id
+        )
+        if destino_activo is None:
+            raise DomainRuleError(
+                "El jugador ya no está activo en el equipo destino de este traspaso — probablemente "
+                "un movimiento posterior ya lo sacó de ahí. No se puede revertir automáticamente."
+            )
+        destino_activo.estado = "Inactivo"
+        destino_activo.fecha_fin = date.today()
+        # Cierra destino ANTES de reactivar origen (mismo motivo que
+        # crear(): fn_validar_exclusividad_torneo no debe ver dos Activo
+        # del mismo perfil en el mismo torneo a la vez).
+        await self.session.flush()
+
+        if traspaso.inscripcion_origen_id is not None:
+            origen_cerrado = await self.jugador_equipo_repo.get_ultima_traspasada_en_inscripcion(
+                traspaso.jugador_perfil_id, traspaso.inscripcion_origen_id
+            )
+            if origen_cerrado is None:
+                raise DomainRuleError(
+                    "No se encontró la membresía de origen para reactivar — no se puede revertir "
+                    "automáticamente."
+                )
+            origen_cerrado.estado = "Activo"
+            origen_cerrado.fecha_fin = None
+
+        traspaso.estado = "Anulado"
+        await self.session.commit()
+        await self.session.refresh(traspaso)
+        return await self._a_salida(traspaso)

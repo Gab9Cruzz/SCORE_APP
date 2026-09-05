@@ -74,6 +74,9 @@ async def crear_traspaso(
     ],
 )
 async def anular_traspaso(traspaso_id: int, session: AsyncSession = Depends(get_db)) -> TraspasoOut:
-    """EC-20: anotación visual — NO revierte el roster. Corregir el error
-    de verdad es un traspaso nuevo en sentido inverso (POST /traspasos)."""
+    """Revierte el traspaso de verdad: reactiva la membresía de origen (si
+    había) y da de baja la de destino — ver TraspasoService.anular. Deja
+    de estar disponible en cuanto el club destino ya arrancó un partido
+    desde este traspaso (`TraspasoOut.puede_anularse`); a partir de ahí
+    corresponde un traspaso nuevo en sentido inverso (POST /traspasos)."""
     return await TraspasoService(session).anular(traspaso_id)

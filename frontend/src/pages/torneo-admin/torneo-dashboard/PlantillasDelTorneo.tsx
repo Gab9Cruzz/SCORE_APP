@@ -5,6 +5,8 @@ import { apiErrorMessage } from "../../../api/client";
 import { ResourceForm, type ResourceFieldValue } from "../../../components/admin/ResourceForm";
 import { LIMITE_LISTA, useResourceCrud } from "../../../hooks/useResourceCrud";
 import { useCatalogo } from "../../../hooks/useCatalogo";
+import { useEtiquetaJugadorPorPerfil } from "../../../hooks/useEtiquetaJugadorPorPerfil";
+import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
 import { AvatarJugador } from "../AvatarJugador";
 import { iconoDisciplina } from "../iconosDisciplina";
 import type { RegistroLoteAlcanceTorneo } from "../RegistroLoteAdmin";
@@ -71,16 +73,33 @@ export function PlantillasDelTorneoPage() {
     basePath: "/api/v1/inscripciones",
     listParams: { torneo_id: torneoId },
   });
-  const equipos = useResourceCrud<EquipoRow>({ resourceKey: "equipos", basePath: "/api/v1/equipos" });
+  // Bug 2 (D2, parte C): solo equipos de esta disciplina — reduce la
+  // ventana de LIMITE_LISTA a algo realista, mismo criterio que ya usaba
+  // EquiposDelTorneo.tsx. No es garantía por sí sola (de ahí que abajo
+  // también se resuelva por ID dirigido) pero achica el problema real.
+  const equipos = useResourceCrud<EquipoRow>({
+    resourceKey: "equipos",
+    basePath: "/api/v1/equipos",
+    listParams: { disciplina_id: disciplinaId },
+  });
   const catalogo = useCatalogo();
 
   const jugadorPorId = useMemo(
     () => new Map((jugadores.listQuery.data ?? []).map((j) => [j.id, j])),
     [jugadores.listQuery.data],
   );
-  const nombreEquipo = useMemo(
+  const jugadorPorIdBase = useMemo(
+    () => new Map((jugadores.listQuery.data ?? []).map((j) => [j.id, j.nombre])),
+    [jugadores.listQuery.data],
+  );
+  const nombreEquipoBase = useMemo(
     () => new Map((equipos.listQuery.data ?? []).map((e) => [e.id, e.nombre])),
     [equipos.listQuery.data],
+  );
+  const nombreEquipo = useNombrePorIdConFaltantes(
+    "/api/v1/equipos",
+    nombreEquipoBase,
+    (inscripciones.listQuery.data ?? []).map((i) => i.equipo_id),
   );
   const nombreEquipoDeInscripcion = useMemo(() => {
     const inscripcionAEquipo = new Map((inscripciones.listQuery.data ?? []).map((i) => [i.id, i.equipo_id]));
@@ -95,12 +114,18 @@ export function PlantillasDelTorneoPage() {
     [perfiles.listQuery.data],
   );
 
+  // Bug 2 (D2, parte B): resolución dirigida cuando el perfil o el jugador
+  // caen fuera de la ventana de LIMITE_LISTA — sin esto, `etiquetaJugador`
+  // mostraba "Perfil #ID" para un vínculo con nombre real perfecto en la
+  // base (P3 del plan).
+  const etiquetaJugador = useEtiquetaJugadorPorPerfil(
+    (crud.listQuery.data ?? []).map((v) => v.jugador_perfil_id),
+    perfilPorId,
+    jugadorPorIdBase,
+  );
   function jugadorDeVinculo(perfilId: number): JugadorRow | undefined {
     const p = perfilPorId.get(perfilId);
     return p ? jugadorPorId.get(p.jugador_id) : undefined;
-  }
-  function etiquetaJugador(perfilId: number): string {
-    return jugadorDeVinculo(perfilId)?.nombre ?? `Perfil #${perfilId}`;
   }
 
   // Un card por equipo INSCRITO, no solo por equipo con jugadores — un

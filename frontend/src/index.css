@@ -1237,3 +1237,65 @@ td:first-child {
 .bracket__equipo:first-child {
   border-bottom: 1px solid var(--border);
 }
+
+/* Traspasos — selector buscable + autocompletados (Flujo 2,
+   fixes-datos-traspasos-control-mesa-plan.md). */
+.selector-jugador-buscable {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.selector-jugador-buscable__label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.selector-jugador-buscable__elegido {
+  font-weight: 600;
+}
+
+.campo-derivado {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.9rem;
+}
+
+.campo-derivado__etiqueta {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.dorsal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.dorsal-chip {
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  border-radius: 999px;
+  padding: 0.15rem 0.65rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.dorsal-chip:hover {
+  border-color: var(--accent, var(--border));
+}
+
+/* Control de Mesa — botón "Empezar Partido" bloqueado por titulares
+   incompletos (Flujo 3, fixes-datos-traspasos-control-mesa-plan.md). */
+.boton-empezar-partido--bloqueado {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+}
+
+.boton-empezar-partido__detalle {
+  font-size: 0.75rem;
+}

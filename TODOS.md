@@ -404,3 +404,70 @@ a propósito.
   sola fila, no un scan) — verificado en la revisión de Eng (voz
   externa), la propuesta original era ruido de proceso, no una
   optimización real.
+
+## Fixes de datos (Alta Local + Traspasos) + Control de Mesa (Titulares) — implementado
+
+Plan en `docs/plans/fixes-datos-traspasos-control-mesa-plan.md`,
+implementado el 2026-09-04 (326 tests backend + 198 frontend, todos
+verdes; `tsc -b`/`oxlint`/`vite build` en verde).
+
+- ~~Bug 1: "Crear equipo nuevo" perdía la plantilla tipeada en el
+  modal~~ — **hecho.** `filasIniciales` viaja del modal a Registro por
+  Lote (`ModalAgregarInscripcion.tsx` → `RegistroLoteAdmin.tsx`); la
+  pantalla dividida arranca con esas filas ya cargadas.
+- ~~Bug 2: nombres reales invisibles detrás de "Equipo #ID"/"Perfil #ID"
+  cuando el ID cae fuera de la ventana de `LIMITE_LISTA`~~ — **hecho,
+  mitigado.** Resolución dirigida por ID (`useFetchFaltantes`,
+  `useNombrePorIdConFaltantes`, `useEtiquetaJugadorPorPerfil`) aplicada en
+  los 7 lugares identificados (`EquiposDelTorneo.tsx`,
+  `PlantillasDelTorneo.tsx`, `TraspasosDelTorneo.tsx`,
+  `MotorFormatosPanel.tsx`, `RegistroLoteAdmin.tsx`, `ControlDeMesa.tsx`,
+  `ModalGestionarPlantilla.tsx`) + filtro por `disciplina_id` donde no
+  existía. **No** es la paginación real con cursor de 3B-9 (arriba) —
+  sigue pendiente con su propio ciclo; esto resuelve el síntoma visible,
+  no el techo de 200 filas al LISTAR.
+- ~~Traspasos: dropdown crudo de IDs, sin búsqueda, sin autocompletado de
+  origen ni sugerencia de dorsal~~ — **hecho.** `SelectorJugadorBuscable`
+  (componente compartido, extraído de `ModalBuscarAgregarJugador`) +
+  `useDebouncedValue` (hook compartido, extraído de `useDebouncedEffect`)
+  + autocompletado de "Equipo de origen"/"Agencia Libre"
+  (`useOrigenActualDelPerfil`) + chips de dorsal histórico
+  (`useDorsalesHistoricos`), ambos sobre `GET /plantillas?jugador_perfil_id=`
+  ya existente, sin backend nuevo.
+- ~~Control de Mesa: "Empezar Partido" no validaba titulares~~ —
+  **hecho.** `HitoPartidoService._validar_titulares` (backend, fuente de
+  verdad, 409→400 `DomainRuleError` con el equipo y los números exactos)
+  + `useTitularesCompletos`/`BotonEmpezarPartido` (frontend, deshabilita
+  el botón antes de que el admin lo intente). Usa
+  `Modalidad.tamano_equipo` como fuente de "cuántos titulares exige esta
+  modalidad" — sin catálogo nuevo. Cubre Pareja (=2) y Conjunto (>2) con
+  el mismo cálculo genérico.
+- **Migrar `DetalleEquipo.tsx`/`ModalIndividual` al `SelectorJugadorBuscable`
+  compartido** — no hecho, mejora recomendada por el plan (D3) pero no
+  pedida explícitamente. Ambos quedarían gratis arreglados del mismo techo
+  de 200 que afecta al Bug 2.
+- **Tope de titulares por ENCIMA de `tamano_equipo`** — fuera de alcance
+  a propósito (Decisión Audit #12 del plan): la validación nueva exige el
+  mínimo al iniciar, no bloquea un exceso marcado en Convocatoria.
+
+**Post-implementación (2026-09-04), encontrado usando la feature real, no
+en el plan original:**
+
+- ~~Bug real: `JugadorEquipoService.list` descartaba `jugador_perfil_id`
+  en cuanto se le pasaba `torneo_id` junto~~ — **hecho.**
+  `GET /plantillas?jugador_perfil_id=X&torneo_id=Y` devolvía TODO el
+  roster del torneo sin filtrar por jugador — `useOrigenActualDelPerfil`
+  (Traspasos) hace exactamente esa combinación para autocompletar "Equipo
+  de origen", así que mostraba siempre el mismo equipo (el primero de la
+  lista sin filtrar) para cualquier jugador. Corregido en
+  `JugadorEquipoRepository.listar_por_torneo` (ahora combina los 3
+  filtros en una sola consulta) + test de regresión en `test_plantillas.py`.
+- ~~"Anular" un traspaso era solo una anotación visual (EC-20 original),
+  no revertía el roster~~ — **hecho, decisión explícita del usuario
+  (cambia el diseño original del plan equipos-jugadores-plan.md).**
+  `TraspasoService.anular` ahora reactiva la membresía de origen y da de
+  baja la de destino — el jugador vuelve al club donde estaba. Deja de
+  ofrecerse (`TraspasoOut.puede_anularse`, botón oculto en el frontend)
+  en cuanto el club DESTINO ya arrancó un partido desde el traspaso
+  (`HitoPartidoRepository.existe_inicio_desde`) — a partir de ahí
+  corresponde un traspaso nuevo en sentido inverso, no un "deshacer".
