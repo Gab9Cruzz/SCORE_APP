@@ -1,9 +1,16 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles, require_torneo_access, require_torneo_access_de
+from app.api.deps import (
+    get_current_user,
+    get_current_user_optional,
+    require_roles,
+    require_torneo_access,
+    require_torneo_access_de,
+)
 from app.db.session import get_db
 from app.models.usuario import Usuario
+from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
 from app.repositories.partido import PartidoRepository
 from app.schemas.hito_partido import (
     DuracionPartidoOut,
@@ -13,7 +20,14 @@ from app.schemas.hito_partido import (
     HitoPartidoUpdate,
 )
 from app.schemas.convocado_a_partido import ConvocadoOut, ConvocatoriaSetRequest
-from app.schemas.partido import EstadoPartido, PartidoCreate, PartidoOut, PartidoUpdate, WalkoverRequest
+from app.schemas.partido import (
+    EstadoPartido,
+    PartidoCreate,
+    PartidoOut,
+    PartidoUpdate,
+    ResultadoDirectoCreate,
+    WalkoverRequest,
+)
 from app.services.convocado_a_partido import ConvocadoAPartidoService
 from app.services.estadisticas import EstadisticasService
 from app.services.hito_partido import HitoPartidoService
@@ -44,15 +58,30 @@ async def listar_partidos(
     torneo_id: int | None = None,
     estado: EstadoPartido | None = None,
     arbitro_id: int | None = None,
+    # control-mesa-centralizacion-fixture-plan.md, ítem 1: mismo opt-in que
+    # GET /torneos?solo_mios=true (E1) — filtra a los torneos asignados
+    # cuando el caller es TorneoAdmin, sin efecto para AdminGeneral/Arbitro/
+    # anónimo. Es lo que scopea la lista de /control-de-mesa: hoy mezclaba
+    # TODOS los torneos del sistema para cualquier TorneoAdmin.
+    solo_mios: bool = False,
     session: AsyncSession = Depends(get_db),
+    usuario: Usuario | None = Depends(get_current_user_optional),
 ) -> list[PartidoOut]:
     """Público, sin auth (roles-3-modulos-plan.md, Fase 1: los resultados
     ya son públicos a propósito). `arbitro_id` (Fase 3, D1) es un filtro
     más, no un chequeo de permiso: PartidoOut ya expone arbitro_id en
     cada fila, así que este query param no agrega ninguna fuga nueva,
     solo evita filtrar del lado del cliente."""
+    torneo_ids_permitidos: list[int] | None = None
+    if solo_mios and usuario is not None and usuario.rol == "TorneoAdmin":
+        torneo_ids_permitidos = await AsignacionTorneoAdminRepository(session).listar_torneo_ids_activos(usuario.id)
     return await PartidoService(session).list(
-        skip=skip, limit=limit, torneo_id=torneo_id, estado=estado, arbitro_id=arbitro_id
+        skip=skip,
+        limit=limit,
+        torneo_id=torneo_id,
+        estado=estado,
+        arbitro_id=arbitro_id,
+        torneo_ids_permitidos=torneo_ids_permitidos,
     )
 
 
@@ -134,6 +163,29 @@ async def marcar_walkover(
     permitido (Eliminación siempre, Liga/fase de grupos solo si el
     torneo lo habilitó)."""
     return await PartidoService(session).marcar_walkover(partido_id, data.equipo_ausente_id, usuario_actual)
+
+
+@router.post(
+    "/{partido_id}/resultado-directo",
+    response_model=PartidoOut,
+    dependencies=[
+        Depends(require_roles("TorneoAdmin", "Arbitro")),
+        Depends(require_torneo_access_de(_torneo_id_de_partido, "Arbitro")),
+    ],
+)
+async def registrar_resultado_directo(
+    partido_id: int,
+    data: ResultadoDirectoCreate,
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+) -> PartidoOut:
+    """"Cargar resultado directo" desde Control de Mesa (control-mesa-
+    centralizacion-fixture-plan.md, Sección 5, Alternativa A) — cierra un
+    partido 'Programado' de una sola vez (goles/tarjetas/cambios + inicio y
+    fin), sin pasar por el cronómetro en vivo. Ver
+    PartidoService.registrar_resultado_directo para la garantía de
+    atomicidad (todo-o-nada)."""
+    return await PartidoService(session).registrar_resultado_directo(partido_id, data, usuario_actual)
 
 
 # ------------------------------------------------------------

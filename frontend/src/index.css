@@ -539,6 +539,15 @@ td:first-child {
   cursor: default;
 }
 
+/* Selector de torneo (control-mesa-centralizacion-fixture-plan.md, ítem
+ * 2) — mismo espaciado que .editor-fecha-partido, label+select en línea. */
+.selector-torneo-control-mesa {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 /* Dashboard pre-partido de Control de Mesa (gestion-avanzada-equipos-
  * control-mesa-plan.md, Flujo 4) */
 .partido-mesa-fila {

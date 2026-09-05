@@ -55,6 +55,13 @@ export function App() {
             }
           />
           <Route path="/partido/:partidoId/en-vivo" element={<PartidoEnVivoPage />} />
+          {/* "Detalle del Partido" (control-mesa-centralizacion-fixture-
+              plan.md, ítem 5) — misma página que /partido/:id/en-vivo
+              (generalizada: sirve para cualquier estado, no solo "En
+              curso"), nueva ruta con el nombre que usa el botón de
+              PartidosDelTorneo.tsx. La ruta vieja se mantiene tal cual —
+              Dashboard.tsx la linkea como "Ver en vivo →". */}
+          <Route path="/partidos/:partidoId" element={<PartidoEnVivoPage />} />
 
           {/* Módulo Árbitro (roles-3-modulos-plan.md, Fase 3, D3 + Fase 4,
               D1): ruta única, sin layout/Outlet — hoy es una sola

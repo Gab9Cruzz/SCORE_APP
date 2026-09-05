@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api/client";
 
@@ -15,6 +16,29 @@ const EVENTO_LABEL: Record<string, string> = {
   Cambio: "🔄 Cambio",
 };
 
+interface PlantillaJugador {
+  jugador_id: number;
+  jugador: string;
+  equipo_id: number;
+  equipo: string;
+  dorsal: number | null;
+  jugador_perfil_id: number;
+}
+interface ConvocadoRow {
+  jugador_perfil_id: number;
+  titular: boolean;
+}
+
+/** "Detalle del Partido" (control-mesa-centralizacion-fixture-plan.md,
+ * ítem 5) — generaliza lo que antes era exclusivamente
+ * `/partido/:partidoId/en-vivo`: mismo componente, dos rutas (esa se
+ * mantiene — Dashboard.tsx la linkea como "Ver en vivo →" — y la nueva
+ * `/partidos/:partidoId`, que es a donde navega el botón "Detalle del
+ * Partido" de `PartidosDelTorneo.tsx` ahora que esa pantalla es de solo
+ * lectura). Sirve para CUALQUIER estado del partido, no solo "En curso" —
+ * el marcador y la timeline de eventos ya funcionaban así (T46/estadísticas
+ * públicas); lo único nuevo acá es la sección de Alineaciones. Público,
+ * sin auth — mismo criterio que el resto de /partidos y /estadisticas. */
 export function PartidoEnVivoPage() {
   const { partidoId } = useParams<{ partidoId: string }>();
   const id = Number(partidoId);
@@ -75,6 +99,56 @@ export function PartidoEnVivoPage() {
     },
     staleTime: 5 * 60 * 1000,
   });
+
+  // Alineaciones (ítem 5 del plan — lo único genuinamente nuevo de esta
+  // página): reusa GET /partidos/{id}/convocados + GET
+  // /estadisticas/equipos/{id}/plantilla, ambos ya públicos, sin backend
+  // nuevo. Mismo fallback que MesaPanel (Convocatoria.tsx): sin
+  // convocatoria guardada, se muestra toda la plantilla vigente sin
+  // distinguir titular/suplente (es estrictamente opt-in).
+  const equipoLocalId = partidoQuery.data?.equipos_id_local;
+  const equipoVisitanteId = partidoQuery.data?.equipos_id_visitante;
+
+  const convocadosQuery = useQuery({
+    queryKey: ["convocados", id],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/partidos/{partido_id}/convocados", {
+        params: { path: { partido_id: id } },
+      });
+      if (error) throw error;
+      return data as ConvocadoRow[];
+    },
+    enabled: Number.isFinite(id),
+  });
+
+  const plantillaLocalQuery = useQuery({
+    queryKey: ["plantilla", equipoLocalId],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/estadisticas/equipos/{equipo_id}/plantilla", {
+        params: { path: { equipo_id: equipoLocalId as number } },
+      });
+      if (error) throw error;
+      return data as PlantillaJugador[];
+    },
+    enabled: equipoLocalId != null,
+  });
+  const plantillaVisitanteQuery = useQuery({
+    queryKey: ["plantilla", equipoVisitanteId],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/estadisticas/equipos/{equipo_id}/plantilla", {
+        params: { path: { equipo_id: equipoVisitanteId as number } },
+      });
+      if (error) throw error;
+      return data as PlantillaJugador[];
+    },
+    enabled: equipoVisitanteId != null,
+  });
+
+  const titularPorPerfil = useMemo(
+    () => new Map((convocadosQuery.data ?? []).map((c) => [c.jugador_perfil_id, c.titular])),
+    [convocadosQuery.data],
+  );
+  const hayConvocatoria = (convocadosQuery.data ?? []).length > 0;
 
   if (!Number.isFinite(id)) {
     return (
@@ -146,6 +220,98 @@ export function PartidoEnVivoPage() {
           </ul>
         )}
       </section>
+
+      {equipoLocalId != null && equipoVisitanteId != null && (
+        <section className="card">
+          <h2>Alineaciones</h2>
+          {!hayConvocatoria && <p className="muted">Sin convocatoria guardada — se muestra toda la plantilla vigente.</p>}
+          <div className="convocatoria-equipos">
+            <AlineacionEquipo
+              nombre={resultado?.equipo_local ?? "Local"}
+              plantilla={plantillaLocalQuery.data ?? []}
+              titularPorPerfil={titularPorPerfil}
+              hayConvocatoria={hayConvocatoria}
+            />
+            <AlineacionEquipo
+              nombre={resultado?.equipo_visitante ?? "Visitante"}
+              plantilla={plantillaVisitanteQuery.data ?? []}
+              titularPorPerfil={titularPorPerfil}
+              hayConvocatoria={hayConvocatoria}
+            />
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/** Titulares/suplentes de un equipo — solo lectura (a diferencia de
+ * `Convocatoria.tsx`, que además la edita). Sin convocatoria guardada
+ * (`hayConvocatoria=false`) se muestra toda la plantilla en una sola
+ * lista, sin separar (mismo fallback que `MesaPanel`/`CargaEvento`: la
+ * plantilla entera sigue siendo candidata). */
+function AlineacionEquipo(props: {
+  nombre: string;
+  plantilla: PlantillaJugador[];
+  titularPorPerfil: Map<number, boolean>;
+  hayConvocatoria: boolean;
+}) {
+  const { nombre, plantilla, titularPorPerfil, hayConvocatoria } = props;
+
+  if (plantilla.length === 0) {
+    return (
+      <div className="convocatoria-equipo">
+        <h3>{nombre}</h3>
+        <p className="muted">Sin plantilla cargada.</p>
+      </div>
+    );
+  }
+
+  if (!hayConvocatoria) {
+    return (
+      <div className="convocatoria-equipo">
+        <h3>{nombre}</h3>
+        <ul className="convocatoria-lista">
+          {plantilla.map((j) => (
+            <li key={j.jugador_perfil_id}>
+              {j.dorsal ? `#${j.dorsal} ` : ""}
+              {j.jugador}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  const titulares = plantilla.filter((j) => titularPorPerfil.get(j.jugador_perfil_id) === true);
+  const suplentes = plantilla.filter((j) => titularPorPerfil.has(j.jugador_perfil_id) && titularPorPerfil.get(j.jugador_perfil_id) === false);
+
+  return (
+    <div className="convocatoria-equipo">
+      <h3>{nombre}</h3>
+      <p className="muted">Titulares</p>
+      <ul className="convocatoria-lista">
+        {titulares.map((j) => (
+          <li key={j.jugador_perfil_id}>
+            {j.dorsal ? `#${j.dorsal} ` : ""}
+            {j.jugador}
+          </li>
+        ))}
+        {titulares.length === 0 && <li className="muted">Sin titulares convocados.</li>}
+      </ul>
+      {suplentes.length > 0 && (
+        <>
+          <p className="muted">Suplentes</p>
+          <ul className="convocatoria-lista">
+            {suplentes.map((j) => (
+              <li key={j.jugador_perfil_id}>
+                {j.dorsal ? `#${j.dorsal} ` : ""}
+                {j.jugador}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

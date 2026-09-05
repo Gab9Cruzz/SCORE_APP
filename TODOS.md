@@ -426,6 +426,11 @@ verdes; `tsc -b`/`oxlint`/`vite build` en verde).
   existía. **No** es la paginación real con cursor de 3B-9 (arriba) —
   sigue pendiente con su propio ciclo; esto resuelve el síntoma visible,
   no el techo de 200 filas al LISTAR.
+  **Corrección (docs/plans/control-mesa-centralizacion-fixture-plan.md,
+  2026-09-04):** faltaba una 8va pantalla —
+  `PartidosDelTorneo.tsx` (`torneo-admin/torneos/{id}/partidos`) seguía
+  resolviendo `nombreEquipo` sin el hook, reportado por el usuario como
+  "?" en el fixture. Mismo parche aplicado ahí.
 - ~~Traspasos: dropdown crudo de IDs, sin búsqueda, sin autocompletado de
   origen ni sugerencia de dorsal~~ — **hecho.** `SelectorJugadorBuscable`
   (componente compartido, extraído de `ModalBuscarAgregarJugador`) +
@@ -471,3 +476,49 @@ en el plan original:**
   en cuanto el club DESTINO ya arrancó un partido desde el traspaso
   (`HitoPartidoRepository.existe_inicio_desde`) — a partir de ahí
   corresponde un traspaso nuevo en sentido inverso, no un "deshacer".
+
+## Centralización operativa en Control de Mesa + fix del fixture — implementado
+
+Plan en `docs/plans/control-mesa-centralizacion-fixture-plan.md`,
+implementado el 2026-09-04 (339 tests backend + 213 frontend, todos
+verdes; `tsc --noEmit`/`oxlint` en verde).
+
+- ~~`GET /partidos` sin RBAC en Control de Mesa — mezclaba TODOS los
+  torneos del sistema para cualquier TorneoAdmin~~ — **hecho.**
+  `GET /partidos?solo_mios=true` (mismo mecanismo que `/torneos?solo_mios=true`,
+  E1) — `PartidoRepository.list` override calca el patrón de
+  `TorneoRepository.list`. Selector de torneo en `ControlDeMesaPage`
+  (visible solo con 2+ torneos) + nombre del torneo por fila.
+- ~~Sin ingreso manual de resultado — solo cronómetro en vivo~~ —
+  **hecho.** `POST /partidos/{id}/resultado-directo` (`PartidoService.
+  registrar_resultado_directo`, nuevo): orquesta Hito Inicio_Partido + N
+  eventos + Hito Fin_Partido en una transacción atómica (sin commits
+  intermedios — mismo criterio que `InscripcionTorneoService.
+  _crear_individual`), reusando las mismas tablas/triggers que el
+  cronómetro en vivo. `ModalResultadoDirecto` en Control de Mesa.
+- ~~`PartidosDelTorneo.tsx` permitía crear/editar/cancelar/asignar
+  árbitro/walkover — superficie operativa duplicada con Control de
+  Mesa~~ — **hecho.** Ahora es de solo lectura para la operación del
+  partido: se quitaron "editar" (fecha/fase/grupo/estado libre) y
+  "Walkover" (mudado a Control de Mesa, junto a "Cargar resultado
+  directo" — ambos cierran el partido sin cronómetro en vivo). Se
+  mantienen "+ Nuevo" (crear partido) y "Asignar árbitro" — son
+  planificación de calendario, no gestión del partido en curso (Taste
+  Decision resuelta por el usuario, Sección 16 del plan).
+- ~~Bug "?" en el fixture: `PartidosDelTorneo.tsx` era la 8va pantalla que
+  le faltaba el parche del Bug 2 (ver sección de arriba)~~ — **hecho.**
+  `useNombrePorIdConFaltantes` aplicado ahí (lista + selector de equipos
+  al crear).
+- ~~`/partido/:id/en-vivo` solo mostraba eventos, sin alineaciones, y su
+  copy/ruta eran específicamente "en vivo"~~ — **hecho.** Generalizada a
+  "Detalle del Partido": sirve para cualquier estado del partido, con
+  una sección nueva de Alineaciones (titulares/suplentes por equipo,
+  reusa `GET /partidos/{id}/convocados` + `GET /estadisticas/equipos/{id}/plantilla`,
+  ambos ya públicos). Nueva ruta `/partidos/:partidoId` — la vieja
+  `/partido/:id/en-vivo` se mantiene tal cual (Dashboard.tsx la linkea).
+- **Migrar `DetalleEquipo.tsx`/`ModalIndividual` al hook de resolución de
+  nombres** — no hecho, ya registrado como mejora no pedida (ver sección
+  de arriba); sigue fuera del blast radius de este plan.
+- **Paginación real con cursor en `/equipos`/`/jugadores` (3B-9)** — no
+  hecho, sigue con su propio ciclo; el fix del fixture es el mismo parche
+  de síntoma que las otras 7 pantallas, no el techo real de 200 filas.

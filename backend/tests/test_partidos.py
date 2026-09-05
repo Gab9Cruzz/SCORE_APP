@@ -185,3 +185,82 @@ async def test_filtrar_partidos_por_arbitro_id_y_estado_combinados(
         "/api/v1/partidos", params={"arbitro_id": arbitro_id, "estado": "Finalizado"}
     )
     assert resp_vacio.json() == []
+
+
+# --- GET /partidos?solo_mios=true (control-mesa-centralizacion-fixture-plan.md,
+# ítem 1) — mismo mecanismo y mismos 4 casos que el E1 de /torneos
+# (test_torneos.py), acá contra PartidoRepository.list. ---
+
+
+async def test_solo_mios_filtra_a_los_partidos_del_torneo_asignado(
+    client: AsyncClient,
+    admin_general_headers: dict[str, str],
+    torneo_admin_con_torneo_headers: dict[str, str],
+):
+    # torneo_admin_con_torneo_headers está asignado solo al Torneo 1 (los 3
+    # partidos del seed) — un torneo nuevo, sin asignación, no debe aparecer.
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "torneo_grupo_nombre": "Torneo No Asignado (Partidos)",
+            "disciplina_id": 1,
+            "modalidad_id": 1,
+            "fecha_inicio": "2026-05-01",
+            "fecha_fin": "2026-06-01",
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 201
+    otro_torneo_id = resp.json()["id"]
+    equipos = []
+    for nombre in ("Equipo Ajeno A", "Equipo Ajeno B"):
+        r = await client.post(
+            "/api/v1/equipos", json={"nombre": nombre, "disciplina_id": 1, "modalidad_id": 1}, headers=admin_general_headers
+        )
+        equipos.append(r.json()["id"])
+    for equipo_id in equipos:
+        r = await client.post(
+            "/api/v1/inscripciones",
+            json={"torneo_id": otro_torneo_id, "equipo_id": equipo_id},
+            headers=admin_general_headers,
+        )
+        assert r.status_code == 201, r.text
+    resp = await client.post(
+        "/api/v1/partidos",
+        json={
+            "torneo_id": otro_torneo_id,
+            "equipos_id_local": equipos[0],
+            "equipos_id_visitante": equipos[1],
+            "fecha_partido": "2026-05-10T16:00:00",
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+    resp = await client.get(
+        "/api/v1/partidos", params={"solo_mios": "true"}, headers=torneo_admin_con_torneo_headers
+    )
+    assert resp.status_code == 200
+    ids_torneo = {p["torneo_id"] for p in resp.json()}
+    assert ids_torneo == {1}
+
+
+async def test_solo_mios_sin_asignaciones_devuelve_lista_vacia_partidos(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    resp = await client.get("/api/v1/partidos", params={"solo_mios": "true"}, headers=torneo_admin_headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_solo_mios_sin_efecto_para_admin_general_y_anonimo_partidos(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    resp_publico = await client.get("/api/v1/partidos", params={"solo_mios": "true"})
+    resp_sin_filtro = await client.get("/api/v1/partidos")
+    assert [p["id"] for p in resp_publico.json()] == [p["id"] for p in resp_sin_filtro.json()]
+
+    resp_admin = await client.get(
+        "/api/v1/partidos", params={"solo_mios": "true"}, headers=admin_general_headers
+    )
+    assert [p["id"] for p in resp_admin.json()] == [p["id"] for p in resp_sin_filtro.json()]

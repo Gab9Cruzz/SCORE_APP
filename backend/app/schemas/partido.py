@@ -95,3 +95,46 @@ class WalkoverRequest(BaseModel):
     para cuándo está permitido."""
 
     equipo_ausente_id: int
+
+
+class ResultadoDirectoEvento(BaseModel):
+    """Un evento (gol/tarjeta/cambio) dentro de POST
+    /partidos/{id}/resultado-directo (control-mesa-centralizacion-fixture-
+    plan.md) — mismo shape que EventoPartidoCreate, salvo `partidos_id`
+    (ya viene del path, no se repite acá)."""
+
+    jugador_id: int
+    equipo_id: int
+    eventos_id: int
+    jugador_id_entra: int | None = None
+    minuto: int
+
+    @field_validator("minuto")
+    @classmethod
+    def minuto_en_rango(cls, v: int) -> int:
+        # chk_eventos_partido_minuto: 0..130 (120' de prórroga + descuento)
+        if not (0 <= v <= 130):
+            raise ValueError("minuto debe estar entre 0 y 130.")
+        return v
+
+    @field_validator("jugador_id_entra")
+    @classmethod
+    def entra_distinto_de_sale(cls, v: int | None, info) -> int | None:
+        jugador_id = info.data.get("jugador_id")
+        if v is not None and jugador_id is not None and v == jugador_id:
+            raise ValueError("jugador_id_entra no puede ser el mismo que jugador_id.")
+        return v
+
+
+class ResultadoDirectoCreate(BaseModel):
+    """POST /partidos/{id}/resultado-directo — Alternativa A (Sección 5 del
+    plan): orquesta Hito Inicio_Partido + N eventos + Hito Fin_Partido en
+    una sola transacción atómica (PartidoService.registrar_resultado_directo),
+    reusando las MISMAS tablas/triggers que el flujo en vivo — sin tabla
+    paralela. Una lista vacía es válida (0-0 sin sucesos)."""
+
+    eventos: list[ResultadoDirectoEvento] = []
+    # Solo exigido para torneos 'Corrido' (Tenis/Pádel, sin marcador de
+    # goles) — fn_validar_ganador_corrido lo exige al pasar a 'Finalizado'.
+    # Un torneo 'Periodos' lo ignora (el resultado sale del marcador de goles).
+    ganador_corrido_id: int | None = None

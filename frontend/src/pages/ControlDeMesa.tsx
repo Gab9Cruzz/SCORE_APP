@@ -226,12 +226,46 @@ function BotonEmpezarPartido(props: {
 
 export function ControlDeMesaPage() {
   const [partidoId, setPartidoId] = useState<number | null>(null);
+  const [resultadoDirectoPartidoId, setResultadoDirectoPartidoId] = useState<number | null>(null);
+  const [torneoIdSeleccionado, setTorneoIdSeleccionado] = useState<number | null>(null);
   const queryClient = useQueryClient();
+  const { session } = useAuth();
 
-  const partidosQuery = useQuery({
-    queryKey: ["partidos-mesa"],
+  // Selector de torneo (control-mesa-centralizacion-fixture-plan.md,
+  // ítem 2 — sin esto, el scoping RBAC de abajo sería invisible en la UI:
+  // un TorneoAdmin con 2+ torneos asignados, o un AdminGeneral con todos,
+  // vería una lista mezclada sin poder distinguir a qué torneo pertenece
+  // cada partido. Mismo patrón que TorneosAdminPage (?solo_mios=true) —
+  // sin efecto para AdminGeneral (ve todos) ni Arbitro (no se pide acá).
+  const torneosQuery = useQuery({
+    queryKey: ["torneos-control-mesa"],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/partidos", { params: { query: { limit: 100 } } });
+      const { data, error } = await api.GET("/api/v1/torneos", {
+        params: { query: { solo_mios: true, limit: 200 } },
+      } as never);
+      if (error) throw error;
+      return data as { id: number; nombre: string }[];
+    },
+    enabled: session?.rol === "TorneoAdmin" || session?.rol === "AdminGeneral",
+  });
+  const nombreTorneo = useMemo(
+    () => new Map((torneosQuery.data ?? []).map((t) => [t.id, t.nombre])),
+    [torneosQuery.data],
+  );
+  const torneos = torneosQuery.data ?? [];
+
+  // Ítem 1 (RBAC): GET /partidos?solo_mios=true — mismo mecanismo que
+  // /torneos?solo_mios=true (E1). Antes esta lista pedía TODOS los
+  // partidos del sistema sin scoping, mezclando cualquier torneo para
+  // cualquier TorneoAdmin/Árbitro/AdminGeneral logueado. Sin efecto para
+  // AdminGeneral/Arbitro (el backend lo ignora fuera de TorneoAdmin), así
+  // que se manda siempre sin ramificar por rol acá.
+  const partidosQuery = useQuery({
+    queryKey: ["partidos-mesa", torneoIdSeleccionado],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/partidos", {
+        params: { query: { limit: 100, solo_mios: true, torneo_id: torneoIdSeleccionado ?? undefined } },
+      } as never);
       if (error) throw error;
       return data;
     },
@@ -291,6 +325,23 @@ export function ControlDeMesaPage() {
     },
   });
 
+  // Sección 16 (Decision Audit Trail #9): Walkover se mudó acá desde
+  // PartidosDelTorneo.tsx — es gestión del partido EN CURSO (cierra el
+  // partido sin cronómetro), no planificación de calendario. Junto con
+  // "Cargar resultado directo", son las dos formas de cerrar un partido
+  // sin pasar por el cronómetro en vivo.
+  const walkover = useMutation({
+    mutationFn: async ({ id, equipoAusenteId }: { id: number; equipoAusenteId: number }) => {
+      const { data, error } = await api.POST("/api/v1/partidos/{partido_id}/walkover", {
+        params: { path: { partido_id: id } },
+        body: { equipo_ausente_id: equipoAusenteId },
+      } as never);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["partidos-mesa"] }),
+  });
+
   const seleccionables = (partidosQuery.data ?? []).filter(
     (p) => p.estado === "Programado" || p.estado === "En curso",
   );
@@ -299,9 +350,30 @@ export function ControlDeMesaPage() {
     return <MesaPanel partidoId={partidoId} onVolver={() => setPartidoId(null)} />;
   }
 
+  const partidoParaResultadoDirecto = seleccionables.find((p) => p.id === resultadoDirectoPartidoId);
+
   return (
     <div className="page">
       <h1>Control de Mesa</h1>
+      {/* Ítem 2 (Sección 6 del plan): solo cuando hay algo que elegir — un
+          TorneoAdmin con 1 solo torneo asignado no necesita un selector
+          para verlo. */}
+      {torneos.length > 1 && (
+        <label className="selector-torneo-control-mesa">
+          Torneo
+          <select
+            value={torneoIdSeleccionado ?? ""}
+            onChange={(e) => setTorneoIdSeleccionado(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">Todos mis torneos</option>
+            {torneos.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {partidosQuery.isLoading && <p>Cargando partidos...</p>}
       {partidosQuery.isError && <p className="error-text">No se pudieron cargar los partidos.</p>}
       {!partidosQuery.isLoading && seleccionables.length === 0 && (
@@ -312,6 +384,11 @@ export function ControlDeMesaPage() {
         {seleccionables.map((p) => (
           <li key={p.id} className="partido-mesa-fila">
             <span className="badge">{p.estado}</span>
+            {/* Nombre del torneo por fila (Sección 8, "bajo-ingeniería a
+                evitar"): sin esto, un TorneoAdmin con 2+ torneos asignados
+                vería la lista mezclada sin saber a cuál pertenece cada
+                partido. */}
+            {torneos.length > 1 && <span className="muted">{nombreTorneo.get(p.torneo_id) ?? `Torneo #${p.torneo_id}`}</span>}
             <span className="partido-mesa-fila__equipos">
               {p.equipos_id_local != null ? nombreEquipo.get(p.equipos_id_local) ?? `#${p.equipos_id_local}` : "?"}
               {" vs "}
@@ -338,9 +415,353 @@ export function ControlDeMesaPage() {
                 Ir al partido en vivo
               </button>
             )}
+            {/* Ítem 3 (Alternativa A, Sección 5): alternativa a "Empezar
+                Partido" + cronómetro en vivo — cierra el partido de una
+                sola vez. Solo tiene sentido con los dos equipos ya
+                definidos (mismo criterio que el backend). */}
+            {p.estado === "Programado" && p.equipos_id_local != null && p.equipos_id_visitante != null && (
+              <button type="button" className="link-button" onClick={() => setResultadoDirectoPartidoId(p.id)}>
+                Cargar resultado directo
+              </button>
+            )}
+            {/* Sección 16: Walkover mudado desde PartidosDelTorneo.tsx —
+                mismo criterio de habilitación que tenía ahí (Programado/En
+                curso, los dos equipos ya definidos). */}
+            {(p.estado === "Programado" || p.estado === "En curso") &&
+              p.equipos_id_local != null &&
+              p.equipos_id_visitante != null && (
+                <AccionWalkoverMesa
+                  equipoLocalId={p.equipos_id_local}
+                  equipoVisitanteId={p.equipos_id_visitante}
+                  nombreLocal={nombreEquipo.get(p.equipos_id_local) ?? `#${p.equipos_id_local}`}
+                  nombreVisitante={nombreEquipo.get(p.equipos_id_visitante) ?? `#${p.equipos_id_visitante}`}
+                  marcando={walkover.isPending}
+                  onMarcar={(equipoAusenteId) => walkover.mutate({ id: p.id, equipoAusenteId })}
+                />
+              )}
           </li>
         ))}
       </ul>
+      {walkover.isError && <p className="error-text">{apiErrorMessage(walkover.error)}</p>}
+
+      {partidoParaResultadoDirecto?.equipos_id_local != null && partidoParaResultadoDirecto?.equipos_id_visitante != null && (
+        <ModalResultadoDirecto
+          partido={{
+            id: partidoParaResultadoDirecto.id,
+            equipos_id_local: partidoParaResultadoDirecto.equipos_id_local,
+            equipos_id_visitante: partidoParaResultadoDirecto.equipos_id_visitante,
+          }}
+          nombreEquipo={nombreEquipo}
+          onClose={() => setResultadoDirectoPartidoId(null)}
+          onGuardado={() => {
+            queryClient.invalidateQueries({ queryKey: ["partidos-mesa"] });
+            setResultadoDirectoPartidoId(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Walkover ("no se presentó") — mudado desde `PartidosDelTorneo.tsx`
+ * (Sección 16 del plan): mismo botón chico inline que tenía ahí, ahora
+ * junto a "Cargar resultado directo" — ambas cierran el partido sin
+ * cronómetro en vivo, así que viven en el mismo lugar. El backend
+ * re-valida todo igual (estado, habilitación de Liga/grupos, etc.). */
+function AccionWalkoverMesa(props: {
+  equipoLocalId: number;
+  equipoVisitanteId: number;
+  nombreLocal: string;
+  nombreVisitante: string;
+  onMarcar: (equipoAusenteId: number) => void;
+  marcando: boolean;
+}) {
+  const { equipoLocalId, equipoVisitanteId, nombreLocal, nombreVisitante, onMarcar, marcando } = props;
+  const [abierto, setAbierto] = useState(false);
+
+  if (!abierto) {
+    return (
+      <button type="button" className="link-button" onClick={() => setAbierto(true)}>
+        Walkover
+      </button>
+    );
+  }
+
+  return (
+    <span className="accion-walkover">
+      <span className="muted">¿Quién no se presentó?</span>
+      <button
+        type="button"
+        disabled={marcando}
+        onClick={() => {
+          onMarcar(equipoLocalId);
+          setAbierto(false);
+        }}
+      >
+        {nombreLocal}
+      </button>
+      <button
+        type="button"
+        disabled={marcando}
+        onClick={() => {
+          onMarcar(equipoVisitanteId);
+          setAbierto(false);
+        }}
+      >
+        {nombreVisitante}
+      </button>
+      <button type="button" className="link-button" onClick={() => setAbierto(false)}>
+        Cancelar
+      </button>
+    </span>
+  );
+}
+
+/** "Cargar resultado directo" (control-mesa-centralizacion-fixture-plan.md,
+ * Sección 5, Alternativa A) — cierra un partido 'Programado' de una sola
+ * vez (goles/tarjetas/cambios + inicio y fin), sin pasar por el cronómetro
+ * en vivo ni exponer `MesaPanel`. Carga TODOS los eventos en memoria y
+ * los manda juntos a `POST /resultado-directo` — el backend orquesta
+ * Inicio_Partido + N eventos + Fin_Partido en una sola transacción
+ * atómica (PartidoService.registrar_resultado_directo). */
+function ModalResultadoDirecto(props: {
+  partido: { id: number; equipos_id_local: number; equipos_id_visitante: number };
+  nombreEquipo: Map<number, string>;
+  onClose: () => void;
+  onGuardado: () => void;
+}) {
+  const { partido, nombreEquipo, onClose, onGuardado } = props;
+  const nombreLocal = nombreEquipo.get(partido.equipos_id_local) ?? `Equipo #${partido.equipos_id_local}`;
+  const nombreVisitante = nombreEquipo.get(partido.equipos_id_visitante) ?? `Equipo #${partido.equipos_id_visitante}`;
+
+  // tipo_cronometro decide si hace falta pedir un ganador manual (torneos
+  // 'Corrido', sin marcador de goles) — mismo endpoint que ya usa el
+  // cronómetro en vivo, no hace falta uno nuevo.
+  const cronometroQuery = useQuery({
+    queryKey: ["cronometro", partido.id],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/partidos/{partido_id}/cronometro", {
+        params: { path: { partido_id: partido.id } },
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+  const esCorrido = cronometroQuery.data?.tipo_cronometro === "Corrido";
+
+  const plantillaLocalQuery = useQuery({
+    queryKey: ["plantilla", partido.equipos_id_local],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/estadisticas/equipos/{equipo_id}/plantilla", {
+        params: { path: { equipo_id: partido.equipos_id_local } },
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+  const plantillaVisitanteQuery = useQuery({
+    queryKey: ["plantilla", partido.equipos_id_visitante],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/estadisticas/equipos/{equipo_id}/plantilla", {
+        params: { path: { equipo_id: partido.equipos_id_visitante } },
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+  const eventosCatalogoQuery = useQuery({
+    queryKey: ["eventos-catalogo"],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/eventos", {});
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const eventoIdPorNombre = useMemo(
+    () => new Map((eventosCatalogoQuery.data ?? []).map((e) => [e.nombre, e.id])),
+    [eventosCatalogoQuery.data],
+  );
+
+  const [eventos, setEventos] = useState<
+    { tipo: TipoEvento; equipoId: number; jugadorId: number; jugadorIdEntra: number | null; minuto: number }[]
+  >([]);
+  const [tipo, setTipo] = useState<TipoEvento>("Gol");
+  const [equipoId, setEquipoId] = useState<number>(partido.equipos_id_local);
+  const [jugadorId, setJugadorId] = useState<number | null>(null);
+  const [jugadorIdEntra, setJugadorIdEntra] = useState<number | null>(null);
+  const [minuto, setMinuto] = useState("");
+  const [ganadorCorridoId, setGanadorCorridoId] = useState<number | null>(null);
+
+  const plantillaEquipo: PlantillaJugador[] =
+    equipoId === partido.equipos_id_local ? (plantillaLocalQuery.data ?? []) : (plantillaVisitanteQuery.data ?? []);
+
+  function agregarEvento() {
+    if (jugadorId === null || minuto === "") return;
+    if (tipo === "Cambio" && jugadorIdEntra === null) return;
+    setEventos((prev) => [
+      ...prev,
+      { tipo, equipoId, jugadorId, jugadorIdEntra: tipo === "Cambio" ? jugadorIdEntra : null, minuto: Number(minuto) },
+    ]);
+    setJugadorId(null);
+    setJugadorIdEntra(null);
+    setMinuto("");
+  }
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const body = {
+        eventos: eventos.map((e) => ({
+          jugador_id: e.jugadorId,
+          equipo_id: e.equipoId,
+          eventos_id: eventoIdPorNombre.get(e.tipo) as number,
+          jugador_id_entra: e.jugadorIdEntra,
+          minuto: e.minuto,
+        })),
+        ganador_corrido_id: esCorrido ? ganadorCorridoId : undefined,
+      };
+      const { data, error } = await api.POST("/api/v1/partidos/{partido_id}/resultado-directo", {
+        params: { path: { partido_id: partido.id } },
+        body,
+      } as never);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: onGuardado,
+  });
+
+  const puedeGuardar = !esCorrido || ganadorCorridoId !== null;
+
+  return (
+    <div
+      className="modal-overlay"
+      role="dialog"
+      aria-label={`Cargar resultado directo — ${nombreLocal} vs ${nombreVisitante}`}
+    >
+      <div className="modal-panel">
+        <h2>Cargar resultado directo</h2>
+        <p className="muted">
+          {nombreLocal} vs {nombreVisitante} — cierra el partido sin usar el cronómetro en vivo.
+        </p>
+
+        <div className="resource-form">
+          <label>
+            Tipo
+            <select
+              value={tipo}
+              onChange={(e) => {
+                setTipo(e.target.value as TipoEvento);
+                setJugadorId(null);
+                setJugadorIdEntra(null);
+              }}
+            >
+              {TIPOS.map((t) => (
+                <option key={t} value={t}>
+                  {TIPO_ICONO[t]} {t}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Equipo
+            <select
+              value={equipoId}
+              onChange={(e) => {
+                setEquipoId(Number(e.target.value));
+                setJugadorId(null);
+                setJugadorIdEntra(null);
+              }}
+            >
+              <option value={partido.equipos_id_local}>{nombreLocal}</option>
+              <option value={partido.equipos_id_visitante}>{nombreVisitante}</option>
+            </select>
+          </label>
+          <label>
+            {tipo === "Cambio" ? "Sale" : "Jugador"}
+            <select value={jugadorId ?? ""} onChange={(e) => setJugadorId(e.target.value ? Number(e.target.value) : null)}>
+              <option value="">Elegir...</option>
+              {plantillaEquipo.map((j) => (
+                <option key={j.jugador_id} value={j.jugador_id}>
+                  {j.dorsal ? `#${j.dorsal} ` : ""}
+                  {j.jugador}
+                </option>
+              ))}
+            </select>
+          </label>
+          {tipo === "Cambio" && (
+            <label>
+              Entra
+              <select
+                value={jugadorIdEntra ?? ""}
+                onChange={(e) => setJugadorIdEntra(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">Elegir...</option>
+                {plantillaEquipo
+                  .filter((j) => j.jugador_id !== jugadorId)
+                  .map((j) => (
+                    <option key={j.jugador_id} value={j.jugador_id}>
+                      {j.dorsal ? `#${j.dorsal} ` : ""}
+                      {j.jugador}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
+          <label>
+            Minuto
+            <input type="number" min={0} max={130} value={minuto} onChange={(e) => setMinuto(e.target.value)} />
+          </label>
+          <div className="resource-form__actions">
+            <button
+              type="button"
+              onClick={agregarEvento}
+              disabled={jugadorId === null || minuto === "" || (tipo === "Cambio" && jugadorIdEntra === null)}
+            >
+              + Agregar evento
+            </button>
+          </div>
+        </div>
+
+        {eventos.length === 0 && <p className="muted">Sin eventos cargados todavía — 0-0 también es un resultado válido.</p>}
+        {eventos.length > 0 && (
+          <ul className="eventos-timeline">
+            {eventos.map((e, i) => (
+              <li key={i}>
+                <span className="eventos-timeline__minuto">{e.minuto}'</span>
+                <span>{TIPO_ICONO[e.tipo]}</span>
+                <span>{nombreEquipo.get(e.equipoId) ?? `#${e.equipoId}`}</span>
+                <button type="button" className="link-button" onClick={() => setEventos((prev) => prev.filter((_, idx) => idx !== i))}>
+                  Quitar
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {esCorrido && (
+          <label>
+            Ganador
+            <select
+              value={ganadorCorridoId ?? ""}
+              onChange={(e) => setGanadorCorridoId(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">Elegir...</option>
+              <option value={partido.equipos_id_local}>{nombreLocal}</option>
+              <option value={partido.equipos_id_visitante}>{nombreVisitante}</option>
+            </select>
+          </label>
+        )}
+
+        {mutation.isError && <p className="error-text">{apiErrorMessage(mutation.error)}</p>}
+        <div className="resource-form__actions">
+          <button type="button" className="link-button" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="button" disabled={!puedeGuardar || mutation.isPending} onClick={() => mutation.mutate()}>
+            {mutation.isPending ? "Guardando..." : "Guardar resultado"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

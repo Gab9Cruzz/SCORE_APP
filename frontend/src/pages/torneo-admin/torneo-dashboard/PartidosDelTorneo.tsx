@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import type { Equipo as EquipoRow } from "../../../api/types";
 import { apiErrorMessage } from "../../../api/client";
-import { ResourceForm, type ResourceFieldValue } from "../../../components/admin/ResourceForm";
+import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
 import { ResourceTable } from "../../../components/admin/ResourceTable";
 import { LIMITE_LISTA, useResourceCrud } from "../../../hooks/useResourceCrud";
 import { MotorFormatosPanel } from "./MotorFormatosPanel";
@@ -20,7 +20,9 @@ interface PartidoRow {
   grupo_id: number | null;
   estado: string;
   arbitro_id: number | null;
-  // 3B-13 (docs/plans/cierre-backlog-todos-plan.md).
+  // 3B-13 (docs/plans/cierre-backlog-todos-plan.md) — sigue mostrándose
+  // como dato (badge W.O.), la ACCIÓN de marcarlo se mudó a Control de
+  // Mesa (control-mesa-centralizacion-fixture-plan.md, Sección 16).
   es_walkover: boolean;
   walkover_equipo_ausente_id: number | null;
 }
@@ -36,20 +38,25 @@ interface UsuarioRow {
 }
 
 const FASES = ["Regular", "Grupos", "Octavos", "Cuartos", "Semifinal", "Final", "Tercer puesto"];
-const ESTADOS = ["Programado", "En curso", "Finalizado", "Cancelado"];
 
-type Modo = { tipo: "lista" } | { tipo: "crear" } | { tipo: "editar"; fila: PartidoRow };
+type Modo = { tipo: "lista" } | { tipo: "crear" };
 
 const formatearFecha = (iso: string) => new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
 
-/** Sub-pestaña "Partidos" del dashboard scoped — mismo alcance funcional
- * que la extinta pestaña global PartidosAdmin.tsx (Fase 3: consolidación).
- * torneo_id ya no se pregunta (es el de este dashboard); el picker de
- * equipos sigue acotado a los inscritos y no cancelados, como ya hacía la
- * página global (trg_partidos_validar_inscripcion en 06_triggers.sql
- * rechaza si no, esto es solo UX). */
+/** Sub-pestaña "Partidos" del dashboard scoped — a partir de
+ * control-mesa-centralizacion-fixture-plan.md (Sección 16, Decision Audit
+ * Trail #9) es de SOLO LECTURA para la operación del partido en curso:
+ * "editar" (fecha/fase/grupo/estado libre) y "Walkover" se mudaron a
+ * Control de Mesa (gestión del partido en curso). Lo que se MANTIENE acá
+ * — porque es planificación de calendario, no operación de un partido ya
+ * en curso — es "+ Nuevo" (crear partido), "Asignar árbitro" y "Cancelar"
+ * (baja lógica). El picker de equipos sigue acotado a los inscritos y no
+ * cancelados, como ya hacía la extinta pestaña global PartidosAdmin.tsx
+ * (trg_partidos_validar_inscripcion en 06_triggers.sql rechaza si no,
+ * esto es solo UX). */
 export function PartidosDelTorneoPage() {
   const { torneoId, torneoContexto, formato } = useOutletContext<TorneoDashboardContext>();
+  const navigate = useNavigate();
   const [modo, setModo] = useState<Modo>({ tipo: "lista" });
 
   const crud = useResourceCrud<PartidoRow>({
@@ -64,9 +71,26 @@ export function PartidosDelTorneoPage() {
     listParams: { torneo_id: torneoId },
   });
 
-  const nombreEquipo = useMemo(
+  const nombreEquipoBase = useMemo(
     () => new Map((equipos.listQuery.data ?? []).map((e) => [e.id, e.nombre])),
     [equipos.listQuery.data],
+  );
+  // Bug del fixture (control-mesa-centralizacion-fixture-plan.md, Sección
+  // 1): esta pantalla era la 8va que le faltaba el parche de
+  // fixes-datos-traspasos-control-mesa-plan.md (Bug 2) — `equipos` acá
+  // arriba pide sin `listParams`, tope de LIMITE_LISTA (200) por ID
+  // ascendente; un equipo creado recién (ID más alto del sistema) caía
+  // afuera de esa ventana y el "?" aparecía aunque el nombre estuviera
+  // perfecto en la base. Resolución dirigida, mismo hook que ya usan las
+  // otras 7 pantallas (EquiposDelTorneo, PlantillasDelTorneo, etc.) — pide
+  // 1 por 1 SOLO los IDs que de verdad faltan (partidos + inscripciones).
+  const nombreEquipo = useNombrePorIdConFaltantes(
+    "/api/v1/equipos",
+    nombreEquipoBase,
+    [
+      ...(crud.listQuery.data ?? []).flatMap((p) => [p.equipos_id_local, p.equipos_id_visitante]),
+      ...(inscritos.listQuery.data ?? []).map((i) => i.equipo_id),
+    ],
   );
   const equiposInscritos = useMemo(() => {
     const filas = inscritos.listQuery.data ?? [];
@@ -74,6 +98,12 @@ export function PartidosDelTorneoPage() {
       .filter((i) => i.estado === "Inscrito" || i.estado === "Confirmado")
       .map((i) => ({ value: i.equipo_id, label: nombreEquipo.get(i.equipo_id) ?? `#${i.equipo_id}` }));
   }, [inscritos.listQuery.data, nombreEquipo]);
+
+  const arbitros = useResourceCrud<UsuarioRow>({
+    resourceKey: "usuarios-arbitros",
+    basePath: "/api/v1/usuarios",
+    listParams: { rol: "Arbitro" },
+  });
 
   function volver() {
     setModo({ tipo: "lista" });
@@ -91,9 +121,6 @@ export function PartidosDelTorneoPage() {
       />
     );
   }
-  if (modo.tipo === "editar") {
-    return <EditarPartidoDelTorneo fila={modo.fila} onDone={volver} onCancel={volver} />;
-  }
 
   return (
     <div>
@@ -109,6 +136,9 @@ export function PartidosDelTorneoPage() {
           + Nuevo
         </button>
       </div>
+      <p className="muted">
+        Solo lectura — la carga de resultados, convocatoria y cronómetro se hacen desde Control de Mesa.
+      </p>
       {crud.truncado && (
         <p className="muted">Mostrando los primeros {LIMITE_LISTA} partidos de esta edición.</p>
       )}
@@ -145,85 +175,79 @@ export function PartidosDelTorneoPage() {
         isLoading={crud.listQuery.isLoading}
         isError={crud.listQuery.isError}
         emptyMessage="Sin partidos programados todavía en esta edición."
-        onSelect={(fila) => setModo({ tipo: "editar", fila })}
         onSoftDelete={(fila) => crud.softDelete.mutate(fila.id)}
         softDeleteLabel="Cancelar"
         softDeletePending={crud.softDelete.isPending}
         estadosDeBaja={["Cancelado"]}
         extraActions={(fila) => (
-          <AccionWalkover
-            partido={fila}
-            nombreLocal={fila.equipos_id_local != null ? (nombreEquipo.get(fila.equipos_id_local) ?? "?") : null}
-            nombreVisitante={
-              fila.equipos_id_visitante != null ? (nombreEquipo.get(fila.equipos_id_visitante) ?? "?") : null
-            }
-            onMarcar={(equipoAusenteId) =>
-              crud.customAction.mutate({
-                path: `/api/v1/partidos/${fila.id}/walkover`,
-                body: { equipo_ausente_id: equipoAusenteId },
-              })
-            }
-            marcando={crud.customAction.isPending}
-          />
+          <>
+            <button type="button" className="link-button" onClick={() => navigate(`/partidos/${fila.id}`)}>
+              Detalle del Partido
+            </button>
+            <AccionAsignarArbitro
+              partido={fila}
+              arbitros={arbitros.listQuery.data ?? []}
+              cargandoArbitros={arbitros.listQuery.isLoading}
+              onAsignar={(arbitroId) => crud.update.mutate({ id: fila.id, body: { arbitro_id: arbitroId } as never })}
+              asignando={crud.update.isPending}
+            />
+          </>
         )}
       />
     </div>
   );
 }
 
-/** 3B-13 (docs/plans/cierre-backlog-todos-plan.md): "no se presentó" para
- * UN partido puntual — botón chico, sin pantalla aparte, mismo criterio
- * que el resto de las acciones de fila de este dashboard. Solo se ofrece
- * cuando tiene sentido (partido con los dos equipos definidos, todavía no
- * cerrado) — el backend igual re-valida todo (estado, habilitación de
- * Liga/grupos, etc.), esto es solo para no mostrar el botón donde ya se
- * sabe que va a fallar. */
-function AccionWalkover(props: {
+/** Planificación de calendario (control-mesa-centralizacion-fixture-plan.md,
+ * Sección 16): asignar árbitro es una de las dos acciones de escritura que
+ * sobreviven en esta pantalla (junto con crear partido) — no es gestión
+ * del partido EN CURSO, así que no se mudó a Control de Mesa. Botón chico
+ * inline, mismo criterio visual que tenía Walkover acá antes. */
+function AccionAsignarArbitro(props: {
   partido: PartidoRow;
-  nombreLocal: string | null;
-  nombreVisitante: string | null;
-  onMarcar: (equipoAusenteId: number) => void;
-  marcando: boolean;
+  arbitros: UsuarioRow[];
+  cargandoArbitros: boolean;
+  onAsignar: (arbitroId: number) => void;
+  asignando: boolean;
 }) {
-  const { partido, nombreLocal, nombreVisitante, onMarcar, marcando } = props;
+  const { partido, arbitros, cargandoArbitros, onAsignar, asignando } = props;
   const [abierto, setAbierto] = useState(false);
+  const [seleccion, setSeleccion] = useState<number | null>(partido.arbitro_id);
 
-  const puedeOfrecerse =
-    (partido.estado === "Programado" || partido.estado === "En curso") &&
-    partido.equipos_id_local != null &&
-    partido.equipos_id_visitante != null;
-  if (!puedeOfrecerse) return null;
+  if (partido.estado === "Cancelado") return null;
 
   if (!abierto) {
     return (
       <button type="button" className="link-button" onClick={() => setAbierto(true)}>
-        Walkover
+        {partido.arbitro_id != null ? "Reasignar árbitro" : "Asignar árbitro"}
       </button>
     );
   }
 
   return (
     <span className="accion-walkover">
-      <span className="muted">¿Quién no se presentó?</span>
+      <select
+        aria-label="Árbitro asignado"
+        value={seleccion ?? ""}
+        onChange={(e) => setSeleccion(e.target.value ? Number(e.target.value) : null)}
+        disabled={cargandoArbitros}
+      >
+        <option value="">{cargandoArbitros ? "Cargando..." : "Sin asignar"}</option>
+        {arbitros.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.nombre} ({a.username})
+          </option>
+        ))}
+      </select>
       <button
         type="button"
-        disabled={marcando}
+        disabled={asignando || seleccion === null}
         onClick={() => {
-          onMarcar(partido.equipos_id_local as number);
+          if (seleccion !== null) onAsignar(seleccion);
           setAbierto(false);
         }}
       >
-        {nombreLocal}
-      </button>
-      <button
-        type="button"
-        disabled={marcando}
-        onClick={() => {
-          onMarcar(partido.equipos_id_visitante as number);
-          setAbierto(false);
-        }}
-      >
-        {nombreVisitante}
+        Guardar
       </button>
       <button type="button" className="link-button" onClick={() => setAbierto(false)}>
         Cancelar
@@ -340,52 +364,6 @@ function CrearPartidoDelTorneo({ torneoId, torneoContexto, equiposInscritos, car
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function EditarPartidoDelTorneo({ fila, onDone, onCancel }: { fila: PartidoRow; onDone: () => void; onCancel: () => void }) {
-  const crud = useResourceCrud<PartidoRow>({ resourceKey: "partidos", basePath: "/api/v1/partidos" });
-  const arbitros = useResourceCrud<UsuarioRow>({
-    resourceKey: "usuarios-arbitros",
-    basePath: "/api/v1/usuarios",
-    listParams: { rol: "Arbitro" },
-  });
-
-  const initialValues: Record<string, ResourceFieldValue> = {
-    fecha_partido: fila.fecha_partido.slice(0, 16),
-    jornada: fila.jornada,
-    fase: fila.fase,
-    grupo: fila.grupo,
-    estado: fila.estado,
-    arbitro_id: fila.arbitro_id,
-  };
-
-  return (
-    <div>
-      <h2>Editar partido #{fila.id}</h2>
-      <ResourceForm
-        fields={[
-          { name: "fecha_partido", label: "Fecha y hora", type: "datetime", required: true },
-          { name: "jornada", label: "Jornada", type: "number" },
-          { name: "fase", label: "Fase", type: "select", choices: FASES },
-          { name: "grupo", label: "Grupo", type: "text" },
-          { name: "estado", label: "Estado", type: "select", choices: ESTADOS },
-          {
-            name: "arbitro_id",
-            label: "Árbitro asignado",
-            type: "reference",
-            optionsLoading: arbitros.listQuery.isLoading,
-            options: (arbitros.listQuery.data ?? []).map((a) => ({ value: a.id, label: `${a.nombre} (${a.username})` })),
-          },
-        ]}
-        initialValues={initialValues}
-        onSubmit={(values) => crud.update.mutate({ id: fila.id, body: values as never }, { onSuccess: onDone })}
-        submitting={crud.update.isPending}
-        submitError={crud.update.isError ? apiErrorMessage(crud.update.error) : null}
-        submitLabel="Guardar cambios"
-        onCancel={onCancel}
-      />
     </div>
   );
 }

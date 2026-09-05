@@ -701,6 +701,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/partidos/{partido_id}/resultado-directo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar Resultado Directo
+         * @description "Cargar resultado directo" desde Control de Mesa (control-mesa-
+         *     centralizacion-fixture-plan.md, Sección 5, Alternativa A) — cierra un
+         *     partido 'Programado' de una sola vez (goles/tarjetas/cambios + inicio y
+         *     fin), sin pasar por el cronómetro en vivo. Ver
+         *     PartidoService.registrar_resultado_directo para la garantía de
+         *     atomicidad (todo-o-nada).
+         */
+        post: operations["registrar_resultado_directo_api_v1_partidos__partido_id__resultado_directo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/partidos/{partido_id}/duracion": {
         parameters: {
             query?: never;
@@ -1026,8 +1051,11 @@ export interface paths {
         put?: never;
         /**
          * Anular Traspaso
-         * @description EC-20: anotación visual — NO revierte el roster. Corregir el error
-         *     de verdad es un traspaso nuevo en sentido inverso (POST /traspasos).
+         * @description Revierte el traspaso de verdad: reactiva la membresía de origen (si
+         *     había) y da de baja la de destino — ver TraspasoService.anular. Deja
+         *     de estar disponible en cuanto el club destino ya arrancó un partido
+         *     desde este traspaso (`TraspasoOut.puede_anularse`); a partir de ahí
+         *     corresponde un traspaso nuevo en sentido inverso (POST /traspasos).
          */
         post: operations["anular_traspaso_api_v1_traspasos__traspaso_id__anular_post"];
         delete?: never;
@@ -2687,6 +2715,42 @@ export interface components {
             /** Filas */
             filas: components["schemas"]["RegistroLoteFila"][];
         };
+        /**
+         * ResultadoDirectoCreate
+         * @description POST /partidos/{id}/resultado-directo — Alternativa A (Sección 5 del
+         *     plan): orquesta Hito Inicio_Partido + N eventos + Hito Fin_Partido en
+         *     una sola transacción atómica (PartidoService.registrar_resultado_directo),
+         *     reusando las MISMAS tablas/triggers que el flujo en vivo — sin tabla
+         *     paralela. Una lista vacía es válida (0-0 sin sucesos).
+         */
+        ResultadoDirectoCreate: {
+            /**
+             * Eventos
+             * @default []
+             */
+            eventos: components["schemas"]["ResultadoDirectoEvento"][];
+            /** Ganador Corrido Id */
+            ganador_corrido_id?: number | null;
+        };
+        /**
+         * ResultadoDirectoEvento
+         * @description Un evento (gol/tarjeta/cambio) dentro de POST
+         *     /partidos/{id}/resultado-directo (control-mesa-centralizacion-fixture-
+         *     plan.md) — mismo shape que EventoPartidoCreate, salvo `partidos_id`
+         *     (ya viene del path, no se repite acá).
+         */
+        ResultadoDirectoEvento: {
+            /** Jugador Id */
+            jugador_id: number;
+            /** Equipo Id */
+            equipo_id: number;
+            /** Eventos Id */
+            eventos_id: number;
+            /** Jugador Id Entra */
+            jugador_id_entra?: number | null;
+            /** Minuto */
+            minuto: number;
+        };
         /** ResultadoPartidoOut */
         ResultadoPartidoOut: {
             /** Partido Id */
@@ -3010,6 +3074,11 @@ export interface components {
              * @enum {string}
              */
             estado: "Completado" | "Anulado";
+            /**
+             * Puede Anularse
+             * @default false
+             */
+            puede_anularse: boolean;
         };
         /** TraspasoTrayectoriaOut */
         TraspasoTrayectoriaOut: {
@@ -4662,6 +4731,7 @@ export interface operations {
                 torneo_id?: number | null;
                 estado?: ("Programado" | "En curso" | "Finalizado" | "Cancelado") | null;
                 arbitro_id?: number | null;
+                solo_mios?: boolean;
             };
             header?: never;
             path?: never;
@@ -4831,6 +4901,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["WalkoverRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registrar_resultado_directo_api_v1_partidos__partido_id__resultado_directo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResultadoDirectoCreate"];
             };
         };
         responses: {
