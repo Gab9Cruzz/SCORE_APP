@@ -279,3 +279,153 @@ describe("PlantillasDelTorneoPage — grid de tarjetas (Design sección D)", () 
     expect(await screen.findByText(/restricción de unicidad/)).toBeInTheDocument();
   });
 });
+
+// Fix de "datos fantasma" (cascada-archivado-alineaciones-traspasos-
+// plan.md, Área 3, P9-P12): GET /plantillas trae TODAS las filas a
+// propósito (Activo/Inactivo/Traspasado) — esta pantalla debe filtrar a
+// solo Activo antes de agrupar, mismo patrón que ModalGestionarPlantilla.tsx
+// y EquiposDelTorneo.tsx.
+describe("PlantillasDelTorneoPage — fix de datos fantasma (traspasos)", () => {
+  it("no muestra una tarjeta para una fila Inactivo dejada por un traspaso anulado (Caso 1)", async () => {
+    server.use(
+      http.get(DISCIPLINAS, () => HttpResponse.json([{ id: 1, nombre: "Fútbol", estado: "Activo", orden_popularidad: 1 }])),
+      http.get(MODALIDADES, () => HttpResponse.json([])),
+      http.get(JUGADORES, () =>
+        HttpResponse.json([
+          { id: 1, nombre: "Carlos Pérez", foto_url: null },
+          { id: 2, nombre: "Gabriel C", foto_url: null },
+        ]),
+      ),
+      http.get(PERFILES, () =>
+        HttpResponse.json([
+          { id: 1, jugador_id: 1, disciplina_id: 1 },
+          { id: 2, jugador_id: 2, disciplina_id: 1 },
+        ]),
+      ),
+      http.get(EQUIPOS, () => HttpResponse.json([{ id: 1, nombre: "Aguilas del Sur" }])),
+      http.get(INSCRIPCIONES, () => HttpResponse.json([{ id: 5, equipo_id: 1 }])),
+      http.get(PLANTILLAS, () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            jugador_perfil_id: 1,
+            inscripcion_torneo_id: 5,
+            dorsal: 10,
+            fecha_inicio: "2026-01-01",
+            fecha_fin: null,
+            estado: "Activo",
+          },
+          // Traspaso hacia Aguilas del Sur, luego anulado: la fila queda
+          // Inactivo, nunca se borra (TraspasoService.anular() por diseño).
+          {
+            id: 2,
+            jugador_perfil_id: 2,
+            inscripcion_torneo_id: 5,
+            dorsal: 7,
+            fecha_inicio: "2026-01-15",
+            fecha_fin: "2026-02-01",
+            estado: "Inactivo",
+          },
+        ]),
+      ),
+    );
+    renderPagina();
+
+    await screen.findByText(/Aguilas del Sur/);
+    expect(screen.getByText("Carlos Pérez")).toBeInTheDocument();
+    expect(screen.queryByText("Gabriel C")).not.toBeInTheDocument();
+    expect(screen.getByText("1 jugador)", { exact: false })).toBeInTheDocument();
+  });
+
+  it("un jugador con fila Traspasado (origen) + Activo (destino) aparece una sola vez, en el equipo correcto (Caso 2)", async () => {
+    server.use(
+      http.get(DISCIPLINAS, () => HttpResponse.json([{ id: 1, nombre: "Fútbol", estado: "Activo", orden_popularidad: 1 }])),
+      http.get(MODALIDADES, () => HttpResponse.json([])),
+      http.get(JUGADORES, () => HttpResponse.json([{ id: 1, nombre: "Gabriel Soto", foto_url: null }])),
+      http.get(PERFILES, () => HttpResponse.json([{ id: 1, jugador_id: 1, disciplina_id: 1 }])),
+      http.get(EQUIPOS, () =>
+        HttpResponse.json([
+          { id: 1, nombre: "Tiburones FC" },
+          { id: 2, nombre: "Halcones FC" },
+        ]),
+      ),
+      http.get(INSCRIPCIONES, () =>
+        HttpResponse.json([
+          { id: 5, equipo_id: 1 },
+          { id: 6, equipo_id: 2 },
+        ]),
+      ),
+      http.get(PLANTILLAS, () =>
+        HttpResponse.json([
+          // Salió de Tiburones FC (traspaso normal, sin anular).
+          {
+            id: 1,
+            jugador_perfil_id: 1,
+            inscripcion_torneo_id: 5,
+            dorsal: 9,
+            fecha_inicio: "2026-01-01",
+            fecha_fin: "2026-02-01",
+            estado: "Traspasado",
+          },
+          // Un traspaso posterior HACIA Tiburones se anuló — fila Inactivo
+          // que se acumula en el mismo roster.
+          {
+            id: 2,
+            jugador_perfil_id: 1,
+            inscripcion_torneo_id: 5,
+            dorsal: 11,
+            fecha_inicio: "2026-02-05",
+            fecha_fin: "2026-02-10",
+            estado: "Inactivo",
+          },
+          // Vigente en Halcones FC.
+          {
+            id: 3,
+            jugador_perfil_id: 1,
+            inscripcion_torneo_id: 6,
+            dorsal: 15,
+            fecha_inicio: "2026-02-01",
+            fecha_fin: null,
+            estado: "Activo",
+          },
+        ]),
+      ),
+    );
+    renderPagina();
+
+    await screen.findByText(/Halcones FC/);
+    expect(screen.getAllByText("Gabriel Soto")).toHaveLength(1);
+    const tiburones = screen.getByText(/Tiburones FC/).closest("section");
+    expect(tiburones).toHaveTextContent("Sin jugadores todavía");
+  });
+
+  it("equipo con 0 jugadores Activo (todo historial) muestra 'Sin jugadores todavía', no las filas fantasma", async () => {
+    server.use(
+      http.get(DISCIPLINAS, () => HttpResponse.json([{ id: 1, nombre: "Fútbol", estado: "Activo", orden_popularidad: 1 }])),
+      http.get(MODALIDADES, () => HttpResponse.json([])),
+      http.get(JUGADORES, () => HttpResponse.json([{ id: 1, nombre: "Ex Jugador", foto_url: null }])),
+      http.get(PERFILES, () => HttpResponse.json([{ id: 1, jugador_id: 1, disciplina_id: 1 }])),
+      http.get(EQUIPOS, () => HttpResponse.json([{ id: 1, nombre: "Equipo Sin Activos" }])),
+      http.get(INSCRIPCIONES, () => HttpResponse.json([{ id: 5, equipo_id: 1 }])),
+      http.get(PLANTILLAS, () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            jugador_perfil_id: 1,
+            inscripcion_torneo_id: 5,
+            dorsal: 10,
+            fecha_inicio: "2026-01-01",
+            fecha_fin: "2026-02-01",
+            estado: "Traspasado",
+          },
+        ]),
+      ),
+    );
+    renderPagina();
+
+    await screen.findByText(/Equipo Sin Activos/);
+    expect(screen.getByText("Sin jugadores todavía —", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByText("Ex Jugador")).not.toBeInTheDocument();
+    expect(screen.getByText("0 jugadores)", { exact: false })).toBeInTheDocument();
+  });
+});

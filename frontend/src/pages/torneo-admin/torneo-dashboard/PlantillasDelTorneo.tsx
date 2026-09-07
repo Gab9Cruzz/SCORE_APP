@@ -131,9 +131,21 @@ export function PlantillasDelTorneoPage() {
   // Un card por equipo INSCRITO, no solo por equipo con jugadores — un
   // equipo recién matriculado y sin plantilla todavía es un estado real,
   // no un error (estados de interacción del grid, Fase 2).
+  //
+  // Fix de "datos fantasma" (cascada-archivado-alineaciones-traspasos-
+  // plan.md, P9-P12): GET /plantillas?torneo_id=X trae TODAS las filas
+  // (Activo/Inactivo/Suspendido/Traspasado) a propósito — es correcto
+  // para otros consumidores que necesitan el historial completo
+  // (TraspasosDelTorneo.tsx, Perfil de Jugador). Esta pantalla muestra la
+  // plantilla VIGENTE, así que filtra a solo Activo antes de agrupar —
+  // mismo patrón ya probado en ModalGestionarPlantilla.tsx:98 y
+  // EquiposDelTorneo.tsx:218-219. Sin esto, una fila que quedó Inactivo
+  // (traspaso anulado) o Traspasado (traspaso normal) se mostraba como si
+  // fuera un jugador más del roster actual.
   const gruposPorEquipo = useMemo(() => {
+    const vinculosActivos = (crud.listQuery.data ?? []).filter((v) => v.estado === "Activo");
     const vinculosPorInscripcion = new Map<number, PlantillaRow[]>();
-    for (const p of crud.listQuery.data ?? []) {
+    for (const p of vinculosActivos) {
       const arr = vinculosPorInscripcion.get(p.inscripcion_torneo_id);
       if (arr) arr.push(p);
       else vinculosPorInscripcion.set(p.inscripcion_torneo_id, [p]);
@@ -144,7 +156,7 @@ export function PlantillasDelTorneoPage() {
         inscripcionId: i.id,
         equipoNombre: nombreEquipo.get(i.equipo_id) ?? `Equipo #${i.equipo_id}`,
         vinculos,
-        activos: vinculos.filter((v) => v.estado === "Activo").length,
+        activos: vinculos.length,
       };
     });
   }, [crud.listQuery.data, inscripciones.listQuery.data, nombreEquipo]);

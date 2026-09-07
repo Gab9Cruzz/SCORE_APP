@@ -34,12 +34,16 @@ class PartidoService:
         estado: str | None = None,
         arbitro_id: int | None = None,
         torneo_ids_permitidos: Sequence[int] | None = None,
+        incluir_archivados: bool = False,
     ) -> list[Partido]:
         # arbitro_id (Fase 3, D1): filtro más, mismo mecanismo genérico de
         # BaseRepository.list — no hace falta tocar el repositorio.
         # torneo_ids_permitidos (control-mesa-centralizacion-fixture-plan.md,
         # ítem 1): mismo mecanismo que TorneoService.list/E1 — ver el
         # override en PartidoRepository.list.
+        # incluir_archivados (cascada-archivado-alineaciones-traspasos-
+        # plan.md): ver PartidoRepository.list — ningún consumidor actual
+        # lo pasa `True`.
         return await self.repo.list(
             skip=skip,
             limit=limit,
@@ -47,6 +51,7 @@ class PartidoService:
             estado=estado,
             arbitro_id=arbitro_id,
             torneo_ids_permitidos=torneo_ids_permitidos,
+            incluir_archivados=incluir_archivados,
         )
 
     async def create(self, data: PartidoCreate) -> Partido:

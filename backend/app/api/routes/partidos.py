@@ -64,6 +64,13 @@ async def listar_partidos(
     # anónimo. Es lo que scopea la lista de /control-de-mesa: hoy mezclaba
     # TODOS los torneos del sistema para cualquier TorneoAdmin.
     solo_mios: bool = False,
+    # Cascada de archivado (cascada-archivado-alineaciones-traspasos-plan.md,
+    # P4): sin esto, la lista de /control-de-mesa trae por igual partidos
+    # 'Programado' de un torneo cuyo TORNEO_GRUPO está Archivado. Ningún
+    # consumidor actual lo pasa `True` — ver PartidoRepository.list para
+    # por qué NO hay excepción por `torneo_id` explícito acá (a diferencia
+    # de `torneo_grupo_id` en GET /torneos).
+    incluir_archivados: bool = False,
     session: AsyncSession = Depends(get_db),
     usuario: Usuario | None = Depends(get_current_user_optional),
 ) -> list[PartidoOut]:
@@ -82,6 +89,7 @@ async def listar_partidos(
         estado=estado,
         arbitro_id=arbitro_id,
         torneo_ids_permitidos=torneo_ids_permitidos,
+        incluir_archivados=incluir_archivados,
     )
 
 

@@ -62,18 +62,25 @@ class TorneoService:
         estado: str | None = None,
         torneo_grupo_id: int | None = None,
         torneo_ids_permitidos: list[int] | None = None,
+        incluir_archivados: bool = False,
     ) -> list[TorneoOut]:
         """`torneo_ids_permitidos` (rbac-licencias-torneos-plan.md, E1):
         restringe el listado a estos IDs — lo arma el router a partir de
         ASIGNACION_TORNEO_ADMIN cuando `?solo_mios=true` y el caller es
         TorneoAdmin. `None` = sin restricción (comportamiento público de
-        siempre, sin cambios)."""
+        siempre, sin cambios).
+
+        `incluir_archivados` (cascada-archivado-alineaciones-traspasos-
+        plan.md): ver TorneoRepository.list — ningún consumidor actual lo
+        pasa `True`, el default excluye por igual las ediciones de un
+        grupo Archivado del listado general."""
         torneos = await self.repo.list(
             skip=skip,
             limit=limit,
             estado=estado,
             torneo_grupo_id=torneo_grupo_id,
             torneo_ids_permitidos=torneo_ids_permitidos,
+            incluir_archivados=incluir_archivados,
         )
         configs = await self._configs_por_torneo([t.id for t in torneos])
         return [self._a_salida(t, configs.get(t.id)) for t in torneos]

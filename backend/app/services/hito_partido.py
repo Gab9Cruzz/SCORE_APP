@@ -4,6 +4,7 @@ from app.exceptions.errors import DomainRuleError
 from app.models.configuracion_tiempo_torneo import ConfiguracionTiempoTorneo
 from app.models.hito_partido import HitoPartido
 from app.models.partido import Partido
+from app.models.torneo import Torneo
 from app.models.usuario import Usuario
 from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoRepository
 from app.repositories.convocado_a_partido import ConvocadoAPartidoRepository
@@ -14,6 +15,7 @@ from app.repositories.jugador_equipo import JugadorEquipoRepository
 from app.repositories.modalidad import ModalidadRepository
 from app.repositories.partido import PartidoRepository
 from app.repositories.torneo import TorneoRepository
+from app.repositories.torneo_grupo import TorneoGrupoRepository
 from app.schemas.hito_partido import EstadoCronometroOut, HitoPartidoCreate, HitoPartidoOut, HitoPartidoUpdate
 from app.services.permisos import verificar_arbitro_asignado
 
@@ -35,6 +37,10 @@ class HitoPartidoService:
         # B.2 (fixes-datos-traspasos-control-mesa-plan.md, D4): validación
         # de titulares antes de Inicio_Partido — ver _validar_titulares.
         self.torneo_repo = TorneoRepository(session)
+        # Cascada de archivado (cascada-archivado-alineaciones-traspasos-
+        # plan.md, P7): defensa en profundidad contra Inicio_Partido en un
+        # torneo archivado — ver _validar_torneo_no_archivado.
+        self.torneo_grupo_repo = TorneoGrupoRepository(session)
         self.modalidad_repo = ModalidadRepository(session)
         self.equipo_repo = EquipoRepository(session)
         self.inscripcion_repo = InscripcionTorneoRepository(session)
@@ -117,7 +123,20 @@ class HitoPartidoService:
             "acciones_permitidas": acciones,
         }
 
-    async def _validar_titulares(self, partido: Partido) -> None:
+    async def _validar_torneo_no_archivado(self, torneo: Torneo) -> None:
+        """Defensa en profundidad (cascada-archivado-alineaciones-
+        traspasos-plan.md, P7): GET /partidos ya excluye del listado los
+        partidos 'Programado' de un torneo cuyo grupo está Archivado — la
+        UI de Control de Mesa nunca ofrece el botón "Empezar Partido" para
+        uno de estos. Esto es el resguardo de backend por si alguien
+        intenta arrancarlo igual vía API directa, mismo criterio que
+        _validar_titulares (B.2): la fuente de verdad vive acá, no solo en
+        qué oculta la UI."""
+        grupo = await self.torneo_grupo_repo.get_or_404(torneo.torneo_grupo_id)
+        if grupo.estado == "Archivado":
+            raise DomainRuleError("Este torneo está archivado — reactivalo antes de operar sus partidos.")
+
+    async def _validar_titulares(self, partido: Partido, torneo: Torneo) -> None:
         """B.2 (fixes-datos-traspasos-control-mesa-plan.md, D4/P10): antes
         de esto, "Empezar Partido" no validaba nada de la convocatoria — el
         partido arrancaba aunque nadie hubiera tocado "Convocados".
@@ -129,7 +148,11 @@ class HitoPartidoService:
         Un `ConvocadoAPartido.titular=True` de un jugador que ya no está en
         el roster activo del equipo (dado de baja después de convocarlo) no
         cuenta — se intersecta contra el roster vigente, no se confía en la
-        convocatoria sola."""
+        convocatoria sola.
+
+        `torneo` llega ya resuelto por `registrar()` (cascada-archivado-
+        alineaciones-traspasos-plan.md, P7) — evita pedirlo dos veces junto
+        con `_validar_torneo_no_archivado`, que corre antes."""
         if partido.equipos_id_local is None or partido.equipos_id_visitante is None:
             # P12: todo PARTIDOS de Equipo/Pareja nace de un bracket o de un
             # fixture ya armado — este caso es "todavía no se sabe quién
@@ -140,7 +163,6 @@ class HitoPartidoService:
                 "el partido anterior del bracket."
             )
 
-        torneo = await self.torneo_repo.get_or_404(partido.torneo_id)
         modalidad = await self.modalidad_repo.get_or_404(torneo.modalidad_id)
         requeridos = modalidad.tamano_equipo
 
@@ -182,7 +204,12 @@ class HitoPartidoService:
             )
 
         if data.tipo_hito == "Inicio_Partido":
-            await self._validar_titulares(partido)
+            # Fail-fast (P7): no tiene sentido calcular titulares de un
+            # torneo que ni siquiera puede operarse — se resuelve el
+            # torneo una sola vez para las dos validaciones.
+            torneo = await self.torneo_repo.get_or_404(partido.torneo_id)
+            await self._validar_torneo_no_archivado(torneo)
+            await self._validar_titulares(partido, torneo)
 
         numero_periodo = data.numero_periodo
         if data.tipo_hito == "Inicio_Periodo" and numero_periodo is None:

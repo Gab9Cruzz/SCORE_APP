@@ -24,6 +24,14 @@ async def listar_torneos(
     # de un TorneoAdmin, no una restricción de seguridad nueva (las
     # rutas de escritura ya están scoped vía require_torneo_access).
     solo_mios: bool = False,
+    # Cascada de archivado (cascada-archivado-alineaciones-traspasos-plan.md,
+    # P3/P6): sin esto, el listado general (menú público, selector de
+    # Control de Mesa) trae por igual ediciones de un TORNEO_GRUPO
+    # Archivado. Ningún consumidor actual lo pasa `True` — queda como
+    # escape hatch, mismo patrón que `incluir_archivados` de
+    # GET /torneo-grupos (3B-7). Sin efecto cuando `torneo_grupo_id` viene
+    # explícito (P6): ver TorneoRepository.list.
+    incluir_archivados: bool = False,
     session: AsyncSession = Depends(get_db),
     usuario: Usuario | None = Depends(get_current_user_optional),
 ) -> list[TorneoOut]:
@@ -38,6 +46,7 @@ async def listar_torneos(
         estado=estado,
         torneo_grupo_id=torneo_grupo_id,
         torneo_ids_permitidos=torneo_ids_permitidos,
+        incluir_archivados=incluir_archivados,
     )
 
 

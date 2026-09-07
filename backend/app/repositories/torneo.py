@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from sqlalchemy import select, text
 
 from app.models.torneo import Torneo
+from app.models.torneo_grupo import TorneoGrupo
 from app.repositories.base import BaseRepository
 
 
@@ -48,6 +49,8 @@ class TorneoRepository(BaseRepository[Torneo]):
         skip: int = 0,
         limit: int = 100,
         torneo_ids_permitidos: Sequence[int] | None = None,
+        torneo_grupo_id: int | None = None,
+        incluir_archivados: bool = False,
         **filtros: object,
     ) -> list[Torneo]:
         """Override de BaseRepository.list: agrega un filtro `IN` opcional
@@ -56,16 +59,30 @@ class TorneoRepository(BaseRepository[Torneo]):
         columna). `torneo_ids_permitidos=[]` (lista vacía, no None)
         significa "el caller no tiene NINGÚN torneo asignado" — debe
         devolver 0 filas, no todas; `None` significa "sin restricción"
-        (comportamiento de siempre)."""
+        (comportamiento de siempre).
+
+        Cascada de archivado (cascada-archivado-alineaciones-traspasos-
+        plan.md, P1-P6): siempre hace JOIN contra TORNEO_GRUPO — cuando
+        `torneo_grupo_id` viene explícito (ej. el selector de Estadísticas
+        de un torneo YA ABIERTO, EC-A5) NO se aplica el filtro de
+        archivado, mismo criterio que ya usa `/torneo-grupos/{id}` (P6):
+        acceso directo/scoped a un grupo puntual sigue funcionando aunque
+        esté Archivado. Solo el listado GENERAL (sin `torneo_grupo_id`)
+        excluye por default las ediciones de un grupo Archivado, salvo
+        `incluir_archivados=True`."""
+        stmt = select(Torneo).join(TorneoGrupo, TorneoGrupo.id == Torneo.torneo_grupo_id)
         if torneo_ids_permitidos is not None:
-            stmt = select(Torneo).where(Torneo.id.in_(torneo_ids_permitidos))
-            for campo, valor in filtros.items():
-                if valor is not None:
-                    stmt = stmt.where(getattr(Torneo, campo) == valor)
-            stmt = stmt.order_by(Torneo.id).offset(skip).limit(limit)
-            result = await self.session.execute(stmt)
-            return list(result.scalars().all())
-        return await super().list(skip=skip, limit=limit, **filtros)
+            stmt = stmt.where(Torneo.id.in_(torneo_ids_permitidos))
+        if torneo_grupo_id is not None:
+            stmt = stmt.where(Torneo.torneo_grupo_id == torneo_grupo_id)
+        elif not incluir_archivados:
+            stmt = stmt.where(TorneoGrupo.estado != "Archivado")
+        for campo, valor in filtros.items():
+            if valor is not None:
+                stmt = stmt.where(getattr(Torneo, campo) == valor)
+        stmt = stmt.order_by(Torneo.id).offset(skip).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     async def ids_existentes(self, torneo_ids: Sequence[int]) -> set[int]:
         """Usado por AsignacionTorneoAdminService.set_torneos_asignados

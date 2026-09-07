@@ -131,10 +131,18 @@ y `fn_validar_exclusividad_torneo` hoy no saben conciliar.
   pedirse), ver `cierre-backlog-todos-plan.md` §3B-6.
 - ~~Archivar/eliminar un `TORNEO_GRUPO` completo~~ con todas sus
   ediciones — **hecho.** Baja lógica (`Estado` Activo/Archivado), nunca
-  DELETE, sin cascada a las ediciones existentes — oculto de `GET
-  /torneo-grupos` por default, botón Archivar/Reactivar + toggle "Ver
-  archivados" en la UI (3B-7, `docs/plans/cierre-backlog-todos-plan.md`,
-  hecho el 2026-09-01).
+  DELETE — oculto de `GET /torneo-grupos` por default, botón
+  Archivar/Reactivar + toggle "Ver archivados" en la UI (3B-7,
+  `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-01).
+  **Extendido el 2026-09-07** (`docs/plans/cascada-archivado-alineaciones-
+  traspasos-plan.md`): archivar un grupo ahora también saca sus ediciones
+  de `GET /torneos` (menú público, selector de Control de Mesa) y sus
+  partidos `Programado` de `GET /partidos` — salvo acceso directo/scoped
+  (`torneo_grupo_id` explícito sigue trayéndolas, mismo criterio que
+  `/torneo-grupos/{id}`). Partidos `En curso`/`Finalizado` de un grupo
+  archivado nunca se ocultan. Defensa en profundidad en
+  `HitoPartidoService.registrar()`: rechaza `Inicio_Partido` de un torneo
+  archivado con 400 aunque alguien lo intente por API directa.
 - ~~Traspasos entre ediciones distintas~~ del mismo grupo — **hecho.**
   `TraspasoService.crear` rechaza un origen/destino de ediciones
   distintas y dirige a dar de alta en la edición destino en vez de un
@@ -476,6 +484,18 @@ en el plan original:**
   en cuanto el club DESTINO ya arrancó un partido desde el traspaso
   (`HitoPartidoRepository.existe_inicio_desde`) — a partir de ahí
   corresponde un traspaso nuevo en sentido inverso, no un "deshacer".
+- ~~"Datos fantasma" en Plantillas: anular un traspaso (o un traspaso
+  normal sin anular) dejaba filas `Inactivo`/`Traspasado` visibles como si
+  fueran jugadores vigentes del roster~~ — **hecho, 2026-09-07**
+  (`docs/plans/cascada-archivado-alineaciones-traspasos-plan.md`, Área 3).
+  El modelo de datos era correcto a propósito (`anular()` nunca borra
+  historial, EC-20); el bug era que `PlantillasDelTorneo.tsx` era la única
+  de 3 pantallas hermanas que no filtraba `GET /plantillas` a
+  `estado === "Activo"` antes de agrupar por equipo — mismo patrón ya
+  usado en `ModalGestionarPlantilla.tsx`/`EquiposDelTorneo.tsx`. Fix
+  100% client-side, sin tocar el endpoint (los 2 consumidores que sí
+  necesitan el historial completo — Traspasos, Perfil de Jugador — no se
+  tocaron).
 
 ## Centralización operativa en Control de Mesa + fix del fixture — implementado
 
