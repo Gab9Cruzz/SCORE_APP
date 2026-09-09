@@ -1,4 +1,7 @@
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.partido import Partido
 
 
 async def _empezar_partido(client: AsyncClient, headers: dict[str, str], convocar_titulares, partido_id: int = 3) -> None:
@@ -194,15 +197,19 @@ async def test_registrar_evento_en_partido_programado_es_rechazado(
 
 
 async def test_registrar_evento_en_partido_finalizado_es_rechazado(
-    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]
+    client: AsyncClient, db_session: AsyncSession, torneo_admin_con_torneo_headers: dict[str, str]
 ):
     """Alta NUEVA sigue bloqueada incluso después de Finalizado — distinto
     de corregir_minuto/anular sobre un evento YA cargado (EC-15), que este
-    test no toca."""
-    resp = await client.patch(
-        "/api/v1/partidos/3", json={"estado": "Finalizado"}, headers=torneo_admin_con_torneo_headers
-    )
-    assert resp.status_code == 200, resp.text
+    test no toca.
+
+    modo-vivo-sustituciones-cierre-plan.md (Bloque 0, T1/T14): `estado` ya
+    no es un campo aceptado del PATCH — mismo criterio que
+    test_motor_formatos.py/test_desempate_manual.py para dejar un partido
+    'Finalizado' en un test (setearlo directo en la sesión), no vía API."""
+    partido = await db_session.get(Partido, 3)
+    partido.estado = "Finalizado"
+    await db_session.commit()
 
     resp = await client.post(
         "/api/v1/eventos-partido",

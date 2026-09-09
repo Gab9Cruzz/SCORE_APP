@@ -51,3 +51,24 @@ class Torneo(TimestampMixin, Base):
     # en Liga/fase de grupos — en Eliminación siempre está permitido, ver
     # PartidoService.marcar_walkover.
     permite_walkover_grupos: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Cuántos titulares por equipo exige "Empezar Partido"
+    # (gestionar-partido-alineaciones-plan.md, D1). NULL = usar
+    # Modalidad.tamano_equipo, que es el comportamiento histórico — por eso la
+    # migración no hace backfill: una base vieja se comporta igual que antes.
+    # Es reglamento del TORNEO, no del catálogo: "Fútbol 11" son 11 en cancha,
+    # pero AFA deja arrancar con 7 y una liga de empresa con menos. No va en
+    # MODALIDAD porque ese catálogo es inmutable vía API (ModalidadUpdate solo
+    # acepta estado), así que el organizador no podría ajustarlo.
+    # El tope superior (<= tamano_equipo) cruza tablas: lo valida TorneoService.
+    minimo_jugadores_para_iniciar: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # modo-vivo-sustituciones-cierre-plan.md, Área 1 (T18): tope SUPERIOR de
+    # titulares por equipo — simétrico al mínimo de arriba. NULL = usar
+    # Modalidad.tamano_equipo (comportamiento por defecto). El tope inferior
+    # y que no supere tamano_equipo los valida TorneoService, no un CHECK.
+    maximo_titulares_permitido: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Área 3 (T5): reglas de sustitución del reglamento de ESTE torneo — ver
+    # el comentario grande en 01_schema.sql para por qué son 2 ejes
+    # independientes (no-retorno vs. tope numérico) y por qué viven acá y
+    # no en Modalidad/Disciplina.
+    permite_cambios_ilimitados: Mapped[bool] = mapped_column(Boolean, default=False)
+    maximo_cambios_por_equipo: Mapped[int | None] = mapped_column(Integer, nullable=True)

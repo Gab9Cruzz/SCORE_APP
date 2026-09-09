@@ -119,20 +119,56 @@ async def test_arbitro_puede_actualizar_su_partido_asignado(
 ):
     # arbitro_headers (conftest.py) queda asignado al partido 3.
     resp = await client.patch(
-        "/api/v1/partidos/3", json={"estado": "En curso"}, headers=arbitro_headers
+        "/api/v1/partidos/3", json={"jornada": 7}, headers=arbitro_headers
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["estado"] == "En curso"
+    assert resp.json()["jornada"] == 7
 
 
 async def test_arbitro_no_puede_actualizar_partido_no_asignado(
     client: AsyncClient, arbitro_no_asignado_headers: dict[str, str]
 ):
     resp = await client.patch(
-        "/api/v1/partidos/1", json={"estado": "En curso"}, headers=arbitro_no_asignado_headers
+        "/api/v1/partidos/1", json={"jornada": 7}, headers=arbitro_no_asignado_headers
     )
     assert resp.status_code == 403
     assert "asignado" in resp.json()["detail"].lower()
+
+
+# --- modo-vivo-sustituciones-cierre-plan.md (Bloque 0, T1/T14): `estado` ---
+# --- deja de ser un campo escribible del PATCH — PARTIDOS.Estado pasa a ---
+# --- derivarse 100% de Hitos, nunca de un PATCH directo. ---
+
+
+async def test_patch_partido_con_estado_es_rechazado(
+    client: AsyncClient, arbitro_headers: dict[str, str]
+):
+    # arbitro_headers queda asignado al partido 3 — el rechazo debe ocurrir
+    # por el schema (422), antes de llegar a ningún guard de negocio.
+    resp = await client.patch(
+        "/api/v1/partidos/3", json={"estado": "En curso"}, headers=arbitro_headers
+    )
+    assert resp.status_code == 422, resp.text
+
+
+async def test_patch_partido_con_estado_no_lo_ignora_silenciosamente(
+    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]
+):
+    # Regresión del hallazgo crítico del Eng subagent (Fase 3): con
+    # `extra="ignore"` (default de Pydantic v2) este PATCH devolvía 200 y
+    # el `estado` mandado se descartaba en silencio — el `jornada` sí se
+    # aplicaba. Con `extra="forbid"`, el body entero se rechaza y NADA se
+    # aplica, ni siquiera `jornada`.
+    resp = await client.patch(
+        "/api/v1/partidos/1",
+        json={"jornada": 11, "estado": "Finalizado"},
+        headers=torneo_admin_con_torneo_headers,
+    )
+    assert resp.status_code == 422, resp.text
+
+    resp = await client.get("/api/v1/partidos", params={"torneo_id": 1})
+    partido_1 = next(p for p in resp.json() if p["id"] == 1)
+    assert partido_1["jornada"] != 11
 
 
 async def test_torneo_admin_puede_actualizar_cualquier_partido(

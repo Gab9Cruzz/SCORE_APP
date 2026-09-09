@@ -55,6 +55,22 @@ class TorneoBase(BaseModel):
     # torneo existente no cambia de comportamiento hasta que el admin lo
     # prenda a propósito.
     permite_walkover_grupos: bool = False
+    # Mínimo de titulares por equipo para permitir "Empezar Partido"
+    # (gestionar-partido-alineaciones-plan.md, D1). NULL = exigir el equipo
+    # completo (Modalidad.tamano_equipo), que es el comportamiento histórico.
+    # El tope superior (<= tamano_equipo) cruza tablas, así que lo valida
+    # TorneoService._validar_minimo_para_iniciar, no un validator de Pydantic.
+    minimo_jugadores_para_iniciar: int | None = None
+    # modo-vivo-sustituciones-cierre-plan.md, Área 1 (T18): tope SUPERIOR de
+    # titulares, simétrico al mínimo de arriba. NULL = usar
+    # Modalidad.tamano_equipo. El tope validado contra la modalidad vive en
+    # TorneoService._validar_maximo_titulares, mismo patrón que el mínimo.
+    maximo_titulares_permitido: int | None = None
+    # Área 3 (T5): reglas de sustitución — ver el comentario grande en
+    # 01_schema.sql para los 2 ejes independientes (no-retorno vs. tope
+    # numérico de cambios).
+    permite_cambios_ilimitados: bool = False
+    maximo_cambios_por_equipo: int | None = None
 
     @field_validator("fecha_fin")
     @classmethod
@@ -125,6 +141,18 @@ class TorneoUpdate(BaseModel):
     config_tiempo: ConfiguracionTiempoTorneoCreate | None = None
     cupo_maximo_inscripciones: int | None = None
     permite_walkover_grupos: bool | None = None
+    # Acá `None` es un valor con significado ("volver a exigir el equipo
+    # completo"), no "no lo mandes". Por eso TorneoService.update lo escribe a
+    # mano en vez de dejárselo a BaseRepository.save_changes, que descarta todo
+    # None (base.py:62-64) y haría el campo imposible de limpiar una vez seteado
+    # — ver C3 del plan. `exclude_unset` es lo que distingue "ausente" de
+    # "presente y null".
+    minimo_jugadores_para_iniciar: int | None = None
+    # Mismo criterio de "None con significado" que minimo_jugadores_para_iniciar
+    # de arriba — TorneoService.update también los escribe a mano.
+    maximo_titulares_permitido: int | None = None
+    permite_cambios_ilimitados: bool | None = None
+    maximo_cambios_por_equipo: int | None = None
 
 
 class TorneoOut(TorneoBase):

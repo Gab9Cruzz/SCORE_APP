@@ -40,11 +40,24 @@ class PartidoCreate(PartidoBase):
 
 
 class PartidoUpdate(BaseModel):
+    # modo-vivo-sustituciones-cierre-plan.md (Bloque 0, T1/T14): `estado`
+    # se retira como campo escribible — PARTIDOS.Estado pasa a ser 100%
+    # derivado de Hitos (trg_hito_sincroniza_estado, 06_triggers.sql),
+    # nunca un valor que un PATCH pueda fijar directamente. Un cierre
+    # forzado inserta un Hito Fin_Partido(forzado=true) en vez de hacer
+    # PATCH {estado: "Finalizado"} (ver HitoPartidoService.registrar).
+    #
+    # `extra="forbid"` es la mitad no negociable de este fix (hallazgo
+    # crítico del Eng subagent, Fase 3): sin esto, Pydantic v2 ignora
+    # silenciosamente cualquier `estado` que un cliente mande en el body
+    # (default `extra="ignore"`), que es exactamente el fallo silencioso
+    # que se buscaba cerrar. Con `forbid`, ese PATCH devuelve 422 real.
+    model_config = ConfigDict(extra="forbid")
+
     fecha_partido: datetime | None = None
     jornada: int | None = None
     fase: FasePartido | None = None
     grupo: str | None = None
-    estado: EstadoPartido | None = None
     # Asignación de árbitro (D6, roles-3-modulos-plan.md) — un paso
     # separado de crear el partido, por eso no está en PartidoCreate.
     arbitro_id: int | None = None

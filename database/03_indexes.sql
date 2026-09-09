@@ -115,6 +115,18 @@ CREATE INDEX idx_hitos_partido_partido ON HITOS_PARTIDO(Partido_ID);
 CREATE INDEX idx_hitos_partido_usuario ON HITOS_PARTIDO(Registrado_Por);
 CREATE INDEX idx_partidos_ganador_corrido ON PARTIDOS(Ganador_Corrido_ID);
 
+-- modo-vivo-sustituciones-cierre-plan.md, T15: cierra a nivel DB la carrera
+-- de doble Fin_Partido — fn_validar_hito_partido (06_triggers.sql) solo la
+-- detecta con un SELECT COUNT(*) previo al INSERT, que bajo 2 transacciones
+-- concurrentes es un TOCTOU clásico (Eng subagent hallazgo alto #6): las dos
+-- pueden leer "0 Fin_Partido todavía" antes de que cualquiera commitee. Este
+-- índice es la fuente de verdad final (la segunda transacción falla acá, no
+-- en el trigger); el trigger sigue dando el mensaje en español para el caso
+-- no-concurrente, que es el 99% de los casos reales.
+CREATE UNIQUE INDEX uq_hitos_partido_fin_unico
+    ON HITOS_PARTIDO (Partido_ID)
+    WHERE Tipo_Hito = 'Fin_Partido';
+
 -- AUDITORIA (bitacora de cambios)
 -- Misma logica que ACCESOS: la pantalla lista siempre por fecha
 -- descendente, y los otros dos son los filtros que ofrece GET /auditoria

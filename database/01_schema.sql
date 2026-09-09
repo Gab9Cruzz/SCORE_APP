@@ -113,7 +113,47 @@ CREATE TABLE TORNEO (
     -- Eliminación siempre está permitido (el bracket necesita un ganador
     -- para avanzar), así que este flag solo aplica fuera de esa fase. Ver
     -- PartidoService.marcar_walkover.
-    Permite_Walkover_Grupos BOOLEAN NOT NULL DEFAULT FALSE
+    Permite_Walkover_Grupos BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Minimo_Jugadores_Para_Iniciar (gestionar-partido-alineaciones-plan.md,
+    -- D1): cuántos titulares por equipo exige "Empezar Partido". NULL = usar
+    -- Modalidad.Tamano_Equipo, que es el comportamiento histórico — por eso
+    -- NO hay backfill: una base vieja se comporta igual que antes de esta
+    -- columna. Es un flag de REGLAMENTO por torneo, mismo tipo de dato que
+    -- Permite_Walkover_Grupos: "Fútbol 11" son 11 en cancha, pero AFA deja
+    -- arrancar con 7 y una liga de empresa con menos. Va acá y no en
+    -- MODALIDAD porque ese catálogo es inmutable vía API (solo se togglea
+    -- Estado) — el organizador no podría ajustarlo sin una migración.
+    -- El tope superior (<= Tamano_Equipo de la modalidad) cruza tablas, así
+    -- que lo valida TorneoService, no un CHECK.
+    Minimo_Jugadores_Para_Iniciar INT,
+    -- modo-vivo-sustituciones-cierre-plan.md, Área 1 (T18): tope SUPERIOR
+    -- de titulares por equipo — reversión explícita de la Decisión Audit
+    -- #12 del plan anterior (ver ese plan y TODOS.md para el porqué se
+    -- había diferido). Simétrico a Minimo_Jugadores_Para_Iniciar: NULL =
+    -- usar Modalidad.Tamano_Equipo (comportamiento por defecto — es
+    -- literalmente cuántos entran en cancha). El tope inferior (>= 1) y
+    -- que no supere Tamano_Equipo cruzan tablas, los valida TorneoService.
+    Maximo_Titulares_Permitido INT,
+    -- Área 3 (T5): reglas de sustitución del reglamento de ESTE torneo —
+    -- mismo patrón que Minimo_Jugadores_Para_Iniciar/Permite_Walkover_Grupos
+    -- (reglamento del TORNEO, no de MODALIDAD ni DISCIPLINA: el pedido
+    -- original mezclaba disciplina/modalidad/nivel competitivo en un solo
+    -- eje, ver 0C-bis del plan). Dos ejes independientes, a propósito:
+    --   - Permite_Cambios_Ilimitados gobierna la regla de NO-RETORNO (un
+    --     jugador que salió por Cambio no puede volver a entrar) — FALSE
+    --     (default) la exige, TRUE la desactiva (cambios rotativos, ej.
+    --     básquet o fútbol 7 amateur).
+    --   - Maximo_Cambios_Por_Equipo gobierna la CANTIDAD de cambios — NULL
+    --     (default) = sin tope numérico. Independiente del anterior: un
+    --     torneo puede permitir reingresos y aun así topear la cantidad.
+    -- (La idea original del plan de un default "por modalidad" cuando este
+    -- campo es NULL se descartó — 0C-bis la señala como una decisión sin
+    -- resolver, ver Eng Fase 3: exigiría inferir el deporte desde texto
+    -- libre de Disciplina.Nombre, un acoplamiento fragil que el propio
+    -- plan no llegó a especificar. El default explícito (FALSE) es más
+    -- seguro y no requiere esa inferencia.)
+    Permite_Cambios_Ilimitados BOOLEAN NOT NULL DEFAULT FALSE,
+    Maximo_Cambios_Por_Equipo INT
 );
 
 -- Disciplina_ID/Modalidad_ID son NOT NULL desde
@@ -306,7 +346,22 @@ CREATE TABLE HITOS_PARTIDO (
     -- razonar sobre timestamps.
     Minuto_Reloj INT,
     Registrado_Por INT NOT NULL,
-    Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Cierre forzado de partido (modo-vivo-sustituciones-cierre-cierre-
+    -- plan.md, T6/T17, Área 4): Forzado=TRUE marca un Fin_Partido insertado
+    -- por el override "Fin de Partido forzado" — permitido en CUALQUIER
+    -- acciones_permitidas mientras el partido esté iniciado y no
+    -- finalizado, no solo cuando el gate normal (todo período cerrado, o
+    -- Corrido con ganador) lo habilita. Motivo_Cierre es un picklist corto
+    -- a propósito (Design Fase 2, Pass 7: un texto libre fragmentaría la
+    -- métrica de observabilidad de "cierres forzados por semana" en
+    -- strings distintas) — Motivo_Cierre_Detalle solo se llena cuando
+    -- Motivo_Cierre='Otro'. Los tres quedan NULL/FALSE para cualquier
+    -- Hito que no sea un Fin_Partido forzado (chk_hitos_partido_forzado_*,
+    -- 02_constraints.sql).
+    Forzado BOOLEAN NOT NULL DEFAULT FALSE,
+    Motivo_Cierre VARCHAR(30),
+    Motivo_Cierre_Detalle VARCHAR(200)
 );
 
 -- ------------------------------------------------------------
@@ -565,7 +620,21 @@ CREATE TABLE CONVOCADO_A_PARTIDO (
     Partido_ID INT NOT NULL,
     Jugador_Perfil_ID INT NOT NULL,
     Titular BOOLEAN NOT NULL DEFAULT FALSE,
-    Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Fecha_Modificacion + trg_convocado_upd_fecha (06_triggers.sql) es el
+    -- ETag de concurrencia optimista del PUT de convocatoria
+    -- (gestionar-partido-alineaciones-plan.md, H4-eng). NO se puede versionar
+    -- por el set de IDs: desde que el repositorio hace diff incremental en vez
+    -- de DELETE+INSERT, cambiar Titular es un UPDATE que no toca ningún ID, así
+    -- que el set queda idéntico y el chequeo no detectaría nada — justo el caso
+    -- que la concurrencia optimista existe para prevenir.
+    Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Minuto_Ingreso/Registrado_Por (H5-eng): valor probatorio de las llegadas
+    -- tardías. Fecha_Registro sola no alcanza — es el inicio de la transacción
+    -- y no dice quién lo cargó. Ambas NULL para los convocados de la lista
+    -- inicial: solo se llenan en el alta aditiva con el partido ya en curso.
+    Minuto_Ingreso INT,
+    Registrado_Por INT
 );
 
 -- Auditoria de cambios: alta, modificacion o baja logica de CUALQUIER

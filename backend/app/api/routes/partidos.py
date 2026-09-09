@@ -13,13 +13,15 @@ from app.models.usuario import Usuario
 from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
 from app.repositories.partido import PartidoRepository
 from app.schemas.hito_partido import (
+    DeshacerCierreForzadoOut,
     DuracionPartidoOut,
     EstadoCronometroOut,
     HitoPartidoCreate,
     HitoPartidoOut,
     HitoPartidoUpdate,
+    PreflightInicioOut,
 )
-from app.schemas.convocado_a_partido import ConvocadoOut, ConvocatoriaSetRequest
+from app.schemas.convocado_a_partido import ConvocadoAgregarRequest, ConvocadoOut, ConvocatoriaSetRequest
 from app.schemas.partido import (
     EstadoPartido,
     PartidoCreate,
@@ -248,6 +250,27 @@ async def registrar_hito_partido(
     return await HitoPartidoService(session).registrar(partido_id, data, usuario_actual)
 
 
+@router.post(
+    "/{partido_id}/deshacer-cierre-forzado",
+    response_model=DeshacerCierreForzadoOut,
+    dependencies=[
+        Depends(require_roles("TorneoAdmin", "Arbitro")),
+        Depends(require_torneo_access_de(_torneo_id_de_partido, "Arbitro")),
+    ],
+)
+async def deshacer_cierre_forzado(
+    partido_id: int,
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+) -> DeshacerCierreForzadoOut:
+    """Área 4 (T17) — deshace un "Fin de Partido forzado" reciente, solo
+    dentro de la ventana de gracia calculada server-side (ver
+    HitoPartidoService.deshacer_fin_forzado para las 3 guardas). Mismo
+    ownership-check que el resto de este router (árbitro asignado o
+    scoping de torneo — sin rol nuevo)."""
+    return await HitoPartidoService(session).deshacer_fin_forzado(partido_id, usuario_actual)
+
+
 @router.patch(
     "/{partido_id}/hitos/{hito_id}",
     response_model=HitoPartidoOut,
@@ -297,3 +320,53 @@ async def definir_convocados(
     convocatoria (vuelve a "toda la plantilla es candidata")."""
     convocados = await ConvocadoAPartidoService(session).reemplazar(partido_id, data, usuario_actual)
     return [ConvocadoOut.model_validate(c) for c in convocados]
+
+
+@router.post(
+    "/{partido_id}/convocados",
+    response_model=ConvocadoOut,
+    status_code=201,
+    dependencies=[
+        Depends(require_roles("TorneoAdmin", "Arbitro")),
+        Depends(require_torneo_access_de(_torneo_id_de_partido, "Arbitro")),
+    ],
+)
+async def agregar_convocado(
+    partido_id: int,
+    data: ConvocadoAgregarRequest,
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+) -> ConvocadoOut:
+    """Suma UN convocado sin tocar el resto de la alineación
+    (gestionar-partido-alineaciones-plan.md, D3 revisada).
+
+    Es el camino de las llegadas tardías: a diferencia del PUT, que reescribe
+    la lista entera y solo se acepta antes del arranque, esto es aditivo y por
+    lo tanto funciona con el partido EN CURSO sin tocar el cronómetro ni el
+    `titular` de nadie. Idempotente ante un doble-tap."""
+    convocado = await ConvocadoAPartidoService(session).agregar(partido_id, data, usuario_actual)
+    return ConvocadoOut.model_validate(convocado)
+
+
+@router.get(
+    "/{partido_id}/preflight-inicio",
+    response_model=PreflightInicioOut,
+    dependencies=[
+        Depends(require_roles("TorneoAdmin", "Arbitro")),
+        Depends(require_torneo_access_de(_torneo_id_de_partido, "Arbitro")),
+    ],
+)
+async def preflight_inicio_partido(
+    partido_id: int, session: AsyncSession = Depends(get_db)
+) -> PreflightInicioOut:
+    """¿Se puede tocar "Empezar Partido"? (H1-eng del plan).
+
+    Endpoint propio y AUTENTICADO en vez de campos nuevos en
+    `GET /partidos/{id}/cronometro`: ese es público sin auth y lo pollean cada
+    5 segundos `Cronometro.tsx` y `PartidoEnVivo.tsx` de forma anónima, así que
+    sumarle el cálculo de titulares (~7 queries, con un roster completo por
+    equipo) lo convertiría en el endpoint más caro del sistema.
+
+    El frontend NO reimplementa la regla: consume `puede_iniciar` y
+    `motivo_bloqueo`, que salen del mismo código que aplica el gate real."""
+    return await HitoPartidoService(session).preflight_inicio(partido_id)

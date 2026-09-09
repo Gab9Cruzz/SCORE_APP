@@ -48,6 +48,14 @@ async def proximos_partidos(
 
 @router.get("/equipos/{equipo_id}/plantilla", response_model=list[PlantillaJugadorOut])
 async def plantilla_equipo(
-    equipo_id: int, session: AsyncSession = Depends(get_db)
+    equipo_id: int, torneo_id: int | None = None, session: AsyncSession = Depends(get_db)
 ) -> list[PlantillaJugadorOut]:
-    return await EstadisticasService(session).plantilla_equipo(equipo_id)
+    """`torneo_id` acota al roster de ESE torneo
+    (gestionar-partido-alineaciones-plan.md, H2-eng). Sin él, un equipo
+    inscripto en dos torneos activos de la misma disciplina devuelve el mismo
+    `jugador_perfil_id` dos veces: rompe las keys de React en el editor de
+    alineación y deja convocar a un titular fantasma que
+    `fn_validar_jugador_partido` después rechaza. Opcional para no romper a
+    los callers que quieren la plantilla del equipo sin acotar (perfil del
+    jugador, estadísticas históricas)."""
+    return await EstadisticasService(session).plantilla_equipo(equipo_id, torneo_id)

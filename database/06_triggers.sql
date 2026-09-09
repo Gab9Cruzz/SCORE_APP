@@ -71,6 +71,95 @@ CREATE TRIGGER trg_usuarios_upd_fecha
 BEFORE UPDATE ON USUARIOS
 FOR EACH ROW EXECUTE FUNCTION fn_actualizar_fecha_modificacion();
 
+-- CONVOCADO_A_PARTIDO lleva el trigger desde
+-- gestionar-partido-alineaciones-plan.md (H4-eng): su Fecha_Modificacion no es
+-- solo informativa, es el ETag que usa ConvocadoAPartidoService para detectar
+-- que otro operador tocó la convocatoria entre el GET y el PUT.
+CREATE TRIGGER trg_convocado_upd_fecha
+BEFORE UPDATE ON CONVOCADO_A_PARTIDO
+FOR EACH ROW EXECUTE FUNCTION fn_actualizar_fecha_modificacion();
+
+-- ------------------------------------------------------------
+-- Tope de titulares por equipo (modo-vivo-sustituciones-cierre-plan.md,
+-- Área 1, T16 — reversión explícita de la Decisión Audit #12 del plan
+-- anterior; el pedido dejó de tratarse como "diferido a propósito" cuando
+-- el usuario lo pidió de nuevo con evidencia concreta, ver ese plan).
+--
+-- Espejo, a nivel DB, del guard que ConvocadoAPartidoService ya aplica en
+-- Python (reemplazar/agregar) — acá cierra la carrera de 2 requests
+-- concurrentes cerca del tope (Eng subagent hallazgo alto #7): el
+-- `SELECT COUNT(*)` de Python, sin lock, tiene la misma ventana TOCTOU que
+-- fn_validar_hito_partido tenía para Fin_Partido antes del índice único
+-- (T15/uq_hitos_partido_fin_unico) — acá no se puede resolver con un
+-- índice único simple (el tope es un número, no una unicidad), así que la
+-- herramienta es un lock de fila sobre el PARTIDO, no sobre el convocado.
+--
+-- Solo mira altas/cambios que MARCAN titular (Titular=TRUE): bajar a
+-- suplente o convocar sin marcar titular nunca puede violar un tope
+-- superior.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_validar_tope_titulares()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_equipo_id INT;
+    v_maximo INT;
+    v_actuales INT;
+BEGIN
+    IF NOT NEW.Titular THEN
+        RETURN NEW;
+    END IF;
+
+    -- Lock de fila del PARTIDO (no de CONVOCADO_A_PARTIDO): serializa 2
+    -- altas/cambios concurrentes de la convocatoria del MISMO partido sin
+    -- bloquear la convocatoria de otros partidos.
+    PERFORM 1 FROM PARTIDOS WHERE ID = NEW.Partido_ID FOR UPDATE;
+
+    -- ¿A cuál de los dos equipos de este partido pertenece el perfil? Mismo
+    -- criterio que ConvocadoAPartidoService._perfiles_validos
+    -- (vw_jugadores_activos_por_equipo, 04_views.sql).
+    SELECT v.Equipo_ID INTO v_equipo_id
+      FROM vw_jugadores_activos_por_equipo v
+      JOIN PARTIDOS p ON p.Torneo_ID = v.Torneo_ID
+     WHERE p.ID = NEW.Partido_ID
+       AND v.Jugador_Perfil_ID = NEW.Jugador_Perfil_ID
+       AND v.Equipo_ID IN (p.EQUIPOS_ID_LOCAL, p.EQUIPOS_ID_VISITANTE)
+     LIMIT 1;
+
+    -- Perfil ajeno a los dos equipos: no es este trigger el que lo rechaza
+    -- (el service ya lo valida antes con un mensaje específico) — defensa
+    -- en profundidad sin duplicar ese mensaje acá.
+    IF v_equipo_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT COALESCE(t.Maximo_Titulares_Permitido, m.Tamano_Equipo) INTO v_maximo
+      FROM PARTIDOS p
+      JOIN TORNEO t ON t.ID = p.Torneo_ID
+      JOIN MODALIDAD m ON m.ID = t.Modalidad_ID
+     WHERE p.ID = NEW.Partido_ID;
+
+    SELECT COUNT(*) INTO v_actuales
+      FROM CONVOCADO_A_PARTIDO c
+      JOIN vw_jugadores_activos_por_equipo v2 ON v2.Jugador_Perfil_ID = c.Jugador_Perfil_ID
+      JOIN PARTIDOS p2 ON p2.ID = c.Partido_ID AND p2.Torneo_ID = v2.Torneo_ID
+     WHERE c.Partido_ID = NEW.Partido_ID
+       AND c.Titular = TRUE
+       AND v2.Equipo_ID = v_equipo_id
+       AND c.ID <> COALESCE(NEW.ID, -1);
+
+    IF v_actuales >= v_maximo THEN
+        RAISE EXCEPTION 'Ya hay % titular(es) marcado(s) para este equipo — el máximo permitido es %.',
+            v_actuales, v_maximo;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_convocado_validar_tope_titulares
+BEFORE INSERT OR UPDATE OF Titular ON CONVOCADO_A_PARTIDO
+FOR EACH ROW EXECUTE FUNCTION fn_validar_tope_titulares();
+
 -- JUGADOR_PERFIL_DISCIPLINA también tiene Fecha_Modificacion.
 -- DISCIPLINA, MODALIDAD y TRASPASOS no la tienen (ver 01_schema.sql), así
 -- que no llevan este trigger.

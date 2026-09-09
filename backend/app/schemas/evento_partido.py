@@ -12,13 +12,21 @@ class EventoPartidoCreate(BaseModel):
     equipo_id: int
     eventos_id: int
     jugador_id_entra: int | None = None
-    minuto: int
+    # Opcional desde modo-vivo-sustituciones-cierre-plan.md, Área 3 (T3/T22):
+    # `EventoPartidoService.create()` solo se usa para el camino EN VIVO
+    # (`_verificar_partido_en_curso` lo exige), así que el minuto se calcula
+    # SIEMPRE server-side desde el cronómetro (app/services/minuto_partido.py)
+    # — lo que mande el cliente acá se ignora, nunca se confía en él (Sección
+    # 3 del plan: "minuto falsificable por el cliente"). Sigue siendo un
+    # campo del schema (no se borra) para no romper a un cliente viejo que
+    # todavía lo manda; queda opcional para que uno nuevo pueda omitirlo.
+    minuto: int | None = None
 
     @field_validator("minuto")
     @classmethod
-    def minuto_en_rango(cls, v: int) -> int:
+    def minuto_en_rango(cls, v: int | None) -> int | None:
         # chk_eventos_partido_minuto: 0..130 (120' de prórroga + descuento)
-        if not (0 <= v <= 130):
+        if v is not None and not (0 <= v <= 130):
             raise ValueError("minuto debe estar entre 0 y 130.")
         return v
 

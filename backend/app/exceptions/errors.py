@@ -66,6 +66,26 @@ class LicenseRevokedError(ForbiddenError):
         super().__init__(detail)
 
 
+class PreconditionFailedError(Exception):
+    """Conflicto de concurrencia optimista: el recurso cambió entre el GET y el
+    PUT (gestionar-partido-alineaciones-plan.md, H3-eng).
+
+    412 y no 409 a propósito. `handlers.py` ya mapea TODO `IntegrityError` a
+    409, así que un 409 nuevo sería indistinguible para el cliente de una
+    violación de unicidad — y en la convocatoria las dos cosas pasan en el mismo
+    endpoint (`unique_convocado_partido` choca con el doble-tap). El frontend
+    necesita separarlas: una se resuelve mostrando el diff al operador, la otra
+    es un reintento.
+
+    `estado_actual` viaja en el body para que el cliente pueda mostrar QUÉ
+    cambió sin pedir otro GET."""
+
+    def __init__(self, detail: str, estado_actual: list | None = None):
+        self.detail = detail
+        self.estado_actual = estado_actual or []
+        super().__init__(self.detail)
+
+
 class RateLimitError(Exception):
     """3B-14 (docs/plans/cierre-backlog-todos-plan.md): demasiados intentos
     de login fallidos en la ventana reciente. Distinta de AuthError (401)

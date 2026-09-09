@@ -21,6 +21,38 @@ class HitoPartidoRepository(BaseRepository[HitoPartido]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def ultimo_hito(self, partido_id: int) -> HitoPartido | None:
+        """El Hito más reciente (ID descendente = orden de inserción =
+        cronológico real, ver listar_por_partido) de este partido — usado
+        por HitoPartidoService.deshacer_fin_forzado (T17) para confirmar
+        que lo último que pasó en el partido es EXACTAMENTE el cierre
+        forzado que se quiere deshacer, no un Hito posterior."""
+        stmt = (
+            select(HitoPartido)
+            .where(HitoPartido.partido_id == partido_id)
+            .order_by(HitoPartido.id.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
+    async def existe_inicio_partido(self, partido_id: int) -> bool:
+        """¿Este partido ya arrancó? (gestionar-partido-alineaciones-plan.md, C5)
+
+        Es la señal que gobierna qué se puede editar de la convocatoria, y NO
+        `PARTIDOS.Estado`: `PATCH /partidos/{id}` acepta `estado` sin validar
+        transiciones, así que un cliente podría hacer
+        `PATCH {estado:"Programado"}` -> operación prohibida ->
+        `PATCH {estado:"En curso"}` y saltear el gate entero. Un HITOS_PARTIDO
+        es append-only: ningún PATCH lo revierte."""
+        stmt = (
+            select(HitoPartido.id)
+            .where(HitoPartido.partido_id == partido_id, HitoPartido.tipo_hito == "Inicio_Partido")
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first() is not None
+
     async def existe_inicio_desde(self, equipo_id: int, desde: datetime) -> bool:
         """Anular un traspaso (fixes-datos-traspasos-control-mesa-plan.md):
         ¿el equipo ya arrancó (Inicio_Partido) algún partido, local o

@@ -42,7 +42,21 @@ BEGIN
 END $$;
 
 -- Mismo texto que la versión final en 04_views.sql.
-CREATE OR REPLACE VIEW vw_jugadores_activos_por_equipo AS
+--
+-- DROP + CREATE, no CREATE OR REPLACE: sobre `torneos_mvp` la vista ya
+-- existe SIN Jugador_Perfil_ID, y la columna nueva entra en el MEDIO de la
+-- lista (entre Jugador y Dorsal). CREATE OR REPLACE VIEW solo admite
+-- agregar columnas AL FINAL — en una base ya provisionada aborta con
+-- "no se puede cambiar el nombre de la columna dorsal a jugador_perfil_id"
+-- y se lleva puesta la transacción entera, incluido el CREATE TABLE de
+-- arriba. Los tests no lo veían: test_scripts_sql.py corre los scripts
+-- sobre una base recién armada con 01-06, donde la vista YA tiene la forma
+-- final y el REPLACE es un no-op.
+--
+-- Sin dependientes (ninguna otra vista la referencia), así que el DROP no
+-- necesita CASCADE y sigue siendo re-ejecutable.
+DROP VIEW IF EXISTS vw_jugadores_activos_por_equipo;
+CREATE VIEW vw_jugadores_activos_por_equipo AS
 SELECT
     e.ID       AS Equipo_ID,
     e.Nombre   AS Equipo,

@@ -487,8 +487,17 @@ td:first-child {
  * convocado + titular al lado. */
 .convocatoria-equipos {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 1rem;
+}
+
+/* Dos equipos lado a lado recién en 1000px. En 800px darían ~380px cada uno,
+   que es casi el ancho de un celular: se reintroduciría el problema que el
+   selector de equipo viene a resolver. */
+@media (min-width: 1000px) {
+  .convocatoria-equipos {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .convocatoria-lista {
@@ -640,6 +649,73 @@ td:first-child {
   gap: 0.5rem;
   justify-content: center;
   padding: 0.4rem 0;
+}
+
+/* Área 4 (modo-vivo-sustituciones-cierre-plan.md, T6/T9/T11) — "Fin de
+   Partido forzado" es una acción destructiva/de emergencia: se distingue
+   visualmente del flujo normal de cierre (botones .cronometro__acciones,
+   color --accent) para que nunca se confunda con un cierre de rutina
+   (Design Fase 2, Sección 11 de Fase 1 del plan). */
+.boton-cierre-forzado {
+  display: block;
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: var(--radius);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.boton-cierre-forzado:hover {
+  background: rgba(239, 106, 106, 0.1);
+}
+
+.cierre-forzado-confirmar {
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: rgba(239, 106, 106, 0.06);
+}
+
+.cierre-forzado-confirmar__titulo {
+  font-weight: 600;
+  margin: 0 0 0.6rem;
+}
+
+.tap-button--activo {
+  outline: 2px solid var(--accent);
+}
+
+/* Banner de deshacer (T11/T25) — alto contraste, siempre lo primero del
+   cronómetro mientras la ventana está abierta (Design Fase 2, Pass 3):
+   `aria-live="assertive"` en el JSX, foco visual acá vía color/borde. */
+.banner-deshacer-cierre {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--danger);
+  color: #2a0a0a;
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+
+.banner-deshacer-cierre button {
+  background: #2a0a0a;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .hito-historial {
@@ -1307,4 +1383,264 @@ td:first-child {
 
 .boton-empezar-partido__detalle {
   font-size: 0.75rem;
+}
+
+
+/* ============================================================
+   "Gestionar Partido" — vista inmersiva de alineaciones
+   (docs/plans/gestionar-partido-alineaciones-plan.md)
+   Sin tokens nuevos: todo con las variables ya definidas arriba.
+   ============================================================ */
+
+.gestionar-partido__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.gestionar-partido__header h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.gestionar-partido__header p {
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+}
+
+/* Banda de modo: sin una señal persistente el operador no sabe si el reloj
+   corre, y edita creyendo que no afecta nada. */
+.banda-en-curso {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-alt);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.selector-equipo {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  /* Sin swipe entre pestañas: son botones, no un carrusel. Si se agregara,
+     competiría con el gesto de "atrás" del sistema desde el borde izquierdo. */
+  overscroll-behavior-x: contain;
+}
+
+.selector-equipo__tab {
+  flex: 1;
+  min-height: 48px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.selector-equipo__tab--activo {
+  border-color: var(--accent);
+  background: var(--surface-alt);
+  font-weight: 600;
+}
+
+.alineacion-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.alineacion-paso1 {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+}
+
+/* Altura acotada con scroll interno: es lo que mantiene los DOS encabezados y
+   los bordes de ambas zonas siempre en pantalla. Sin esto, con un plantel de 14
+   la zona destino queda fuera del viewport en la mayoría de los movimientos. */
+.alineacion-zona {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.alineacion-zona--activa {
+  border-color: var(--accent);
+}
+
+.alineacion-zona__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.alineacion-zona__header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+/* El contador no usa --text-muted: es información crítica, no secundaria. Y no
+   se apoya solo en el color — el texto dice "faltan N". */
+.alineacion-contador {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.alineacion-contador--falta {
+  color: var(--warning);
+}
+
+/* Área 3 (modo-vivo-sustituciones-cierre-plan.md, T4/T9) — alineación en
+   vivo de MesaPanel: dos columnas espejadas por equipo, mismo patrón que
+   AlineacionEditor (Titulares/Suplentes lado a lado, Design Fase 2 Pass 4:
+   "cita explícita para no repetir una afirmación de diseño sin
+   archivo:línea"). */
+.alineacion-en-vivo__equipos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .alineacion-en-vivo__equipos {
+    grid-template-columns: 1fr;
+  }
+}
+
+.alineacion-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.alineacion-fila {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 56px;
+  padding: 0 0.5rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.alineacion-fila--arrastrando {
+  opacity: 0.85;
+  border-color: var(--accent);
+}
+
+.alineacion-fila__nombre {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Manija solo donde hay arrastre (>=1000px): en el celular ese ancho se dedica
+   al nombre y al botón, que es lo que el operador realmente usa. */
+.alineacion-fila__manija {
+  display: none;
+  cursor: grab;
+  color: var(--text-muted);
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (min-width: 1000px) {
+  .alineacion-fila__manija {
+    display: flex;
+  }
+}
+
+/* Clase propia y no .tap-button: ese es flex-column con padding de 1rem y
+   min-height 64px, pensado para el grid de eventos — metido inline en una fila
+   de 56px quedaría un bloque de ~140px de ancho. */
+.alineacion-fila__mover {
+  width: 56px;
+  min-height: 44px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.gestionar-partido__acciones {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: var(--surface);
+  /* border-top: sin esto, --surface sobre --bg casi no se distingue y la barra
+     flota sin límite sobre la lista que scrollea por debajo. */
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  /* safe-area: sin esto el indicador de home de iOS se come el borde inferior
+     del botón y la zona táctil real cae por debajo de 44px. */
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  margin-top: 1rem;
+}
+
+.gestionar-partido__acciones p {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+@media (min-width: 1000px) {
+  .gestionar-partido__acciones {
+    position: static;
+  }
+}
+
+.gestionar-partido__otras {
+  margin-top: 1rem;
+}
+
+.gestionar-partido__otras summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+/* Solo para lectores de pantalla: la región aria-live que anuncia los
+   movimientos. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alineacion-fila,
+  .alineacion-zona {
+    transition: none !important;
+  }
 }

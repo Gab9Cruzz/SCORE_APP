@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { api } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
-import { MesaPanel } from "../ControlDeMesa";
+import { useNavigate } from "react-router-dom";
 
 /** Landing del módulo Árbitro (roles-3-modulos-plan.md, Fase 3).
  *
@@ -16,7 +15,7 @@ import { MesaPanel } from "../ControlDeMesa";
  */
 export function MisPartidosPage() {
   const { session } = useAuth();
-  const [partidoId, setPartidoId] = useState<number | null>(null);
+  const navigate = useNavigate();
 
   const partidosQuery = useQuery({
     queryKey: ["mis-partidos", session?.id],
@@ -37,10 +36,6 @@ export function MisPartidosPage() {
     (p) => p.estado === "Programado" || p.estado === "En curso",
   );
 
-  if (partidoId !== null) {
-    return <MesaPanel partidoId={partidoId} onVolver={() => setPartidoId(null)} />;
-  }
-
   return (
     <div className="page">
       <h1>Mis partidos</h1>
@@ -57,7 +52,7 @@ export function MisPartidosPage() {
       <ul className="partidos-list partidos-list--tappable">
         {activos.map((p) => (
           <li key={p.id}>
-            <button type="button" onClick={() => setPartidoId(p.id)}>
+            <button type="button" onClick={() => navigate(`/control-de-mesa/partido/${p.id}`)}>
               <span className="badge">{p.estado}</span>
               Partido #{p.id} ·{" "}
               {new Date(p.fecha_partido).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}

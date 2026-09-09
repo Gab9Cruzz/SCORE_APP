@@ -45,6 +45,10 @@ SCRIPTS_VIGENTES = [
     "23_migracion_archivar_torneo_grupo.sql",
     "24_migracion_limites_y_walkover.sql",
     "25_migracion_convocados.sql",
+    "27_migracion_minimo_titulares.sql",
+    "28_migracion_reglas_cambio.sql",
+    "29_migracion_maximo_titulares.sql",
+    "30_migracion_fin_forzado.sql",
 ]
 
 DB_SCRIPTS = "torneos_mvp_scripts_test"

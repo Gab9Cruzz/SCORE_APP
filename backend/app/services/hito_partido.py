@@ -1,8 +1,11 @@
+from datetime import datetime, timedelta
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import DomainRuleError
 from app.models.configuracion_tiempo_torneo import ConfiguracionTiempoTorneo
 from app.models.hito_partido import HitoPartido
+from app.models.modalidad import Modalidad
 from app.models.partido import Partido
 from app.models.torneo import Torneo
 from app.models.usuario import Usuario
@@ -16,8 +19,23 @@ from app.repositories.modalidad import ModalidadRepository
 from app.repositories.partido import PartidoRepository
 from app.repositories.torneo import TorneoRepository
 from app.repositories.torneo_grupo import TorneoGrupoRepository
-from app.schemas.hito_partido import EstadoCronometroOut, HitoPartidoCreate, HitoPartidoOut, HitoPartidoUpdate
+from app.schemas.hito_partido import (
+    DeshacerCierreForzadoOut,
+    EstadoCronometroOut,
+    HitoPartidoCreate,
+    HitoPartidoOut,
+    HitoPartidoUpdate,
+    PreflightInicioOut,
+    TitularesEquipoOut,
+)
 from app.services.permisos import verificar_arbitro_asignado
+
+# Área 4 (T6/T17): ventana de deshacer del cierre forzado, real y
+# autoritativa en el SERVIDOR (Eng Fase 3, corrección de diseño — ver
+# HitoPartidoService._registrar_fin_forzado). Constante de módulo porque la
+# usan tanto el registro (calcula deshacer_disponible_hasta) como el
+# deshacer (valida contra ella).
+VENTANA_DESHACER_SEGUNDOS = 5
 
 
 class HitoPartidoService:
@@ -136,19 +154,98 @@ class HitoPartidoService:
         if grupo.estado == "Archivado":
             raise DomainRuleError("Este torneo está archivado — reactivalo antes de operar sus partidos.")
 
+    @staticmethod
+    def _minimo_requerido(torneo: Torneo, modalidad: Modalidad) -> int:
+        """Cuántos titulares por equipo exige "Empezar Partido"
+        (gestionar-partido-alineaciones-plan.md, D1).
+
+        `Torneo.minimo_jugadores_para_iniciar` en NULL significa "exigir el
+        equipo completo", que es el comportamiento previo a esta columna — por
+        eso la migración no necesita backfill: una base que no configura nada se
+        comporta exactamente igual que antes.
+
+        Un `or` alcanza porque chk_torneo_minimo_iniciar prohíbe el 0, así que
+        no hay valor falsy legítimo que se confunda con NULL.
+        """
+        return torneo.minimo_jugadores_para_iniciar or modalidad.tamano_equipo
+
+    @staticmethod
+    def _maximo_permitido(torneo: Torneo, modalidad: Modalidad) -> int:
+        """Tope SUPERIOR de titulares por equipo (modo-vivo-sustituciones-
+        cierre-plan.md, Área 1, T2/T18) — espejo exacto de
+        `_minimo_requerido`. `Torneo.maximo_titulares_permitido` en NULL
+        significa "usar el tamaño de la modalidad", que es también el
+        techo que valida TorneoService al guardar ese campo — por eso un
+        `or` alcanza acá (no hay 0 legítimo, chk_torneo_maximo_titulares lo
+        prohíbe)."""
+        return torneo.maximo_titulares_permitido or modalidad.tamano_equipo
+
+    async def _contar_titulares(self, partido: Partido, torneo: Torneo) -> tuple[int, list[dict]]:
+        """Cuántos titulares válidos tiene cada equipo y cuántos hacen falta.
+
+        Extraído de `_validar_titulares` para que el preflight
+        (gestionar-partido-alineaciones-plan.md, H1-eng) publique EXACTAMENTE
+        el mismo veredicto que después va a aplicar el gate de arranque. Si
+        esto se duplicara, el botón del frontend prometería lo que el backend
+        rechaza — que es el problema que C1 del plan viene a cerrar.
+
+        Un `ConvocadoAPartido.titular=True` de un jugador que ya no está en el
+        roster activo del equipo (dado de baja después de convocarlo) no
+        cuenta: se intersecta contra el roster vigente, no se confía en la
+        convocatoria sola.
+
+        Devuelve `(requeridos, [{equipo_id, nombre, titulares}])`.
+        """
+        modalidad = await self.modalidad_repo.get_or_404(torneo.modalidad_id)
+        requeridos = self._minimo_requerido(torneo, modalidad)
+
+        convocados = await self.convocado_repo.listar_por_partido(partido.id)
+        titulares_convocados = {c.jugador_perfil_id for c in convocados if c.titular}
+
+        por_equipo: list[dict] = []
+        for equipo_id in (partido.equipos_id_local, partido.equipos_id_visitante):
+            inscripciones = await self.inscripcion_repo.list(torneo_id=torneo.id, equipo_id=equipo_id, limit=1)
+            if inscripciones:
+                roster_activo = await self.jugador_equipo_repo.list(
+                    inscripcion_torneo_id=inscripciones[0].id, estado="Activo", limit=10_000
+                )
+                perfiles_roster = {j.jugador_perfil_id for j in roster_activo}
+                n = len(titulares_convocados & perfiles_roster)
+            else:
+                # No debería pasar (P12: todo Partido con equipo_id sale de
+                # una inscripción real) — se trata como 0 titulares, no
+                # como un 500 sin explicación.
+                n = 0
+            equipo = await self.equipo_repo.get_or_404(equipo_id)
+            por_equipo.append({"equipo_id": equipo_id, "nombre": equipo.nombre, "titulares": n})
+
+        return requeridos, por_equipo
+
+    def _motivo_faltan_titulares(self, torneo: Torneo, requeridos: int, fila: dict) -> str:
+        titular_plural = "es" if fila["titulares"] != 1 else ""
+        marcado_plural = "s" if fila["titulares"] != 1 else ""
+        # El texto distingue de dónde sale el número: si el torneo tiene un
+        # mínimo propio, decir "esta modalidad exige N" sería mentira (la
+        # modalidad puede exigir más).
+        origen = (
+            "el reglamento de este torneo exige"
+            if torneo.minimo_jugadores_para_iniciar
+            else "esta modalidad exige"
+        )
+        return (
+            f"{fila['nombre']} tiene {fila['titulares']} titular{titular_plural} "
+            f"marcado{marcado_plural}, {origen} {requeridos}. "
+            "Definí la convocatoria antes de empezar el partido."
+        )
+
     async def _validar_titulares(self, partido: Partido, torneo: Torneo) -> None:
         """B.2 (fixes-datos-traspasos-control-mesa-plan.md, D4/P10): antes
         de esto, "Empezar Partido" no validaba nada de la convocatoria — el
         partido arrancaba aunque nadie hubiera tocado "Convocados".
 
-        `Modalidad.tamano_equipo` ya significa "cuántos juegan a la vez"
-        (P11 del plan, mismo sentido que usa RegistroLoteService para el
-        cupo) — es la fuente de verdad de cuántos titulares exige esta
-        modalidad, sin inventar un catálogo nuevo de reglas por disciplina.
-        Un `ConvocadoAPartido.titular=True` de un jugador que ya no está en
-        el roster activo del equipo (dado de baja después de convocarlo) no
-        cuenta — se intersecta contra el roster vigente, no se confía en la
-        convocatoria sola.
+        Cuántos titulares exige sale de `_minimo_requerido` (el mínimo del
+        torneo si lo tiene, si no `Modalidad.tamano_equipo`), y el conteo de
+        `_contar_titulares`, compartido con el preflight.
 
         `torneo` llega ya resuelto por `registrar()` (cascada-archivado-
         alineaciones-traspasos-plan.md, P7) — evita pedirlo dos veces junto
@@ -163,40 +260,94 @@ class HitoPartidoService:
                 "el partido anterior del bracket."
             )
 
+        requeridos, por_equipo = await self._contar_titulares(partido, torneo)
+        for fila in por_equipo:
+            if fila["titulares"] < requeridos:
+                raise DomainRuleError(self._motivo_faltan_titulares(torneo, requeridos, fila))
+
+    async def preflight_inicio(self, partido_id: int) -> PreflightInicioOut:
+        """¿Se puede tocar "Empezar Partido"? — el veredicto que consume el
+        frontend (gestionar-partido-alineaciones-plan.md, H1-eng).
+
+        Endpoint propio y AUTENTICADO en vez de campos nuevos en
+        `GET /partidos/{id}/cronometro`: ese es público sin auth y lo pollean
+        cada 5 segundos `Cronometro.tsx` y `PartidoEnVivo.tsx` de forma
+        anónima. Meterle este cálculo (~7 queries, con un `list(limit=10_000)`
+        de roster por equipo) lo convertiría en el endpoint más caro del
+        sistema, sin autenticación de por medio.
+
+        Reusa `_contar_titulares` y `_validar_torneo_no_archivado` para que el
+        veredicto publicado sea el mismo que aplica `registrar()` — si
+        divergieran, el botón se habilitaría y el POST devolvería 400 (M5-eng).
+        """
+        partido = await self.partido_repo.get_or_404(partido_id)
+        torneo = await self.torneo_repo.get_or_404(partido.torneo_id)
         modalidad = await self.modalidad_repo.get_or_404(torneo.modalidad_id)
-        requeridos = modalidad.tamano_equipo
 
-        convocados = await self.convocado_repo.listar_por_partido(partido.id)
-        titulares_convocados = {c.jugador_perfil_id for c in convocados if c.titular}
+        ya_inicio = await self.repo.existe_inicio_partido(partido_id)
+        if ya_inicio:
+            # Una vez arrancado, "puede iniciar" no significa nada. Se devuelve
+            # el mínimo (la UI lo sigue mostrando como referencia) pero no se
+            # recalcula el roster: es el caso que más se consulta y el más caro.
+            return PreflightInicioOut(
+                minimo_para_iniciar=self._minimo_requerido(torneo, modalidad),
+                maximo_titulares=self._maximo_permitido(torneo, modalidad),
+                titulares_por_equipo=[],
+                puede_iniciar=False,
+                motivo_bloqueo="El partido ya arrancó.",
+                partido_iniciado=True,
+            )
 
-        for equipo_id in (partido.equipos_id_local, partido.equipos_id_visitante):
-            inscripciones = await self.inscripcion_repo.list(torneo_id=torneo.id, equipo_id=equipo_id, limit=1)
-            if inscripciones:
-                roster_activo = await self.jugador_equipo_repo.list(
-                    inscripcion_torneo_id=inscripciones[0].id, estado="Activo", limit=10_000
-                )
-                perfiles_roster = {j.jugador_perfil_id for j in roster_activo}
-                n = len(titulares_convocados & perfiles_roster)
-            else:
-                # No debería pasar (P12: todo Partido con equipo_id sale de
-                # una inscripción real) — se trata como 0 titulares, no
-                # como un 500 sin explicación.
-                n = 0
+        if partido.equipos_id_local is None or partido.equipos_id_visitante is None:
+            return PreflightInicioOut(
+                minimo_para_iniciar=self._minimo_requerido(torneo, modalidad),
+                maximo_titulares=self._maximo_permitido(torneo, modalidad),
+                titulares_por_equipo=[],
+                puede_iniciar=False,
+                motivo_bloqueo=(
+                    "Este partido todavía no tiene los dos equipos definidos — esperá a que termine "
+                    "el partido anterior del bracket."
+                ),
+                partido_iniciado=False,
+            )
 
-            if n < requeridos:
-                equipo = await self.equipo_repo.get_or_404(equipo_id)
-                titular_plural = "es" if n != 1 else ""
-                marcado_plural = "s" if n != 1 else ""
-                raise DomainRuleError(
-                    f"{equipo.nombre} tiene {n} titular{titular_plural} marcado{marcado_plural}, esta "
-                    f"modalidad exige {requeridos}. Definí la convocatoria antes de empezar el partido."
-                )
+        try:
+            await self._validar_torneo_no_archivado(torneo)
+        except DomainRuleError as exc:
+            return PreflightInicioOut(
+                minimo_para_iniciar=self._minimo_requerido(torneo, modalidad),
+                maximo_titulares=self._maximo_permitido(torneo, modalidad),
+                titulares_por_equipo=[],
+                puede_iniciar=False,
+                motivo_bloqueo=str(exc),
+                partido_iniciado=False,
+            )
+
+        requeridos, por_equipo = await self._contar_titulares(partido, torneo)
+        faltantes = [f for f in por_equipo if f["titulares"] < requeridos]
+        motivo = self._motivo_faltan_titulares(torneo, requeridos, faltantes[0]) if faltantes else None
+
+        return PreflightInicioOut(
+            minimo_para_iniciar=requeridos,
+            maximo_titulares=self._maximo_permitido(torneo, modalidad),
+            titulares_por_equipo=[TitularesEquipoOut(**f) for f in por_equipo],
+            puede_iniciar=not faltantes,
+            motivo_bloqueo=motivo,
+            partido_iniciado=False,
+        )
 
     async def registrar(self, partido_id: int, data: HitoPartidoCreate, usuario_actual: Usuario) -> HitoPartidoOut:
         partido, config, hitos = await self._cargar_contexto(partido_id)
         verificar_arbitro_asignado(partido, usuario_actual)
 
         estado = self._calcular_estado(hitos, config)
+
+        if data.forzado:
+            # Área 4 (T6): reusa este mismo endpoint (mismo Hito terminal,
+            # mismo trigger de sincronización) en vez de un segundo camino
+            # de escritura — ver _registrar_fin_forzado.
+            return await self._registrar_fin_forzado(partido, config, estado, data, usuario_actual)
+
         if data.tipo_hito not in estado["acciones_permitidas"]:
             raise DomainRuleError(
                 f"No se puede registrar '{data.tipo_hito}' en el estado actual del partido "
@@ -238,6 +389,148 @@ class HitoPartidoService:
             registrado_por=usuario_actual.id,
         )
         return HitoPartidoOut.model_validate(hito)
+
+    async def _registrar_fin_forzado(
+        self,
+        partido: Partido,
+        config: ConfiguracionTiempoTorneo,
+        estado: dict,
+        data: HitoPartidoCreate,
+        usuario_actual: Usuario,
+    ) -> HitoPartidoOut:
+        """Área 4 (T6): "Fin de Partido forzado" — override global,
+        permitido desde CUALQUIER `acciones_permitidas` (a diferencia del
+        Fin_Partido normal, gateado por `_calcular_estado`) mientras el
+        partido esté iniciado y no finalizado. El único estado "imposible"
+        que se sigue rechazando: doble Fin_Partido (normal+forzado, o
+        forzado dos veces) — `estado["partido_finalizado"]` lo corta acá en
+        el caso no-concurrente; el índice único parcial
+        `uq_hitos_partido_fin_unico` (T15, 03_indexes.sql) es la defensa de
+        fondo contra 2 requests concurrentes (TOCTOU).
+
+        Corrección de diseño de Eng Fase 3 (supera la decisión inicial de
+        "commit diferido 100% cliente" de la Fase 1): el Hito se inserta DE
+        INMEDIATO — dispara la misma cascada que un cierre normal
+        (`trg_hito_sincroniza_estado`, `fn_propagar_ganador_bracket`) en la
+        misma transacción. La ventana de 5s que ve el operador es una
+        ventana de DESHACER real y autoritativa en el SERVIDOR (ver
+        `deshacer_fin_forzado`), no un envío retrasado: así el cierre queda
+        firme aunque el dispositivo del operador se apague en medio de la
+        ventana — exactamente el escenario (clima, incidente) que esta
+        feature dice cubrir, y que un commit diferido del lado del cliente
+        NO protegía (el partido nunca se cerraba si el dispositivo fallaba
+        antes de los 5s)."""
+        if not estado["partido_iniciado"]:
+            raise DomainRuleError("El partido todavía no arrancó — no se puede forzar el cierre.")
+        if estado["partido_finalizado"]:
+            raise DomainRuleError("El partido ya está finalizado.")
+
+        if config.tipo_cronometro == "Corrido":
+            # Mismo requisito que un Fin_Partido normal de un torneo
+            # Corrido (Tenis/Pádel): fn_validar_ganador_corrido (BEFORE
+            # UPDATE en PARTIDOS) exige Ganador_Corrido_ID no-NULL en el
+            # mismo UPDATE que este Hito va a disparar hacia
+            # Estado='Finalizado' — un cierre forzado no es una excepción
+            # a esa integridad de datos, solo salta el gate de
+            # `acciones_permitidas`. El frontend reusa el mismo paso
+            # "¿Quién ganó?" que ya tiene para el cierre normal.
+            if data.ganador_corrido_id is None:
+                raise DomainRuleError(
+                    "Un partido Corrido necesita el ganador para finalizar, incluso en un cierre forzado."
+                )
+            if data.ganador_corrido_id not in (partido.equipos_id_local, partido.equipos_id_visitante):
+                raise DomainRuleError("El ganador debe ser uno de los dos equipos que disputan el partido.")
+            partido = await self.partido_repo.save_changes(partido, ganador_corrido_id=data.ganador_corrido_id)
+
+        hito = await self.repo.create(
+            partido_id=partido.id,
+            tipo_hito="Fin_Partido",
+            numero_periodo=None,
+            minuto_reloj=data.minuto_reloj,
+            registrado_por=usuario_actual.id,
+            forzado=True,
+            motivo_cierre=data.motivo_cierre,
+            motivo_cierre_detalle=data.motivo_cierre_detalle,
+        )
+        salida = HitoPartidoOut.model_validate(hito)
+        salida.deshacer_disponible_hasta = hito.timestamp_real + timedelta(seconds=VENTANA_DESHACER_SEGUNDOS)
+        return salida
+
+    async def deshacer_fin_forzado(self, partido_id: int, usuario_actual: Usuario) -> DeshacerCierreForzadoOut:
+        """POST /partidos/{id}/deshacer-cierre-forzado (T17) — reversión
+        atómica de un Fin_Partido forzado, solo dentro de la ventana de
+        `VENTANA_DESHACER_SEGUNDOS` contada desde el SERVIDOR (nunca
+        confiando en el reloj/timer del cliente — Design Fase 2 solo
+        resolvía el caso de navegar DENTRO de la app; esto cierra el caso
+        real: el dispositivo deja de responder).
+
+        Tres guardas, en orden (Sección 4/Registro de Modos de Falla de la
+        Fase 3):
+          1. El último Hito de este partido tiene que ser el Fin_Partido
+             forzado que se quiere deshacer — no se puede deshacer "el
+             cierre de hace 3 partidos" ni uno normal (no forzado).
+          2. La ventana server-side no expiró.
+          3. Si hubo propagación de bracket (Partido_Siguiente_ID /
+             Partido_Perdedor_Siguiente_ID), el próximo partido todavía no
+             tiene ningún Hito propio — si el rival ya empezó a operarlo,
+             deshacer acá dejaría datos huérfanos del otro lado.
+
+        Revierte en una sola transacción: borra el Hito, recalcula
+        `PARTIDOS.Estado` desde los Hitos que quedan (reusa
+        `_calcular_estado` — nunca un valor hardcodeado, mismo principio
+        que el resto del servicio) y limpia el slot que la propagación
+        hubiera escrito en el/los partido(s) siguientes."""
+        partido = await self.partido_repo.get_or_404(partido_id)
+        verificar_arbitro_asignado(partido, usuario_actual)
+
+        ultimo = await self.repo.ultimo_hito(partido_id)
+        if ultimo is None or ultimo.tipo_hito != "Fin_Partido" or not ultimo.forzado:
+            raise DomainRuleError("No hay un cierre forzado reciente para deshacer en este partido.")
+
+        limite = ultimo.timestamp_real + timedelta(seconds=VENTANA_DESHACER_SEGUNDOS)
+        if datetime.now() > limite:
+            raise DomainRuleError("La ventana para deshacer este cierre ya expiró.")
+
+        for siguiente_id in (partido.partido_siguiente_id, partido.partido_perdedor_siguiente_id):
+            if siguiente_id is None:
+                continue
+            hitos_siguiente = await self.repo.listar_por_partido(siguiente_id)
+            if hitos_siguiente:
+                raise DomainRuleError(
+                    "Ya no se puede deshacer: el próximo partido del bracket ya tiene actividad propia."
+                )
+
+        # Revierte la propagación ANTES de borrar el Hito (mismo criterio de
+        # orden que registrar_resultado_directo: cada paso con flush(),
+        # commit único al final — si algo falla acá, nada de esto queda a
+        # medias). Solo limpia el slot que ESTE partido pudo haber escrito
+        # — nunca toca el otro slot del partido siguiente (el que llena la
+        # otra rama del bracket).
+        if partido.partido_siguiente_id is not None:
+            siguiente = await self.partido_repo.get_or_404(partido.partido_siguiente_id)
+            if partido.slot_siguiente == "Local":
+                siguiente.equipos_id_local = None
+            elif partido.slot_siguiente == "Visitante":
+                siguiente.equipos_id_visitante = None
+        if partido.partido_perdedor_siguiente_id is not None:
+            perdedor_siguiente = await self.partido_repo.get_or_404(partido.partido_perdedor_siguiente_id)
+            if partido.slot_perdedor_siguiente == "Local":
+                perdedor_siguiente.equipos_id_local = None
+            elif partido.slot_perdedor_siguiente == "Visitante":
+                perdedor_siguiente.equipos_id_visitante = None
+        await self.session.flush()
+
+        await self.session.delete(ultimo)
+        await self.session.flush()
+
+        hitos_restantes = await self.repo.listar_por_partido(partido_id)
+        config = await self.config_repo.get_by_torneo(partido.torneo_id)
+        estado = self._calcular_estado(hitos_restantes, config)
+        partido.estado = "Finalizado" if estado["partido_finalizado"] else "En curso"
+        await self.session.commit()
+        await self.session.refresh(partido)
+
+        return DeshacerCierreForzadoOut(partido_id=partido.id, estado=partido.estado)
 
     async def corregir(
         self, partido_id: int, hito_id: int, data: HitoPartidoUpdate, usuario_actual: Usuario

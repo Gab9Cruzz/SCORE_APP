@@ -818,6 +818,59 @@ export interface paths {
         patch: operations["corregir_hito_partido_api_v1_partidos__partido_id__hitos__hito_id__patch"];
         trace?: never;
     };
+    "/api/v1/partidos/{partido_id}/deshacer-cierre-forzado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deshacer Cierre Forzado
+         * @description Área 4 (T17) — deshace un "Fin de Partido forzado" reciente, solo
+         *     dentro de la ventana de gracia calculada server-side.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    partido_id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Successful Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DeshacerCierreForzadoOut"];
+                    };
+                };
+                /** @description Validation Error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTTPValidationError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/partidos/{partido_id}/convocados": {
         parameters: {
             query?: never;
@@ -834,6 +887,45 @@ export interface paths {
          *     convocatoria (vuelve a "toda la plantilla es candidata").
          */
         put: operations["definir_convocados_api_v1_partidos__partido_id__convocados_put"];
+        /**
+         * Agregar Convocado
+         * @description Suma UN convocado sin tocar el resto de la alineación
+         *     (gestionar-partido-alineaciones-plan.md, D3 revisada).
+         *
+         *     Es el camino de las llegadas tardías: a diferencia del PUT, que reescribe
+         *     la lista entera y solo se acepta antes del arranque, esto es aditivo y por
+         *     lo tanto funciona con el partido EN CURSO sin tocar el cronómetro ni el
+         *     `titular` de nadie. Idempotente ante un doble-tap.
+         */
+        post: operations["agregar_convocado_api_v1_partidos__partido_id__convocados_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partidos/{partido_id}/preflight-inicio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preflight Inicio Partido
+         * @description ¿Se puede tocar "Empezar Partido"? (H1-eng del plan).
+         *
+         *     Endpoint propio y AUTENTICADO en vez de campos nuevos en
+         *     `GET /partidos/{id}/cronometro`: ese es público sin auth y lo pollean cada
+         *     5 segundos `Cronometro.tsx` y `PartidoEnVivo.tsx` de forma anónima, así que
+         *     sumarle el cálculo de titulares (~7 queries, con un roster completo por
+         *     equipo) lo convertiría en el endpoint más caro del sistema.
+         *
+         *     El frontend NO reimplementa la regla: consume `puede_iniciar` y
+         *     `motivo_bloqueo`, que salen del mismo código que aplica el gate real.
+         */
+        get: operations["preflight_inicio_partido_api_v1_partidos__partido_id__preflight_inicio_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1354,7 +1446,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Plantilla Equipo */
+        /**
+         * Plantilla Equipo
+         * @description `torneo_id` acota al roster de ESE torneo
+         *     (gestionar-partido-alineaciones-plan.md, H2-eng). Sin él, un equipo
+         *     inscripto en dos torneos activos de la misma disciplina devuelve el mismo
+         *     `jugador_perfil_id` dos veces: rompe las keys de React en el editor de
+         *     alineación y deja convocar a un titular fantasma que
+         *     `fn_validar_jugador_partido` después rechaza. Opcional para no romper a
+         *     los callers que quieren la plantilla del equipo sin acotar (perfil del
+         *     jugador, estadísticas históricas).
+         */
         get: operations["plantilla_equipo_api_v1_estadisticas_equipos__equipo_id__plantilla_get"];
         put?: never;
         post?: never;
@@ -1573,6 +1675,28 @@ export interface components {
             mensaje: string;
         };
         /**
+         * ConvocadoAgregarRequest
+         * @description POST /partidos/{id}/convocados — suma UN convocado sin tocar el resto
+         *     (gestionar-partido-alineaciones-plan.md, D3 revisada).
+         *
+         *     Es el camino de las llegadas tardías, y por eso es un endpoint aparte del
+         *     PUT: al ser aditivo funciona con el partido en curso sin riesgo de pisar la
+         *     alineación ni de perder el trabajo de otro operador. Con el partido ya
+         *     iniciado, `titular` debe ser False — el que llega tarde entra al banco y
+         *     pasa a cancha vía el evento Cambio.
+         */
+        ConvocadoAgregarRequest: {
+            /** Jugador Perfil Id */
+            jugador_perfil_id: number;
+            /**
+             * Titular
+             * @default false
+             */
+            titular: boolean;
+            /** Minuto Ingreso */
+            minuto_ingreso?: number | null;
+        };
+        /**
          * ConvocadoInput
          * @description Una fila de la convocatoria que manda el frontend — ver
          *     ConvocatoriaSetRequest para el shape completo del PUT.
@@ -1601,6 +1725,12 @@ export interface components {
              * Format: date-time
              */
             fecha_registro: string;
+            /** Fecha Modificacion */
+            fecha_modificacion?: string | null;
+            /** Minuto Ingreso */
+            minuto_ingreso?: number | null;
+            /** Registrado Por */
+            registrado_por?: number | null;
         };
         /**
          * ConvocatoriaSetRequest
@@ -1615,6 +1745,8 @@ export interface components {
         ConvocatoriaSetRequest: {
             /** Convocados */
             convocados: components["schemas"]["ConvocadoInput"][];
+            /** Version */
+            version?: string | null;
         };
         /**
          * DisciplinaConModalidadesOut
@@ -1926,7 +2058,7 @@ export interface components {
             /** Jugador Id Entra */
             jugador_id_entra?: number | null;
             /** Minuto */
-            minuto: number;
+            minuto?: number | null;
         };
         /**
          * EventoPartidoMinutoUpdate
@@ -2114,6 +2246,15 @@ export interface components {
             minuto_reloj?: number | null;
             /** Ganador Corrido Id */
             ganador_corrido_id?: number | null;
+            /**
+             * Forzado
+             * @default false
+             */
+            forzado: boolean;
+            /** Motivo Cierre */
+            motivo_cierre?: ("Clima" | "Incidente" | "Lesion_Grave" | "Orden_Seguridad" | "Otro") | null;
+            /** Motivo Cierre Detalle */
+            motivo_cierre_detalle?: string | null;
         };
         /** HitoPartidoOut */
         HitoPartidoOut: {
@@ -2142,6 +2283,27 @@ export interface components {
              * Format: date-time
              */
             fecha_registro: string;
+            /**
+             * Forzado
+             * @default false
+             */
+            forzado: boolean;
+            /** Motivo Cierre */
+            motivo_cierre?: ("Clima" | "Incidente" | "Lesion_Grave" | "Orden_Seguridad" | "Otro") | null;
+            /** Motivo Cierre Detalle */
+            motivo_cierre_detalle?: string | null;
+            /**
+             * Deshacer Disponible Hasta
+             * Format: date-time
+             */
+            deshacer_disponible_hasta?: string | null;
+        };
+        /** DeshacerCierreForzadoOut */
+        DeshacerCierreForzadoOut: {
+            /** Partido Id */
+            partido_id: number;
+            /** Estado */
+            estado: string;
         };
         /**
          * HitoPartidoUpdate
@@ -2526,8 +2688,6 @@ export interface components {
             fase?: ("Regular" | "Grupos" | "Octavos" | "Cuartos" | "Semifinal" | "Final" | "Tercer puesto") | null;
             /** Grupo */
             grupo?: string | null;
-            /** Estado */
-            estado?: ("Programado" | "En curso" | "Finalizado" | "Cancelado") | null;
             /** Arbitro Id */
             arbitro_id?: number | null;
             /** Ganador Desempate Id */
@@ -2655,6 +2815,38 @@ export interface components {
             grupo_equipo_id?: number | null;
             /** Orden Manual */
             orden_manual?: number | null;
+        };
+        /**
+         * PreflightInicioOut
+         * @description GET /partidos/{id}/preflight-inicio — ¿se puede tocar "Empezar Partido"?
+         *     (gestionar-partido-alineaciones-plan.md, H1-eng).
+         *
+         *     Endpoint propio y AUTENTICADO en vez de campos nuevos en
+         *     `GET /partidos/{id}/cronometro`: ese es público sin auth y lo pollean cada
+         *     5 segundos `Cronometro.tsx` y `PartidoEnVivo.tsx` de forma anónima.
+         *
+         *     El frontend NO reimplementa la regla: consume `puede_iniciar` y
+         *     `motivo_bloqueo` tal cual, que salen del mismo código que después aplica el
+         *     gate en `HitoPartidoService.registrar` (C1 del plan — antes existía
+         *     `useTitularesCompletos`, una réplica client-side que podía divergir).
+         *
+         *     `titulares_por_equipo` viene vacío cuando no hay nada que contar (partido ya
+         *     iniciado, sin rival definido, o torneo archivado): en esos casos el motivo
+         *     lo explica y el roster ni se consulta.
+         */
+        PreflightInicioOut: {
+            /** Minimo Para Iniciar */
+            minimo_para_iniciar: number;
+            /** Maximo Titulares */
+            maximo_titulares: number;
+            /** Titulares Por Equipo */
+            titulares_por_equipo: components["schemas"]["TitularesEquipoOut"][];
+            /** Puede Iniciar */
+            puede_iniciar: boolean;
+            /** Motivo Bloqueo */
+            motivo_bloqueo?: string | null;
+            /** Partido Iniciado */
+            partido_iniciado: boolean;
         };
         /** ProximoPartidoOut */
         ProximoPartidoOut: {
@@ -2798,6 +2990,20 @@ export interface components {
             /** Semilla */
             semilla?: string | null;
         };
+        /**
+         * TitularesEquipoOut
+         * @description Cuántos titulares válidos tiene un equipo para este partido. `titulares`
+         *     ya está intersectado contra el roster activo — un convocado dado de baja
+         *     después no cuenta.
+         */
+        TitularesEquipoOut: {
+            /** Equipo Id */
+            equipo_id: number;
+            /** Nombre */
+            nombre: string;
+            /** Titulares */
+            titulares: number;
+        };
         /** Token */
         Token: {
             /** Access Token */
@@ -2867,6 +3073,17 @@ export interface components {
              * @default false
              */
             permite_walkover_grupos: boolean;
+            /** Minimo Jugadores Para Iniciar */
+            minimo_jugadores_para_iniciar?: number | null;
+            /** Maximo Titulares Permitido */
+            maximo_titulares_permitido?: number | null;
+            /**
+             * Permite Cambios Ilimitados
+             * @default false
+             */
+            permite_cambios_ilimitados: boolean;
+            /** Maximo Cambios Por Equipo */
+            maximo_cambios_por_equipo?: number | null;
             /** Torneo Grupo Id */
             torneo_grupo_id?: number | null;
             /** Torneo Grupo Nombre */
@@ -2983,6 +3200,17 @@ export interface components {
              * @default false
              */
             permite_walkover_grupos: boolean;
+            /** Minimo Jugadores Para Iniciar */
+            minimo_jugadores_para_iniciar?: number | null;
+            /** Maximo Titulares Permitido */
+            maximo_titulares_permitido?: number | null;
+            /**
+             * Permite Cambios Ilimitados
+             * @default false
+             */
+            permite_cambios_ilimitados: boolean;
+            /** Maximo Cambios Por Equipo */
+            maximo_cambios_por_equipo?: number | null;
             /** Id */
             id: number;
             /** Torneo Grupo Id */
@@ -3034,6 +3262,14 @@ export interface components {
             cupo_maximo_inscripciones?: number | null;
             /** Permite Walkover Grupos */
             permite_walkover_grupos?: boolean | null;
+            /** Minimo Jugadores Para Iniciar */
+            minimo_jugadores_para_iniciar?: number | null;
+            /** Maximo Titulares Permitido */
+            maximo_titulares_permitido?: number | null;
+            /** Permite Cambios Ilimitados */
+            permite_cambios_ilimitados?: boolean | null;
+            /** Maximo Cambios Por Equipo */
+            maximo_cambios_por_equipo?: number | null;
         };
         /** TraspasoCreate */
         TraspasoCreate: {
@@ -3488,6 +3724,7 @@ export interface operations {
                 estado?: ("Activo" | "Inactivo" | "Finalizado") | null;
                 torneo_grupo_id?: number | null;
                 solo_mios?: boolean;
+                incluir_archivados?: boolean;
             };
             header?: never;
             path?: never;
@@ -4732,6 +4969,7 @@ export interface operations {
                 estado?: ("Programado" | "En curso" | "Finalizado" | "Cancelado") | null;
                 arbitro_id?: number | null;
                 solo_mios?: boolean;
+                incluir_archivados?: boolean;
             };
             header?: never;
             path?: never;
@@ -5145,6 +5383,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConvocadoOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agregar_convocado_api_v1_partidos__partido_id__convocados_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConvocadoAgregarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConvocadoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preflight_inicio_partido_api_v1_partidos__partido_id__preflight_inicio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreflightInicioOut"];
                 };
             };
             /** @description Validation Error */
@@ -6277,7 +6581,9 @@ export interface operations {
     };
     plantilla_equipo_api_v1_estadisticas_equipos__equipo_id__plantilla_get: {
         parameters: {
-            query?: never;
+            query?: {
+                torneo_id?: number | null;
+            };
             header?: never;
             path: {
                 equipo_id: number;

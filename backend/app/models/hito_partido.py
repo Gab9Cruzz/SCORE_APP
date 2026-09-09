@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, text
+from sqlalchemy import Boolean, ForeignKey, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -30,3 +30,10 @@ class HitoPartido(Base):
     minuto_reloj: Mapped[int | None]
     registrado_por: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
     fecha_registro: Mapped[datetime] = mapped_column(nullable=True, server_default=text("CURRENT_TIMESTAMP"))
+    # Cierre forzado (modo-vivo-sustituciones-cierre-plan.md, Área 4). Ver
+    # el comentario grande en 01_schema.sql — Forzado solo aplica a
+    # Fin_Partido, Motivo_Cierre es un picklist corto, Motivo_Cierre_Detalle
+    # solo se llena cuando Motivo_Cierre='Otro' (chk_hitos_partido_*).
+    forzado: Mapped[bool] = mapped_column(Boolean, default=False)
+    motivo_cierre: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    motivo_cierre_detalle: Mapped[str | None] = mapped_column(String(200), nullable=True)

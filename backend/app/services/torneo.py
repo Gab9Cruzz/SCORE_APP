@@ -162,6 +162,12 @@ class TorneoService:
         if not datos.get("nombre"):
             datos["nombre"] = f"{grupo.nombre} - Edición {datos['numero_edicion']}"
 
+        # Después de resolver el grupo: en una edición nueva la modalidad se
+        # HEREDA de la edición de referencia, así que recién acá se sabe contra
+        # qué tamano_equipo hay que validar el mínimo.
+        await self._validar_minimo_para_iniciar(datos.get("minimo_jugadores_para_iniciar"), datos["modalidad_id"])
+        await self._validar_maximo_titulares(datos.get("maximo_titulares_permitido"), datos["modalidad_id"])
+
         torneo = await self.repo.create(**datos)
         await self._crear_fase_inicial(torneo)
         await self._auto_asignar_creador(torneo, usuario_actual)
@@ -173,6 +179,28 @@ class TorneoService:
             return
         self.session.add(AsignacionTorneoAdmin(usuario_id=usuario_actual.id, torneo_id=torneo.id, estado="Activo"))
         await self.session.commit()
+
+    async def _validar_minimo_para_iniciar(self, minimo: int | None, modalidad_id: int) -> None:
+        """Tope superior de Torneo.minimo_jugadores_para_iniciar
+        (gestionar-partido-alineaciones-plan.md, D1).
+
+        El piso (>= 1) lo cubre chk_torneo_minimo_iniciar; el techo cruza
+        tablas (TORNEO -> MODALIDAD), así que no se puede expresar como CHECK y
+        vive acá — mismo criterio que _validar_parametros_formato: 400 con un
+        mensaje que dice el número real, no el 409 genérico de un constraint.
+
+        `None` es válido y significa "exigir el equipo completo": no hay nada
+        que validar contra la modalidad en ese caso.
+        """
+        if minimo is None:
+            return
+        modalidad = await self.modalidad_repo.get_or_404(modalidad_id)
+        if minimo > modalidad.tamano_equipo:
+            raise DomainRuleError(
+                f"El mínimo para iniciar ({minimo}) no puede ser mayor que el tamaño del equipo "
+                f"de la modalidad {modalidad.nombre} ({modalidad.tamano_equipo}). "
+                "Dejalo vacío para exigir el equipo completo."
+            )
 
     def _validar_parametros_formato(
         self,
@@ -191,6 +219,25 @@ class TorneoService:
             raise DomainRuleError(
                 f"Equipos por grupo y Clasificados por grupo no aplican a Formato {formato} "
                 "— son parámetros exclusivos de Grupos + Playoffs."
+            )
+
+    async def _validar_maximo_titulares(self, maximo: int | None, modalidad_id: int) -> None:
+        """Tope SUPERIOR de Torneo.maximo_titulares_permitido
+        (modo-vivo-sustituciones-cierre-plan.md, Área 1, T18) — mismo
+        criterio exacto que _validar_minimo_para_iniciar: el piso (>= 1) lo
+        cubre chk_torneo_maximo_titulares, el techo cruza tablas y vive acá.
+
+        `None` es válido y significa "usar Modalidad.tamano_equipo": nada
+        que validar contra la modalidad en ese caso.
+        """
+        if maximo is None:
+            return
+        modalidad = await self.modalidad_repo.get_or_404(modalidad_id)
+        if maximo > modalidad.tamano_equipo:
+            raise DomainRuleError(
+                f"El máximo de titulares ({maximo}) no puede ser mayor que el tamaño del equipo "
+                f"de la modalidad {modalidad.nombre} ({modalidad.tamano_equipo}). "
+                "Dejalo vacío para usar el tamaño de la modalidad."
             )
 
     async def _crear_fase_inicial(self, torneo: Torneo) -> None:
@@ -234,6 +281,27 @@ class TorneoService:
                 payload.get("equipos_por_grupo", torneo_actual.equipos_por_grupo),
                 payload.get("clasificados_por_grupo", torneo_actual.clasificados_por_grupo),
             )
+
+        if "minimo_jugadores_para_iniciar" in payload:
+            await self._validar_minimo_para_iniciar(
+                payload["minimo_jugadores_para_iniciar"], torneo_actual.modalidad_id
+            )
+        if "maximo_titulares_permitido" in payload:
+            await self._validar_maximo_titulares(
+                payload["maximo_titulares_permitido"], torneo_actual.modalidad_id
+            )
+
+        # C3 del plan: `BaseRepository.save_changes` hace `if valor is not None`
+        # (base.py:62-64), así que un `null` explícito se descartaría y el campo
+        # sería imposible de limpiar una vez seteado. Acá `None` es un valor con
+        # significado ("volver a exigir el equipo completo"/"usar tamano_equipo"/
+        # "sin tope numérico"), y todo el diseño de D1 (y su símil de T18/T5)
+        # depende de que sea alcanzable — por eso se escriben a mano y se sacan
+        # del payload antes de delegar. `exclude_unset` en el model_dump de
+        # arriba es lo que distingue "ausente" de "presente y null".
+        for campo in ("minimo_jugadores_para_iniciar", "maximo_titulares_permitido", "maximo_cambios_por_equipo"):
+            if campo in payload:
+                setattr(torneo_actual, campo, payload.pop(campo))
 
         torneo = await self.repo.save_changes(torneo_actual, **payload)
 

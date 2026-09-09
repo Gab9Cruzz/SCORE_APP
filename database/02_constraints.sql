@@ -57,7 +57,17 @@ ALTER TABLE TORNEO
     -- dorsal (EC-45): Python se anticipa para dar el mensaje claro.
     ADD CONSTRAINT chk_torneo_formato CHECK (Formato IN ('Liga', 'Eliminacion', 'Grupos_Playoffs')),
     -- 3B-10: NULL = sin límite; si se setea, tiene que ser un cupo real.
-    ADD CONSTRAINT chk_torneo_cupo_maximo CHECK (Cupo_Maximo_Inscripciones IS NULL OR Cupo_Maximo_Inscripciones > 0);
+    ADD CONSTRAINT chk_torneo_cupo_maximo CHECK (Cupo_Maximo_Inscripciones IS NULL OR Cupo_Maximo_Inscripciones > 0),
+    -- El tope superior (<= Modalidad.Tamano_Equipo) cruza tablas y lo valida
+    -- TorneoService — acá solo el piso. NULL = usar Tamano_Equipo.
+    ADD CONSTRAINT chk_torneo_minimo_iniciar CHECK (Minimo_Jugadores_Para_Iniciar IS NULL OR Minimo_Jugadores_Para_Iniciar >= 1),
+    -- modo-vivo-sustituciones-cierre-plan.md, T18: mismo criterio que el
+    -- mínimo — el piso acá, el techo (<= Modalidad.Tamano_Equipo) en
+    -- TorneoService._validar_maximo_titulares.
+    ADD CONSTRAINT chk_torneo_maximo_titulares CHECK (Maximo_Titulares_Permitido IS NULL OR Maximo_Titulares_Permitido >= 1),
+    -- T5: NULL = sin tope numérico de cambios (independiente de
+    -- Permite_Cambios_Ilimitados, que gobierna la regla de no-retorno).
+    ADD CONSTRAINT chk_torneo_maximo_cambios CHECK (Maximo_Cambios_Por_Equipo IS NULL OR Maximo_Cambios_Por_Equipo >= 1);
 
 -- EQUIPOS
 -- Disciplina_ID/Modalidad_ID: sin ON DELETE CASCADE a proposito — el
@@ -166,7 +176,20 @@ ALTER TABLE HITOS_PARTIDO
     ADD CONSTRAINT fk_hitos_partido_usuario FOREIGN KEY (Registrado_Por) REFERENCES USUARIOS(ID),
     ADD CONSTRAINT chk_hitos_partido_tipo CHECK (Tipo_Hito IN (
         'Inicio_Partido', 'Inicio_Periodo', 'Fin_Periodo', 'Pausa', 'Reanudacion', 'Fin_Partido'
-    ));
+    )),
+    -- Cierre forzado (T6/T17): Forzado solo tiene sentido en Fin_Partido, y
+    -- un Fin_Partido forzado siempre trae un motivo (la UI lo exige antes
+    -- de confirmar — ver ModalCierreForzado). Motivo_Cierre_Detalle es
+    -- texto libre SOLO cuando el picklist es 'Otro' (Design Fase 2, Pass 7:
+    -- si se permitiera siempre, un operador apurado lo llenaría en vez de
+    -- usar el picklist y la métrica de observabilidad se fragmentaría igual).
+    ADD CONSTRAINT chk_hitos_partido_forzado_solo_fin CHECK (NOT Forzado OR Tipo_Hito = 'Fin_Partido'),
+    ADD CONSTRAINT chk_hitos_partido_motivo_solo_forzado CHECK (Motivo_Cierre IS NULL OR Forzado),
+    ADD CONSTRAINT chk_hitos_partido_forzado_requiere_motivo CHECK (NOT Forzado OR Motivo_Cierre IS NOT NULL),
+    ADD CONSTRAINT chk_hitos_partido_motivo_cierre CHECK (
+        Motivo_Cierre IS NULL OR Motivo_Cierre IN ('Clima', 'Incidente', 'Lesion_Grave', 'Orden_Seguridad', 'Otro')
+    ),
+    ADD CONSTRAINT chk_hitos_partido_detalle_solo_otro CHECK (Motivo_Cierre_Detalle IS NULL OR Motivo_Cierre = 'Otro');
 
 -- FASE / GRUPO / GRUPO_EQUIPO / SORTEOS (Motor de Formatos, requerimiento #4)
 ALTER TABLE FASE
@@ -325,7 +348,11 @@ ALTER TABLE EVENTOS_PARTIDO
 ALTER TABLE CONVOCADO_A_PARTIDO
     ADD CONSTRAINT fk_convocado_partido FOREIGN KEY (Partido_ID) REFERENCES PARTIDOS(ID) ON DELETE CASCADE,
     ADD CONSTRAINT fk_convocado_perfil FOREIGN KEY (Jugador_Perfil_ID) REFERENCES JUGADOR_PERFIL_DISCIPLINA(ID) ON DELETE CASCADE,
-    ADD CONSTRAINT unique_convocado_partido UNIQUE (Partido_ID, Jugador_Perfil_ID);
+    ADD CONSTRAINT unique_convocado_partido UNIQUE (Partido_ID, Jugador_Perfil_ID),
+    -- Sin ON DELETE: rastro de quién convocó, mismo criterio que
+    -- HITOS_PARTIDO.Registrado_Por.
+    ADD CONSTRAINT fk_convocado_registrado_por FOREIGN KEY (Registrado_Por) REFERENCES USUARIOS(ID),
+    ADD CONSTRAINT chk_convocado_minuto_ingreso CHECK (Minuto_Ingreso IS NULL OR Minuto_Ingreso >= 0);
 
 -- AUDITORIA (bitacora de cambios)
 -- Sin ON DELETE: rastro de auditoria, mismo criterio que ACCESOS.Usuario_ID

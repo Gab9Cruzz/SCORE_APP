@@ -1,12 +1,19 @@
+from datetime import datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import DomainRuleError
 from app.models.evento_partido import EventoPartido
 from app.models.partido import Partido
 from app.models.usuario import Usuario
+from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoRepository
+from app.repositories.evento import EventoRepository
 from app.repositories.evento_partido import EventoPartidoRepository
+from app.repositories.hito_partido import HitoPartidoRepository
 from app.repositories.partido import PartidoRepository
+from app.repositories.torneo import TorneoRepository
 from app.schemas.evento_partido import EventoPartidoCreate, EventoPartidoUpdate
+from app.services.minuto_partido import calcular_minuto_actual
 from app.services.permisos import verificar_arbitro_asignado
 
 
@@ -46,6 +53,11 @@ class EventoPartidoService:
         self.session = session
         self.repo = EventoPartidoRepository(session)
         self.partido_repo = PartidoRepository(session)
+        # Área 3 (T3/T22 — minuto automático; T5 — reglas de cambio).
+        self.hito_repo = HitoPartidoRepository(session)
+        self.config_repo = ConfiguracionTiempoTorneoRepository(session)
+        self.torneo_repo = TorneoRepository(session)
+        self.evento_catalogo_repo = EventoRepository(session)
 
     async def get(self, id_: int) -> EventoPartido:
         return await self.repo.get_or_404(id_)
@@ -62,7 +74,77 @@ class EventoPartidoService:
         partido = await self.partido_repo.get_or_404(data.partidos_id)
         verificar_arbitro_asignado(partido, usuario_actual)
         _verificar_partido_en_curso(partido)
-        return await self.repo.create(**data.model_dump())
+
+        # Área 3 (T3/T22): este método es EXCLUSIVAMENTE el camino en vivo
+        # (la línea de arriba ya lo garantiza — solo 'En curso' llega hasta
+        # acá), así que el minuto se calcula SIEMPRE server-side desde el
+        # cronómetro — lo que `data.minuto` traiga se ignora. El resultado
+        # directo (PartidoService.registrar_resultado_directo) es el único
+        # camino que sigue aceptando el minuto del cliente, y no pasa por
+        # este método (inserta EventoPartido directo).
+        minuto = await self._minuto_en_vivo(partido)
+
+        await self._validar_reglas_cambio(partido, data)
+
+        datos = data.model_dump()
+        datos["minuto"] = minuto
+        return await self.repo.create(**datos)
+
+    async def _minuto_en_vivo(self, partido: Partido) -> int:
+        config = await self.config_repo.get_by_torneo(partido.torneo_id)
+        if config is None:
+            # No debería pasar (Inicio_Partido exige config, ver
+            # HitoPartidoService._cargar_contexto) — mensaje de dominio en
+            # vez de dejar que un None se cuele silencioso más abajo
+            # (Sección 2 del plan: el GAP real era justo esto).
+            raise DomainRuleError("Este torneo todavía no tiene configuración de tiempos.")
+        hitos = await self.hito_repo.listar_por_partido(partido.id)
+        minuto = calcular_minuto_actual(hitos, config, datetime.now())
+        if minuto is None:
+            raise DomainRuleError(
+                "El cronómetro todavía no arrancó — esperá el primer inicio de partido para cargar eventos."
+            )
+        return minuto
+
+    async def _validar_reglas_cambio(self, partido: Partido, data: EventoPartidoCreate) -> None:
+        """Área 3 (T5): tope de cantidad + no-retorno, gobernados por
+        `Torneo.maximo_cambios_por_equipo`/`Torneo.permite_cambios_ilimitados`
+        — ver el comentario grande en 01_schema.sql para por qué son 2 ejes
+        independientes. Solo aplica a tipo_hito='Cambio'; cualquier otro
+        evento (Gol, Autogol, tarjetas) no toca esto."""
+        evento_catalogo = await self.evento_catalogo_repo.get_or_404(data.eventos_id)
+        if evento_catalogo.nombre != "Cambio":
+            return
+
+        torneo = await self.torneo_repo.get_or_404(partido.torneo_id)
+
+        if not torneo.permite_cambios_ilimitados and data.jugador_id_entra is not None:
+            ya_salio = await self.repo.list(
+                limit=1,
+                partidos_id=partido.id,
+                eventos_id=data.eventos_id,
+                jugador_id=data.jugador_id_entra,
+                estado="Registrado",
+            )
+            if ya_salio:
+                raise DomainRuleError(
+                    "Ese jugador ya salió por cambio antes en este partido — este torneo no permite "
+                    "reingresos (cambios rotativos). Activá 'Permite cambios ilimitados' si corresponde."
+                )
+
+        if torneo.maximo_cambios_por_equipo is not None:
+            usados = await self.repo.list(
+                limit=torneo.maximo_cambios_por_equipo + 1,
+                partidos_id=partido.id,
+                eventos_id=data.eventos_id,
+                equipo_id=data.equipo_id,
+                estado="Registrado",
+            )
+            if len(usados) >= torneo.maximo_cambios_por_equipo:
+                raise DomainRuleError(
+                    f"Ya se usaron los {torneo.maximo_cambios_por_equipo} cambios permitidos para "
+                    "este equipo en este partido."
+                )
 
     async def corregir_minuto(self, id_: int, minuto: int, usuario_actual: Usuario) -> EventoPartido:
         """PATCH /eventos-partido/{id} (gestion-avanzada-equipos-control-

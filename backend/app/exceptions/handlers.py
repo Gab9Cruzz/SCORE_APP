@@ -10,6 +10,7 @@ from app.exceptions.errors import (
     ForbiddenError,
     LicenseRevokedError,
     NotFoundError,
+    PreconditionFailedError,
     RateLimitError,
 )
 
@@ -75,6 +76,16 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ForbiddenError)
     async def _forbidden(_: Request, exc: ForbiddenError) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": exc.detail})
+
+    @app.exception_handler(PreconditionFailedError)
+    async def _precondition_failed(_: Request, exc: PreconditionFailedError) -> JSONResponse:
+        # 412, no 409: el 409 ya está tomado por IntegrityError (abajo) y el
+        # cliente tiene que poder distinguir "alguien más editó" de "chocaste
+        # contra una restricción de unicidad" — ver PreconditionFailedError.
+        return JSONResponse(
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            content={"detail": exc.detail, "estado_actual": exc.estado_actual},
+        )
 
     @app.exception_handler(RateLimitError)
     async def _rate_limit(_: Request, exc: RateLimitError) -> JSONResponse:

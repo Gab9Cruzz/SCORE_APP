@@ -542,3 +542,91 @@ verdes; `tsc --noEmit`/`oxlint` en verde).
 - **Paginación real con cursor en `/equipos`/`/jugadores` (3B-9)** — no
   hecho, sigue con su propio ciclo; el fix del fixture es el mismo parche
   de síntoma que las otras 7 pantallas, no el techo real de 200 filas.
+
+## Deferido desde el plan de Modo en Vivo, Sustituciones y Cierre (`docs/plans/modo-vivo-sustituciones-cierre-plan.md`)
+
+Plan revisado vía `/autoplan` el 2026-09-08 (CEO + Design + Eng, `[subagent-only]`,
+Codex no disponible en esta máquina). Reversión explícita de la Decisión Audit #12
+del plan anterior (tope de titulares) — documentada como reversión, no como bugfix.
+Corrección crítica en Fase 3 (Eng): el mecanismo de "deshacer" de Fin de Partido
+forzado pasó de commit diferido 100% cliente a soft-commit server-side + endpoint
+compensatorio, porque el diseño original no protegía contra el escenario que decía
+proteger (dispositivo del operador cae durante la ventana de 5s).
+
+- **Badge visual de sanción pendiente en convocatoria** — depende de un concepto de
+  "sanciones" inexistente en el modelo hoy (`JUGADOR_PERFIL_DISCIPLINA` no tiene
+  estado de suspensión). Efort: S una vez que exista el modelo de sanciones.
+- **Exportar resultado directo cargado a texto plano (para pegar en WhatsApp del
+  torneo)** — fuera de blast radius de gestión de partido, es comunicación externa.
+  Efort: S.
+- **Motor de reglamento de torneo genérico (`ReglamentoTorneo`)** — unificaría
+  mínimo/máximo de titulares, tope de cambios, tiempo extra/prórroga en un solo
+  objeto de dominio en vez de columnas sueltas en `TORNEO`. Refactor estructural,
+  Effort: L, excede 1 día CC — se revisita si aparece un tercer campo de
+  reglamento además de `minimo_jugadores_para_iniciar`/`maximo_titulares_permitido`/
+  `permite_cambios_ilimitados`.
+- **Mecanismo genérico de "operación reversible con ventana de gracia"** — el
+  patrón construido para `deshacer-cierre-forzado` (insertar de inmediato + endpoint
+  compensatorio con ventana server-side) es candidato a generalizarse si aparece una
+  segunda necesidad similar (ej. deshacer un walkover marcado por error). No se
+  construye ahora (un solo caso de uso no justifica la abstracción); depende de
+  `backend/app/services/hito_partido.py::deshacer_forzado` como precedente.
+- **`PartidoService.marcar_walkover` sigue escribiendo `Estado` directamente**, sin
+  pasar por Hito — excepción reconocida (tiene sus propios guards), fuera de
+  alcance de este plan. Si en el futuro se decide que TODA escritura de `Estado`
+  debe pasar por Hito, este método necesita revisarse.
+
+### Estado de implementación (2026-09-09)
+
+Implementado y con tests pasando (404 backend + 241 frontend, suite completa
+verde) — T1/T2/T3/T4/T5/T6/T7/T8/T14/T15/T16/T17/T18/T21/T22/T25 del artefacto de
+tareas (`~/.gstack/projects/Score-App/tasks-*-2026090[89]*.jsonl`):
+
+- Bloque 0: `PartidoUpdate` sin `estado` + `extra="forbid"` (422 real, no
+  `extra=ignore` silencioso).
+- Área 1: tope de titulares — guard en `ConvocadoAPartidoService` (Python) +
+  trigger `fn_validar_tope_titulares` (DB, con lock de fila) + rechazo
+  client-side en `AlineacionEditor`/`alineacion.ts` (mensaje inline, sin toast
+  porque el repo no tiene ese componente — mismo criterio que
+  `ModalPerfilJugador.tsx`).
+- Área 2: `EventoPartidoRepository.list` ordena `(minuto, id)`; `MesaPanel`
+  dejó de reordenar client-side (solo invierte para mostrar lo más reciente
+  arriba).
+- Área 3: minuto en vivo calculado server-side
+  (`app/services/minuto_partido.py`, ignora lo que mande el cliente) +
+  `Cronometro` expone `onMinutoActual` + `ModalSustitucion.tsx` (nuevo,
+  contextual desde una sección "Alineación en vivo" agregada a `MesaPanel`) +
+  reglas de cambio (`Torneo.permite_cambios_ilimitados`/
+  `maximo_cambios_por_equipo`) + contador "cambios usados X/Y".
+- Área 4: `Fin_Partido(forzado=true, motivo_cierre, motivo_cierre_detalle)`
+  reusa `POST /partidos/{id}/hitos`; `POST /partidos/{id}/deshacer-cierre-forzado`
+  (`HitoPartidoService.deshacer_fin_forzado`) con ventana server-side de 5s
+  (`VENTANA_DESHACER_SEGUNDOS`), banner de countdown derivado 100% de
+  `GET /cronometro` (sobrevive un F5 sin estado propio del cliente). Incluye
+  el caso no cubierto por la Fase 1/2 del `/autoplan`: un torneo `Corrido`
+  sigue exigiendo `ganador_corrido_id` incluso en un cierre forzado
+  (`fn_validar_ganador_corrido` no hace excepciones) — el service lo valida
+  antes de insertar el Hito, mismo criterio que el Fin_Partido normal.
+
+Genuinamente pendiente (no implementado en esta pasada):
+
+- **T23/T24 — tests de concurrencia real** (2 transacciones DB simultáneas: tope
+  de titulares y doble `Fin_Partido`). Los tests nuevos
+  (`test_tope_titulares.py`, `test_fin_forzado.py`) cubren el caso secuencial y
+  la defensa en profundidad a nivel DB (INSERT directo que dispara el trigger/
+  índice único), pero no un escenario de 2 sesiones genuinamente paralelas —
+  requiere infraestructura de test que este repo no tiene todavía (2 engines/
+  conexiones abiertas a la vez contra la misma fila).
+- **`ModalSustitucion`/alineación en vivo con reemplazo del cálculo heurístico
+  de `MesaPanel.tsx`** — el modal nuevo reusa `calcularElegibilidadCambios`
+  (extraído a `eventos.ts` para no duplicarlo), pero el formulario de Cambio
+  YA EXISTENTE dentro de `CargaEvento` no se retiró (Sección 5 del plan pedía
+  "eliminar y reemplazar, no duplicar" la heurística de elegibilidad — quedó
+  compartida, no duplicada, pero el segundo CAMINO de UI para cargar un Cambio
+  sigue existiendo en paralelo al modal nuevo). Retirarlo requiere revisar
+  `MesaPanel.test.tsx` con más cuidado del que alcanzó esta pasada.
+- **Wireframe de 3 zonas (Design Fase 2, Pass 1) literal** — el panel en vivo
+  no se reorganizó en 3 franjas fijas (primaria/secundaria/terciaria) como el
+  ASCII del plan; el botón de cierre forzado y la alineación en vivo se
+  agregaron como secciones nuevas de `MesaPanel`/`Cronometro` sin rehacer el
+  layout general de la página.

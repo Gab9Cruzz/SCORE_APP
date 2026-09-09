@@ -11,6 +11,7 @@ from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorn
 from app.repositories.fase import FaseRepository
 from app.repositories.partido import PartidoRepository
 from app.repositories.torneo import TorneoRepository
+from app.repositories.torneo_grupo import TorneoGrupoRepository
 from app.schemas.partido import PartidoCreate, PartidoUpdate, ResultadoDirectoCreate
 from app.services.permisos import verificar_arbitro_asignado
 
@@ -22,6 +23,9 @@ class PartidoService:
         self.fase_repo = FaseRepository(session)
         self.torneo_repo = TorneoRepository(session)
         self.config_repo = ConfiguracionTiempoTorneoRepository(session)
+        # H7: guard de torneo archivado en registrar_resultado_directo, que
+        # inserta el HitoPartido a mano y por eso no pasa por HitoPartidoService.
+        self.torneo_grupo_repo = TorneoGrupoRepository(session)
 
     async def get(self, id_: int) -> Partido:
         return await self.repo.get_or_404(id_)
@@ -80,6 +84,15 @@ class PartidoService:
         vw_resultados_partidos aplica el 3-0 (ver Es_Walkover en
         04_views.sql), fn_propagar_ganador_bracket avanza al ganador solo
         con el flag, sin necesitar eventos de gol reales.
+
+        Excepción reconocida a "Hito es la única fuente de verdad de
+        Estado" (modo-vivo-sustituciones-cierre-plan.md, Eng Fase 3,
+        hallazgo medio #3): este método escribe `estado="Finalizado"`
+        directamente vía `save_changes`, sin insertar ningún Hito. Es
+        deliberado — un walkover no tiene cronómetro corriendo ni eventos
+        que lo justifiquen, y ya tiene sus propios guards completos acá
+        mismo (fase de eliminación, o `Permite_Walkover_Grupos`). No se
+        unifica con el flujo de Hitos en este plan (fuera de alcance).
 
         En Eliminación (incluida la fase de playoffs de Grupos_Playoffs)
         siempre está permitido — el bracket necesita un ganador para
@@ -153,6 +166,26 @@ class PartidoService:
                 "Este partido todavía no tiene los dos equipos definidos — esperá a que termine "
                 "el partido anterior del bracket."
             )
+
+        # H7 del plan (gestionar-partido-alineaciones-plan.md): este método
+        # inserta el HitoPartido a mano, así que NUNCA pasa por
+        # HitoPartidoService.registrar y se salteaba las dos validaciones que
+        # ese aplica. La de torneo archivado es un agujero: cargar un resultado
+        # en un torneo archivado no tiene lectura legítima.
+        #
+        # La de titulares NO se agrega, a propósito (D4): este camino existe
+        # para partidos que YA se jugaron y se registraron en papel, donde
+        # exigir una alineación sería pedir un dato que el operador no tiene.
+        #
+        # Va acá, ANTES del primer flush(): una vez insertado el Inicio_Partido,
+        # trg_hito_sincroniza_estado ya movió PARTIDOS.Estado en la base
+        # mientras el objeto Python sigue diciendo 'Programado'
+        # (expire_on_commit=False, db/database.py), así que un chequeo posterior
+        # leería un estado que no es el real.
+        torneo = await self.torneo_repo.get_or_404(partido.torneo_id)
+        grupo = await self.torneo_grupo_repo.get_or_404(torneo.torneo_grupo_id)
+        if grupo.estado == "Archivado":
+            raise DomainRuleError("Este torneo está archivado — reactivalo antes de operar sus partidos.")
 
         config = await self.config_repo.get_by_torneo(partido.torneo_id)
         if config is None:

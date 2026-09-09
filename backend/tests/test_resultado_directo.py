@@ -177,3 +177,56 @@ async def test_resultado_directo_arbitro_no_asignado_es_rechazado(
         "/api/v1/partidos/3/resultado-directo", json={"eventos": []}, headers=arbitro_no_asignado_headers
     )
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# gestionar-partido-alineaciones-plan.md (H7 / D4): este endpoint inserta el
+# HitoPartido a mano, así que NUNCA pasa por HitoPartidoService.registrar y se
+# salteaba las dos validaciones que ese aplica. Una era un agujero; la otra es
+# deliberada.
+# ---------------------------------------------------------------------------
+
+
+async def test_resultado_directo_en_torneo_archivado_es_rechazado(
+    client: AsyncClient, db_session: AsyncSession, admin_general_headers: dict[str, str]
+):
+    """Cargar un resultado en un torneo archivado no tiene ninguna lectura
+    legítima: era un agujero, no una decisión. El guard va ANTES del primer
+    flush() — después del Inicio_Partido el trigger ya movió PARTIDOS.Estado en
+    la base mientras el objeto Python sigue diciendo 'Programado'."""
+    from app.models.torneo import Torneo
+    from app.models.torneo_grupo import TorneoGrupo
+
+    partido = await db_session.get(Partido, 3)
+    torneo = await db_session.get(Torneo, partido.torneo_id)
+    grupo = await db_session.get(TorneoGrupo, torneo.torneo_grupo_id)
+    grupo.estado = "Archivado"
+    await db_session.commit()
+
+    resp = await client.post(
+        "/api/v1/partidos/3/resultado-directo", json={"eventos": []}, headers=admin_general_headers
+    )
+    assert resp.status_code == 400, resp.text
+    assert "archivado" in resp.json()["detail"].lower()
+
+    # Nada quedó a medias.
+    assert await _hitos_de(db_session, 3) == []
+
+
+async def test_resultado_directo_no_exige_convocatoria(
+    client: AsyncClient, db_session: AsyncSession, admin_general_headers: dict[str, str]
+):
+    """Decisión explícita (D4), y ahora con test que la fija por escrito: este
+    camino existe para partidos que YA se jugaron y se registraron en papel,
+    donde exigir una alineación sería pedir un dato que el operador no tiene.
+
+    Antes era un comportamiento implícito —efecto colateral de que el hito se
+    inserta a mano— que se podía romper sin que nadie se enterara."""
+    convocados = await client.get("/api/v1/partidos/3/convocados")
+    assert convocados.json() == []
+
+    resp = await client.post(
+        "/api/v1/partidos/3/resultado-directo", json={"eventos": []}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["estado"] == "Finalizado"

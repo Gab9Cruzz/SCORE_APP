@@ -2,6 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TOKEN_STORAGE_KEY } from "../../api/client";
 import { AuthProvider } from "../../auth/AuthContext";
@@ -32,12 +33,21 @@ function sembrarSesionArbitro(id = 42) {
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ username: "arbitro_test", rol: "Arbitro", id }));
 }
 
+/** Router real con rutas, no solo `MemoryRouter`: desde
+ * gestionar-partido-alineaciones-plan.md el Árbitro NAVEGA a
+ * /control-de-mesa/partido/:id en vez de montar el panel por useState, así que
+ * el test necesita poder observar a dónde fue. */
 function renderPagina() {
   const queryClient = createTestQueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <MisPartidosPage />
+        <MemoryRouter initialEntries={["/arbitro"]}>
+          <Routes>
+            <Route path="/arbitro" element={<MisPartidosPage />} />
+            <Route path="/control-de-mesa/partido/:partidoId" element={<div>VISTA GESTIONAR PARTIDO</div>} />
+          </Routes>
+        </MemoryRouter>
       </AuthProvider>
     </QueryClientProvider>,
   );
@@ -98,7 +108,7 @@ describe("MisPartidosPage (roles-3-modulos-plan.md, Fase 3)", () => {
     expect(await screen.findByText("No tenés partidos asignados por ahora.")).toBeInTheDocument();
   });
 
-  it("al elegir un partido, reusa MesaPanel (D4) — se ve 'Volver a la lista'", async () => {
+  it("al elegir un partido, navega a la vista compartida de Gestionar Partido", async () => {
     const user = userEvent.setup();
     server.use(
       http.get(PARTIDOS, () =>
@@ -125,7 +135,9 @@ describe("MisPartidosPage (roles-3-modulos-plan.md, Fase 3)", () => {
 
     await user.click(await screen.findByText(/Partido #5/));
 
-    expect(await screen.findByText("← Volver a la lista")).toBeInTheDocument();
-    expect(screen.getByText("Tiburones FC")).toBeInTheDocument();
+    // Un solo camino a la vista del partido para los dos roles. Antes el
+    // Árbitro montaba MesaPanel por useState mientras el TorneoAdmin no tenía
+    // forma de llegar — esa asimetría es la que enmascaró el deadlock.
+    expect(await screen.findByText("VISTA GESTIONAR PARTIDO")).toBeInTheDocument();
   });
 });

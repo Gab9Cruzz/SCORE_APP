@@ -13,7 +13,10 @@ export interface EventoPendiente {
   equipo_id: number;
   eventos_id: number;
   jugador_id_entra?: number | null;
-  minuto: number;
+  // Área 3 (modo-vivo-sustituciones-cierre-plan.md, T3/T22): opcional
+  // desde que el servidor calcula el minuto siempre para el camino en
+  // vivo — ver EventoBody.minuto en MesaPanel.tsx.
+  minuto?: number;
   /** Cuándo se guardó — para que la UI pueda decir "desde hace 3 min" en
    * vez de solo "hay algo pendiente". */
   guardadoEn: string;

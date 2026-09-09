@@ -31,8 +31,10 @@ class EstadisticasService:
         filas = await self.repo.resultados_partidos(torneo_id)
         return [ResultadoPartidoOut.model_validate(f) for f in filas]
 
-    async def plantilla_equipo(self, equipo_id: int) -> list[PlantillaJugadorOut]:
-        filas = await self.repo.plantilla_equipo(equipo_id)
+    async def plantilla_equipo(
+        self, equipo_id: int, torneo_id: int | None = None
+    ) -> list[PlantillaJugadorOut]:
+        filas = await self.repo.plantilla_equipo(equipo_id, torneo_id)
         return [PlantillaJugadorOut.model_validate(f) for f in filas]
 
     async def duracion_partido(self, partido_id: int) -> DuracionPartidoOut:

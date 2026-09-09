@@ -65,11 +65,31 @@ class EstadisticasRepository:
             torneo_id=torneo_id,
         )
 
-    async def plantilla_equipo(self, equipo_id: int) -> list[dict[str, Any]]:
+    async def plantilla_equipo(self, equipo_id: int, torneo_id: int | None = None) -> list[dict[str, Any]]:
+        """Plantilla vigente de un equipo. `torneo_id` acota al roster de ESE
+        torneo (gestionar-partido-alineaciones-plan.md, H2-eng).
+
+        Sin el filtro, un equipo inscripto en dos torneos activos de la misma
+        disciplina devuelve el mismo `jugador_perfil_id` dos veces: rompe las
+        keys de las listas del frontend y deja convocar a alguien del equipo
+        **en otro torneo** — un titular que `_validar_titulares` no cuenta y al
+        que `fn_validar_jugador_partido` le rechaza cualquier evento.
+
+        Queda opcional para no romper a los callers que legítimamente quieren
+        la plantilla del equipo sin acotar a un torneo (perfil del jugador,
+        estadísticas históricas)."""
+        if torneo_id is None:
+            return await self._fetch(
+                "SELECT * FROM vw_jugadores_activos_por_equipo WHERE equipo_id = :equipo_id "
+                "ORDER BY dorsal NULLS LAST, jugador",
+                equipo_id=equipo_id,
+            )
         return await self._fetch(
-            "SELECT * FROM vw_jugadores_activos_por_equipo WHERE equipo_id = :equipo_id "
+            "SELECT * FROM vw_jugadores_activos_por_equipo "
+            "WHERE equipo_id = :equipo_id AND torneo_id = :torneo_id "
             "ORDER BY dorsal NULLS LAST, jugador",
             equipo_id=equipo_id,
+            torneo_id=torneo_id,
         )
 
     async def estado_perfil(self, jugador_perfil_id: int) -> str | None:

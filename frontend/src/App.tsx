@@ -2,7 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/useAuth";
 import { NavBar } from "./components/NavBar";
 import { RequireRole } from "./components/RequireRole";
-import { ControlDeMesaPage } from "./pages/ControlDeMesa";
+import { ControlDeMesaPage } from "./pages/control-mesa/ControlDeMesa";
+import { GestionarPartidoPage } from "./pages/control-mesa/GestionarPartido";
 import { DashboardPage } from "./pages/Dashboard";
 import { LicenseRevokedScreen } from "./pages/LicenseRevokedScreen";
 import { LoginPage } from "./pages/Login";
@@ -51,6 +52,19 @@ export function App() {
             element={
               <RequireRole roles={["TorneoAdmin", "AdminGeneral", "Arbitro"]}>
                 <ControlDeMesaPage />
+              </RequireRole>
+            }
+          />
+          {/* Vista inmersiva de un partido (gestionar-partido-alineaciones-plan.md).
+              Ruta propia y no un panel por useState: sin URL, el botón Atrás
+              salía del módulo entero y un refresh en pleno partido devolvía al
+              operador a la lista. Mismo RequireRole que /control-de-mesa — no
+              se puede colgar de /partidos/:id, que es público sin auth. */}
+          <Route
+            path="/control-de-mesa/partido/:partidoId"
+            element={
+              <RequireRole roles={["TorneoAdmin", "AdminGeneral", "Arbitro"]}>
+                <GestionarPartidoPage />
               </RequireRole>
             }
           />
