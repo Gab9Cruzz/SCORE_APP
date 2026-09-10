@@ -630,3 +630,26 @@ Genuinamente pendiente (no implementado en esta pasada):
   ASCII del plan; el botón de cierre forzado y la alineación en vivo se
   agregaron como secciones nuevas de `MesaPanel`/`Cronometro` sin rehacer el
   layout general de la página.
+
+## Deferido desde el plan de Goles por Marcador + Quick Action Bar + Timeline
+(`docs/plans/goles-por-marcador-slots-plan.md`)
+
+- **Fusión completa de Modo en Vivo + Resultado Directo en un único motor de
+  eventos parametrizado por modo** — el reframe de mayor apalancamiento que
+  señaló la voz externa (Eng subagent) de ese plan: hoy son 2 máquinas de
+  estado de `Partido` genuinamente distintas (`'Programado'` con persistencia
+  atómica al final vs. `'En curso'` con persistencia inmediata por evento).
+  Fusionarlas de verdad excede blast radius de ese plan (>1 día CC, introduce
+  un concepto de dominio nuevo — "modo de carga"). Candidata fuerte para una
+  futura sesión, idealmente con datos reales de qué fracción de partidos
+  cargados como "resultado directo" tienen convocatoria guardada (esa métrica
+  no existe hoy y hubiera evitado tener que asumir el caso feliz/degradado a
+  ciegas).
+- **Restaurar un batch local de Resultado Directo no guardado desde
+  `localStorage`** tras un refresh accidental de la página — hoy el estado
+  vive 100% en memoria del componente (`eventos[]`), se pierde con cualquier
+  cierre/refresh de pestaña antes de guardar. Requiere diseño de persistencia
+  local no pedido por ese plan.
+- **`/design-consultation` para un DESIGN.md formal del proyecto** — deuda de
+  diseño conocida y recomendada por 5 planes consecutivos de este repo
+  (incluido este), nunca ejecutada. No específica de ninguna feature puntual.

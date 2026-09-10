@@ -1644,3 +1644,94 @@ td:first-child {
     transition: none !important;
   }
 }
+
+/* goles-por-marcador-slots-plan.md (Fase 2 Design, Pass 1/6) — "Cargar
+   resultado directo": input de marcador, columnas de slots de gol y el
+   banner persistente de modo degradado (sin convocatoria guardada). */
+
+.marcador-input-fila {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+  font-weight: 600;
+}
+
+.marcador-input-fila input {
+  width: 3.5rem;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.marcador-contador-parcial {
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.slots-columnas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .slots-columnas {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Pass 1: hasta 6 slots visibles por columna sin scroll (cubre la enorme
+   mayoría de partidos amateur); un marcador más alto activa scroll
+   interno — el marcador y el Quick Action Bar quedan fuera de esta
+   columna, siempre visibles. */
+.slots-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: calc(6 * 3.25rem);
+  overflow-y: auto;
+}
+
+.slot-gol-fila {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.slot-gol-fila select {
+  flex: 1;
+  min-width: 0;
+}
+
+.slot-gol-fila input[type="number"] {
+  width: 4rem;
+}
+
+.slot-gol-fila__check {
+  color: var(--accent);
+  width: 1.25rem;
+  text-align: center;
+}
+
+/* Banner persistente informativo (no urgente — `aria-live="polite"`, a
+   diferencia de `.banner-deshacer-cierre` que sí es una emergencia de
+   cierre forzado). Modo degradado: sin convocatoria guardada, el filtrado
+   estricto titular/suplente no se puede cumplir — se avisa mientras el
+   modo esté activo, nunca un dismiss-once. */
+.banner-info-persistente {
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 0.75rem;
+  background: var(--warning);
+  color: #2a2205;
+  border-radius: var(--radius);
+  font-weight: 600;
+}

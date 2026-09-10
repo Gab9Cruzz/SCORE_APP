@@ -11,7 +11,7 @@ import {
   limpiarEventoPendiente,
 } from "../lib/colaOfflineEventos";
 import { Cronometro } from "./Cronometro";
-import { calcularElegibilidadCambios, TIPOS, TIPO_ICONO, type PlantillaJugador, type TipoEvento } from "./eventos";
+import { deriveHistorialElegibilidad, deriveTitularSuplente, TIPOS, TIPO_ICONO, type PlantillaJugador, type TipoEvento } from "./eventos";
 import { ModalSustitucion } from "./ModalSustitucion";
 
 /** 3B-1 (docs/plans/cierre-backlog-todos-plan.md): distingue "no hay red"
@@ -228,6 +228,30 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
     return conteo;
   }, [eventosRegistrados, eventoNombrePorId]);
   const maximoCambios = torneoQuery.data?.maximo_cambios_por_equipo ?? null;
+
+  // goles-por-marcador-slots-plan.md, Fase 3 Eng (corrección 4): 1 sola
+  // fuente para ambos ejes (historial de la timeline + titular/suplente de
+  // la convocatoria), compartida por los 3 call-sites de más abajo
+  // (alineación en vivo "Sacar", ModalSustitucion "Entra", CargaEvento) —
+  // antes cada uno tenía su propio cálculo, divergente (hallazgo 1 del
+  // plan: CargaEvento no distinguía titular/suplente en absoluto).
+  const { salidosOExpulsados, yaEntraron } = useMemo(
+    () => deriveHistorialElegibilidad(eventosRegistrados, eventoNombrePorId),
+    [eventosRegistrados, eventoNombrePorId],
+  );
+  const plantillaCompleta = useMemo(
+    () => [...(plantillaLocalQuery.data ?? []), ...(plantillaVisitanteQuery.data ?? [])],
+    [plantillaLocalQuery.data, plantillaVisitanteQuery.data],
+  );
+  // Ambos sets vacíos = sin convocatoria guardada para este partido (D4,
+  // `partido.py:170-179`) — cada call-site que los usa muestra la
+  // plantilla completa + un aviso en vez de asumir un filtrado que no
+  // puede cumplir.
+  const { titulares: titularesJugadorIds, suplentes: suplentesJugadorIds } = useMemo(
+    () => deriveTitularSuplente(titularesPerfilIds, plantillaCompleta),
+    [titularesPerfilIds, plantillaCompleta],
+  );
+  const sinConvocatoria = titularesJugadorIds.size === 0 && suplentesJugadorIds.size === 0;
 
   // Marcador calculado como vw_goles_acreditados: Gol suma al equipo del
   // jugador, Autogol suma al rival. Se recalcula en cada refetch — no hay
@@ -491,6 +515,15 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
             eventosRegistrados={eventosRegistrados}
             eventoIdPorNombre={eventoIdPorNombre}
             eventoNombrePorId={eventoNombrePorId}
+            // goles-por-marcador-slots-plan.md, Fase 1 (hallazgo 1): antes
+            // este componente calculaba su propia elegibilidad de Cambio
+            // sin distinguir titular/suplente en absoluto ("plantilla
+            // vigente — no distingue titular/suplente", el comentario que
+            // se retira más abajo) — ahora consume el mismo cálculo
+            // compartido que la alineación en vivo y ModalSustitucion.
+            titularesJugadorIds={titularesJugadorIds}
+            suplentesJugadorIds={suplentesJugadorIds}
+            sinConvocatoria={sinConvocatoria}
             minutoActual={minutoActual}
             onSubmit={manejarSubmitEvento}
             submitting={mutation.isPending}
@@ -523,7 +556,16 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
                 [partido.equipos_id_visitante, nombreVisitante, plantillaVisitanteFiltrada],
               ] as const
             ).map(([equipoId, nombre, plantillaEquipo]) => {
-              const titularesEquipo = plantillaEquipo.filter((j) => titularesPerfilIds.has(j.jugador_perfil_id));
+              // Fix (goles-por-marcador-slots-plan.md, Fase 1, hallazgo 3):
+              // antes no excluía `salidosOExpulsados` — un titular YA
+              // sustituido (o expulsado) seguía apareciendo acá con botón
+              // "Sacar", permitiendo una segunda "salida" del mismo
+              // jugador sin aviso (el backend ahora sí lo rechaza,
+              // `reglas_cambio.validar_reglas_cambio`, pero esta lista no
+              // debía ni ofrecerlo).
+              const titularesEquipo = plantillaEquipo.filter(
+                (j) => titularesJugadorIds.has(j.jugador_id) && !salidosOExpulsados.has(j.jugador_id),
+              );
               return (
                 <div key={equipoId}>
                   <h3>{nombre}</h3>
@@ -554,10 +596,16 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
       {sustituyendoA && (() => {
         const plantillaEquipoSaliente =
           sustituyendoA.equipo_id === partido.equipos_id_local ? plantillaLocalFiltrada : plantillaVisitanteFiltrada;
-        const { salidosOExpulsados, yaEntraron } = calcularElegibilidadCambios(eventosRegistrados, eventoNombrePorId);
+        // Fix (goles-por-marcador-slots-plan.md, Fase 1, hallazgo 2): antes
+        // `elegibles` era la plantilla completa (menos sale/salidos/ya
+        // entraron) — un titular en cancha que nunca salió podía aparecer
+        // como candidato a "Entra". Este flujo solo se dispara tocando un
+        // titular en la lista de arriba, que YA exige convocatoria
+        // guardada (si no hay, la lista sale vacía) — así que acá siempre
+        // hay convocatoria y se puede filtrar estrictamente a suplentes.
         const elegibles = plantillaEquipoSaliente.filter(
           (j) =>
-            j.jugador_id !== sustituyendoA.jugador_id &&
+            suplentesJugadorIds.has(j.jugador_id) &&
             !salidosOExpulsados.has(j.jugador_id) &&
             !yaEntraron.has(j.jugador_id),
         );
@@ -587,11 +635,14 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
         {corregirMinutoEvento.isError && <p className="error-text">{apiErrorMessage(corregirMinutoEvento.error)}</p>}
         {eventosRegistrados.length > 0 && (
           <ul className="eventos-timeline">
-            {/* T7 (Área 2): el backend ya devuelve ordenado cronológicamente
-                (ORDER BY minuto, id — EventoPartidoRepository.list), esto
-                solo invierte para mostrar lo más reciente arriba. Ya no
-                reimplementa un sort: un `.reverse()` no es un comparador. */}
-            {[...eventosRegistrados].reverse().map((e) => (
+            {/* T7 (Área 2) + goles-por-marcador-slots-plan.md (Gate Final,
+                Alternativa D): el backend ya devuelve ordenado cronológicamente
+                (ORDER BY minuto, id — EventoPartidoRepository.list) y se
+                renderiza tal cual, ascendente — el usuario eligió esto
+                explícitamente en el gate ("el orden siempre debe ser de
+                menor a mayor"), revirtiendo el `.reverse()` que antes
+                mostraba lo más reciente arriba. */}
+            {eventosRegistrados.map((e) => (
               <EventoTimelineFila
                 key={e.id}
                 evento={e}
@@ -689,6 +740,12 @@ function CargaEvento(props: {
   eventosRegistrados: EventoPartidoRow[];
   eventoIdPorNombre: Map<string, number>;
   eventoNombrePorId: Map<number, string>;
+  /** goles-por-marcador-slots-plan.md, Fase 3 Eng (corrección 4): sets
+   * explícitos derivados de la convocatoria (`deriveTitularSuplente`) —
+   * ambos vacíos cuando no hay convocatoria guardada (`sinConvocatoria`). */
+  titularesJugadorIds: Set<number>;
+  suplentesJugadorIds: Set<number>;
+  sinConvocatoria: boolean;
   /** Área 3 (T3): emitido por <Cronometro> — `null` mientras no hay nada
    * que mostrar. El submit queda deshabilitado hasta que llega un valor
    * real (Sección 1 del plan: "deshabilitar botón hasta que Cronometro
@@ -717,12 +774,28 @@ function CargaEvento(props: {
 
   const plantillaEquipo = equipoId === props.equipoLocalId ? props.plantillaLocal : props.plantillaVisitante;
 
-  const { salidosOExpulsados, yaEntraron } = calcularElegibilidadCambios(props.eventosRegistrados, props.eventoNombrePorId);
+  const { salidosOExpulsados, yaEntraron } = deriveHistorialElegibilidad(props.eventosRegistrados, props.eventoNombrePorId);
 
+  // Lista general (Gol/Autogol/tarjetas): toda la plantilla convocada,
+  // menos quien ya salió/fue expulsado — sin distinción titular/suplente
+  // (no aplica acá: un suplente que ya ingresó también puede marcar un gol).
   const disponiblesParaSalir = plantillaEquipo.filter((j) => !salidosOExpulsados.has(j.jugador_id));
-  const disponiblesParaEntrar = plantillaEquipo.filter(
-    (j) => !salidosOExpulsados.has(j.jugador_id) && !yaEntraron.has(j.jugador_id) && j.jugador_id !== sale,
-  );
+
+  // Cambio (goles-por-marcador-slots-plan.md, Fase 1, hallazgo 1 — antes
+  // este componente no distinguía titular/suplente EN ABSOLUTO, a
+  // diferencia de la alineación en vivo, que sí lo hacía para "Sale"; era
+  // la inconsistencia DRY que el plan señaló). Con convocatoria guardada,
+  // "Sale" se restringe a titulares vigentes y "Entra" a suplentes
+  // vigentes — el filtrado estricto que pide el punto 3 del pedido. Sin
+  // convocatoria (`sinConvocatoria`), degrada con gracia a la plantilla
+  // completa (D4) — mismo comportamiento que tenía antes de este plan.
+  const disponiblesParaSalirCambio = props.sinConvocatoria
+    ? disponiblesParaSalir
+    : plantillaEquipo.filter((j) => props.titularesJugadorIds.has(j.jugador_id) && !salidosOExpulsados.has(j.jugador_id));
+  const disponiblesParaEntrar = plantillaEquipo.filter((j) => {
+    if (salidosOExpulsados.has(j.jugador_id) || yaEntraron.has(j.jugador_id) || j.jugador_id === sale) return false;
+    return props.sinConvocatoria || props.suplentesJugadorIds.has(j.jugador_id);
+  });
 
   const jugadorSimple = tipo !== "Cambio" ? sale : null;
 
@@ -793,19 +866,24 @@ function CargaEvento(props: {
 
       {tipo === "Cambio" && equipoId && sale === null && (
         <div className="tap-grid">
-          <p className="muted">¿Quién sale? (plantilla vigente — no distingue titular/suplente)</p>
-          {disponiblesParaSalir.map((j) => (
+          <p className="muted">
+            {props.sinConvocatoria
+              ? "¿Quién sale? (sin convocatoria guardada para este partido — mostrando la plantilla completa, sin distinguir titular/suplente)"
+              : "¿Quién sale? (solo titulares)"}
+          </p>
+          {disponiblesParaSalirCambio.map((j) => (
             <button key={j.jugador_id} type="button" className="tap-button" onClick={() => setSale(j.jugador_id)}>
               {j.dorsal ? `#${j.dorsal} ` : ""}{j.jugador}
             </button>
           ))}
+          {disponiblesParaSalirCambio.length === 0 && <p>No hay titulares disponibles en la plantilla.</p>}
           <button type="button" className="link-button" onClick={() => setEquipoId(null)}>← Cambiar equipo</button>
         </div>
       )}
 
       {tipo === "Cambio" && equipoId && sale !== null && entra === null && (
         <div className="tap-grid">
-          <p className="muted">¿Quién entra?</p>
+          <p className="muted">{props.sinConvocatoria ? "¿Quién entra?" : "¿Quién entra? (solo suplentes)"}</p>
           {disponiblesParaEntrar.map((j) => (
             <button key={j.jugador_id} type="button" className="tap-button" onClick={() => setEntra(j.jugador_id)}>
               {j.dorsal ? `#${j.dorsal} ` : ""}{j.jugador}

@@ -90,3 +90,66 @@ async def test_permite_cambios_ilimitados_desactiva_la_regla_de_no_retorno(
         headers=arbitro_headers,
     )
     assert resp.status_code == 201, resp.text
+
+
+async def test_doble_salida_del_mismo_jugador_rechazada(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares
+):
+    """goles-por-marcador-slots-plan.md, Fase 3 Eng (corrección 1, crítico):
+    el jugador que SALE (jugador_id) no puede tener ya un Cambio previo
+    como saliente en este partido — sin esto, un titular ya sustituido
+    seguía apareciendo con botón "Sacar" en la alineación en vivo
+    (MesaPanel.tsx:526, no excluía salidosOExpulsados) y podía generar un
+    segundo evento Cambio con el mismo jugador_id saliente, sin ningún
+    rechazo. Torneo default (permite_cambios_ilimitados=False)."""
+    await _iniciar_partido_3(client, arbitro_headers, convocar_titulares)
+    cambio_id = next(e["id"] for e in (await client.get("/api/v1/eventos")).json() if e["nombre"] == "Cambio")
+
+    # Sale 5, entra 6 — aceptado.
+    resp = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": cambio_id, "jugador_id_entra": 6},
+        headers=arbitro_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+    # El MISMO jugador (5) "sale" de nuevo, con un entrante distinto (7) —
+    # rechazado: 5 ya generó un evento de Cambio como saliente.
+    resp = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": cambio_id, "jugador_id_entra": 7},
+        headers=arbitro_headers,
+    )
+    assert resp.status_code == 400, resp.text
+    assert "volver a salir" in resp.json()["detail"].lower()
+
+
+async def test_doble_salida_del_mismo_jugador_rechazada_con_cambios_ilimitados(
+    client: AsyncClient, arbitro_headers: dict[str, str], torneo_admin_con_torneo_headers: dict[str, str], convocar_titulares
+):
+    """El guard de doble-salida es INCONDICIONAL — a diferencia de
+    no-retorno (que sí se desactiva con permite_cambios_ilimitados=True,
+    ver el test de arriba), permite_cambios_ilimitados gobierna REINGRESO
+    (jugador_id_entra volviendo a entrar), nunca el doble-registro de la
+    MISMA salida (jugador_id saliendo dos veces). Antes de esta corrección,
+    un torneo con cambios ilimitados no tenía NINGUNA protección contra
+    esto — el guard estaba anidado dentro del mismo `if` que desactiva
+    no-retorno."""
+    await _patch_torneo_1(client, torneo_admin_con_torneo_headers, permite_cambios_ilimitados=True)
+    await _iniciar_partido_3(client, arbitro_headers, convocar_titulares)
+    cambio_id = next(e["id"] for e in (await client.get("/api/v1/eventos")).json() if e["nombre"] == "Cambio")
+
+    resp = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": cambio_id, "jugador_id_entra": 6},
+        headers=arbitro_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+    resp = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": cambio_id, "jugador_id_entra": 7},
+        headers=arbitro_headers,
+    )
+    assert resp.status_code == 400, resp.text
+    assert "volver a salir" in resp.json()["detail"].lower()

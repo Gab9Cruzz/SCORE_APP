@@ -15,6 +15,7 @@ from app.repositories.torneo import TorneoRepository
 from app.schemas.evento_partido import EventoPartidoCreate, EventoPartidoUpdate
 from app.services.minuto_partido import calcular_minuto_actual
 from app.services.permisos import verificar_arbitro_asignado
+from app.services.reglas_cambio import validar_reglas_cambio
 
 
 def _verificar_partido_en_curso(partido: Partido) -> None:
@@ -107,44 +108,28 @@ class EventoPartidoService:
         return minuto
 
     async def _validar_reglas_cambio(self, partido: Partido, data: EventoPartidoCreate) -> None:
-        """Área 3 (T5): tope de cantidad + no-retorno, gobernados por
-        `Torneo.maximo_cambios_por_equipo`/`Torneo.permite_cambios_ilimitados`
-        — ver el comentario grande en 01_schema.sql para por qué son 2 ejes
-        independientes. Solo aplica a tipo_hito='Cambio'; cualquier otro
-        evento (Gol, Autogol, tarjetas) no toca esto."""
+        """Área 3 (T5): delega en `reglas_cambio.validar_reglas_cambio`
+        (goles-por-marcador-slots-plan.md, Fase 3 Eng, corrección 3) — la
+        lógica de tope/no-retorno/doble-salida vive ahí, compartida con
+        `PartidoService.registrar_resultado_directo`, no acá. Este método
+        queda como wrapper delgado: solo resuelve el catálogo de evento
+        (para el early-return barato si no es 'Cambio', sin gastar la
+        consulta de torneo en el caso común de Gol/tarjeta) y el torneo."""
         evento_catalogo = await self.evento_catalogo_repo.get_or_404(data.eventos_id)
         if evento_catalogo.nombre != "Cambio":
             return
 
         torneo = await self.torneo_repo.get_or_404(partido.torneo_id)
-
-        if not torneo.permite_cambios_ilimitados and data.jugador_id_entra is not None:
-            ya_salio = await self.repo.list(
-                limit=1,
-                partidos_id=partido.id,
-                eventos_id=data.eventos_id,
-                jugador_id=data.jugador_id_entra,
-                estado="Registrado",
-            )
-            if ya_salio:
-                raise DomainRuleError(
-                    "Ese jugador ya salió por cambio antes en este partido — este torneo no permite "
-                    "reingresos (cambios rotativos). Activá 'Permite cambios ilimitados' si corresponde."
-                )
-
-        if torneo.maximo_cambios_por_equipo is not None:
-            usados = await self.repo.list(
-                limit=torneo.maximo_cambios_por_equipo + 1,
-                partidos_id=partido.id,
-                eventos_id=data.eventos_id,
-                equipo_id=data.equipo_id,
-                estado="Registrado",
-            )
-            if len(usados) >= torneo.maximo_cambios_por_equipo:
-                raise DomainRuleError(
-                    f"Ya se usaron los {torneo.maximo_cambios_por_equipo} cambios permitidos para "
-                    "este equipo en este partido."
-                )
+        await validar_reglas_cambio(
+            torneo=torneo,
+            evento_catalogo_nombre=evento_catalogo.nombre,
+            evento_partido_repo=self.repo,
+            partido_id=partido.id,
+            jugador_id=data.jugador_id,
+            jugador_id_entra=data.jugador_id_entra,
+            equipo_id=data.equipo_id,
+            eventos_id=data.eventos_id,
+        )
 
     async def corregir_minuto(self, id_: int, minuto: int, usuario_actual: Usuario) -> EventoPartido:
         """PATCH /eventos-partido/{id} (gestion-avanzada-equipos-control-

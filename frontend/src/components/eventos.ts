@@ -40,14 +40,20 @@ interface EventoRegistradoMinimo {
  * partido (modo-vivo-sustituciones-cierre-plan.md, Sección 5 — extraído
  * acá para que `CargaEvento` (MesaPanel.tsx) y `ModalSustitucion` compartan
  * el mismo cálculo en vez de que cada uno reimplemente su propia
- * heurística: exactamente el riesgo DRY que el plan señala). El modelo de
- * datos no distingue titular/suplente en el historial, así que esto es
- * "plantilla vigente menos quien ya salió o fue expulsado" — una
- * simplificación consciente, no un cálculo exacto de "quién está en
- * cancha ahora mismo". La validación AUTORITATIVA (tope de cambios,
- * no-retorno) es 100% del backend (`EventoPartidoService._validar_reglas_cambio`)
- * — esto es solo la lista de candidatos que se le ofrece al operador. */
-export function calcularElegibilidadCambios(eventosRegistrados: EventoRegistradoMinimo[], eventoNombrePorId: Map<number, string>) {
+ * heurística: exactamente el riesgo DRY que el plan señala). Es
+ * "plantilla vigente menos quien ya salió o fue expulsado" — para
+ * distinguir titular/suplente, ver `deriveTitularSuplente` abajo
+ * (goles-por-marcador-slots-plan.md, Fase 3 Eng, corrección 4 — antes vivía
+ * mezclado en un solo set negado acá mismo, ambiguo de polaridad entre
+ * "Sale" y "Entra"). La validación AUTORITATIVA (tope de cambios,
+ * no-retorno, doble-salida) es 100% del backend
+ * (`app/services/reglas_cambio.py::validar_reglas_cambio`) — esto es solo
+ * la lista de candidatos que se le ofrece al operador.
+ *
+ * Nombre `derive*` (no `calcular*`): comunica explícitamente "esto es un
+ * cálculo puro sobre datos existentes, no una fuente de verdad propia" —
+ * mismo criterio de nombrado que `calcular_minuto_actual` en el backend. */
+export function deriveHistorialElegibilidad(eventosRegistrados: EventoRegistradoMinimo[], eventoNombrePorId: Map<number, string>) {
   const salidosOExpulsados = new Set<number>();
   for (const e of eventosRegistrados) {
     const nombreTipo = eventoNombrePorId.get(e.eventos_id);
@@ -59,4 +65,33 @@ export function calcularElegibilidadCambios(eventosRegistrados: EventoRegistrado
       .map((e) => e.jugador_id_entra as number),
   );
   return { salidosOExpulsados, yaEntraron };
+}
+
+/** Deriva quiénes son titulares/suplentes AHORA, a partir de la
+ * convocatoria guardada (goles-por-marcador-slots-plan.md, Fase 3 Eng,
+ * corrección 4). Devuelve los DOS sets EXPLÍCITOS — nunca 1 set negado —
+ * para que cada consumidor use el que le corresponde sin ambigüedad de
+ * polaridad ("Sale" necesita `titulares`, "Entra" necesita `suplentes`).
+ *
+ * Sin convocatoria guardada para este partido (`titularesPerfilIds` vacío):
+ * AMBOS sets vuelven vacíos, EXPLÍCITAMENTE — degradación con gracia (D4,
+ * `partido.py:170-179`: "resultado directo" existe para partidos sin
+ * alineación registrada). Cada call-site debe chequear
+ * `titulares.size === 0 && suplentes.size === 0` y mostrar la plantilla
+ * completa + un aviso, en vez de asumir que un set vacío "no filtra" por
+ * accidente. */
+export function deriveTitularSuplente(
+  titularesPerfilIds: Set<number>,
+  plantilla: PlantillaJugador[],
+): { titulares: Set<number>; suplentes: Set<number> } {
+  if (titularesPerfilIds.size === 0) {
+    return { titulares: new Set(), suplentes: new Set() };
+  }
+  const titulares = new Set<number>();
+  const suplentes = new Set<number>();
+  for (const j of plantilla) {
+    if (titularesPerfilIds.has(j.jugador_perfil_id)) titulares.add(j.jugador_id);
+    else suplentes.add(j.jugador_id);
+  }
+  return { titulares, suplentes };
 }

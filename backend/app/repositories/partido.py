@@ -2,6 +2,7 @@ from collections.abc import Sequence
 
 from sqlalchemy import and_, not_, select
 
+from app.exceptions.errors import NotFoundError
 from app.models.partido import Partido
 from app.models.torneo import Torneo
 from app.models.torneo_grupo import TorneoGrupo
@@ -11,6 +12,23 @@ from app.repositories.base import BaseRepository
 class PartidoRepository(BaseRepository[Partido]):
     model = Partido
     nombre_recurso = "Partido"
+
+    async def get_or_404_bloqueado(self, id_: int) -> Partido:
+        """`SELECT ... FOR UPDATE` (goles-por-marcador-slots-plan.md, Fase 3
+        Eng, corrección 2) — usado exclusivamente por
+        `PartidoService.registrar_resultado_directo`, que lee `estado`
+        UNA vez y después hace varios `flush()` antes del `commit()` final
+        sin ningún lock; 2 requests concurrentes sobre el mismo partido
+        'Programado' (doble-click antes de que React re-renderice
+        `isPending`, o 2 pestañas) podían pasar el guard ambos y ambos
+        insertar Inicio_Partido+eventos+Fin_Partido. `AsyncSession.get`
+        soporta `with_for_update` nativo (no hace falta un `select()`
+        manual) — el lock se libera en el `commit()`/rollback ya existente
+        de ese método, sin reestructurar su transacción."""
+        obj = await self.session.get(self.model, id_, with_for_update=True)
+        if obj is None:
+            raise NotFoundError(self.nombre_recurso, id_)
+        return obj
 
     async def list(
         self,

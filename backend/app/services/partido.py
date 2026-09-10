@@ -8,12 +8,15 @@ from app.models.hito_partido import HitoPartido
 from app.models.partido import Partido
 from app.models.usuario import Usuario
 from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoRepository
+from app.repositories.evento import EventoRepository
+from app.repositories.evento_partido import EventoPartidoRepository
 from app.repositories.fase import FaseRepository
 from app.repositories.partido import PartidoRepository
 from app.repositories.torneo import TorneoRepository
 from app.repositories.torneo_grupo import TorneoGrupoRepository
 from app.schemas.partido import PartidoCreate, PartidoUpdate, ResultadoDirectoCreate
 from app.services.permisos import verificar_arbitro_asignado
+from app.services.reglas_cambio import validar_reglas_cambio
 
 
 class PartidoService:
@@ -26,6 +29,12 @@ class PartidoService:
         # H7: guard de torneo archivado en registrar_resultado_directo, que
         # inserta el HitoPartido a mano y por eso no pasa por HitoPartidoService.
         self.torneo_grupo_repo = TorneoGrupoRepository(session)
+        # goles-por-marcador-slots-plan.md, Fase 3 Eng (corrección 3): repos
+        # propios para llamar `validar_reglas_cambio` sin instanciar
+        # `EventoPartidoService` — ningún servicio de este repo instancia a
+        # otro, mismo patrón que los repos de arriba.
+        self.evento_catalogo_repo = EventoRepository(session)
+        self.evento_partido_repo = EventoPartidoRepository(session)
 
     async def get(self, id_: int) -> Partido:
         return await self.repo.get_or_404(id_)
@@ -152,8 +161,17 @@ class PartidoService:
         excepción sube sin que nada de esto se haya persistido todavía, y
         `app/db/session.py` hace rollback de la transacción completa — ni
         el Inicio_Partido ni los eventos previos quedan a medias.
+
+        Lock de fila (goles-por-marcador-slots-plan.md, Fase 3 Eng,
+        corrección 2): `get_or_404_bloqueado` en vez de `get_or_404` — sin
+        esto, 2 requests concurrentes sobre el mismo partido 'Programado'
+        (doble-click, o 2 pestañas) podían leer `estado='Programado'` los
+        dos antes de que cualquiera hiciera commit, y los dos insertar
+        Inicio_Partido+eventos+Fin_Partido. El lock se libera en el
+        `commit()`/rollback que este método ya tiene, sin reestructurar la
+        transacción.
         """
-        partido = await self.repo.get_or_404(id_)
+        partido = await self.repo.get_or_404_bloqueado(id_)
         verificar_arbitro_asignado(partido, usuario_actual)
 
         if partido.estado != "Programado":
@@ -200,6 +218,26 @@ class PartidoService:
         await self.session.flush()
 
         for evento in data.eventos:
+            # goles-por-marcador-slots-plan.md, Fase 1 (hallazgo 6): antes de
+            # esta corrección, este método nunca llamaba nada de
+            # `reglas_cambio` — un resultado directo con 10 cambios para un
+            # equipo con tope 5 se aceptaba sin aviso. Se valida ANTES del
+            # `add()`/`flush()` de este evento, usando los eventos ya
+            # flusheados en vueltas anteriores del mismo loop (visibles acá
+            # porque comparten la misma transacción) — si este evento viola
+            # una regla, ninguno de los siguientes llega a insertarse y el
+            # rollback de `app/db/session.py` deshace los anteriores también.
+            evento_catalogo = await self.evento_catalogo_repo.get_or_404(evento.eventos_id)
+            await validar_reglas_cambio(
+                torneo=torneo,
+                evento_catalogo_nombre=evento_catalogo.nombre,
+                evento_partido_repo=self.evento_partido_repo,
+                partido_id=id_,
+                jugador_id=evento.jugador_id,
+                jugador_id_entra=evento.jugador_id_entra,
+                equipo_id=evento.equipo_id,
+                eventos_id=evento.eventos_id,
+            )
             self.session.add(EventoPartido(partidos_id=id_, **evento.model_dump()))
             await self.session.flush()
 
