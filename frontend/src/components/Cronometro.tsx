@@ -282,6 +282,20 @@ export function Cronometro(props: {
     await registrar.mutateAsync({ tipo_hito: "Inicio_Periodo", numero_periodo: 1 } as never);
   }
 
+  // Botón "Fin del Partido" en el último período: espejo de
+  // iniciarPrimerTiempo, mismo motivo. El backend (HitoPartidoService.
+  // _calcular_estado) solo habilita "Fin_Partido" en acciones_permitidas
+  // DESPUÉS de que el último período quedó cerrado (Periodo_Abierto is
+  // None) — es la misma regla que decide qué botones mostrar acá, así que
+  // mandar "Fin_Partido" mientras el período todavía está abierto se
+  // rechaza con 400 ("hitos válidos ahora: Pausa, Fin_Periodo"). Un solo
+  // toque de mesa cierra el período Y el partido (Fin_Periodo + Fin_Partido),
+  // sin exponerle al árbitro los dos hitos por separado.
+  async function finalizarUltimoPeriodoYPartido() {
+    await registrar.mutateAsync({ tipo_hito: "Fin_Periodo", numero_periodo: estado.periodo_abierto ?? undefined } as never);
+    await registrar.mutateAsync({ tipo_hito: "Fin_Partido" } as never);
+  }
+
   const esUltimoPeriodo = estado.cantidad_periodos != null && estado.periodo_abierto === estado.cantidad_periodos;
 
   let contenido: ReactNode;
@@ -384,7 +398,7 @@ export function Cronometro(props: {
             <button
               type="button"
               disabled={registrar.isPending}
-              onClick={() => accion(esUltimoPeriodo ? "Fin_Partido" : "Fin_Periodo", esUltimoPeriodo ? {} : { numero_periodo: estado.periodo_abierto ?? undefined })}
+              onClick={() => (esUltimoPeriodo ? finalizarUltimoPeriodoYPartido() : accion("Fin_Periodo", { numero_periodo: estado.periodo_abierto ?? undefined }))}
             >
               {esUltimoPeriodo ? "Fin del Partido" : `Fin ${label}`}
             </button>
