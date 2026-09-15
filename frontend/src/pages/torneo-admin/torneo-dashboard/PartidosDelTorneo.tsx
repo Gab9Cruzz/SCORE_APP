@@ -184,6 +184,17 @@ export function PartidosDelTorneoPage() {
             <button type="button" className="link-button" onClick={() => navigate(`/partidos/${fila.id}`)}>
               Detalle del Partido
             </button>
+            {/* portal-publico-feed-partidos-plan.md, T1.3: con el link
+                global de Control de Mesa ahora gateado por rol (T1.1), esta
+                es la puerta de entrada por fila para gestionar un partido
+                puntual sin pasar por la lista de /control-de-mesa. */}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => navigate(`/control-de-mesa/partido/${fila.id}`)}
+            >
+              Gestionar en Mesa
+            </button>
             <AccionAsignarArbitro
               partido={fila}
               arbitros={arbitros.listQuery.data ?? []}

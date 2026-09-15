@@ -16,7 +16,10 @@
 -- de 11_catalogo_disciplinas.sql.
 ALTER TABLE DISCIPLINA
     ADD CONSTRAINT unique_disciplina_nombre UNIQUE (Nombre),
-    ADD CONSTRAINT chk_disciplina_estado CHECK (Estado IN ('Activo', 'Inactivo'));
+    ADD CONSTRAINT chk_disciplina_estado CHECK (Estado IN ('Activo', 'Inactivo')),
+    -- Portal Público (portal-publico-feed-partidos-plan.md, F3): un slug
+    -- duplicado dejaría dos disciplinas resolviendo el mismo deep link.
+    ADD CONSTRAINT unique_disciplina_slug UNIQUE (Slug);
 
 -- MODALIDAD
 ALTER TABLE MODALIDAD

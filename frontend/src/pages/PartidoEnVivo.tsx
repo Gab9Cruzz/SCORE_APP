@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 
 // Intervalo de refresco para lo "en vivo" — arranca en 5s, ver Recommended
@@ -66,6 +66,41 @@ export function PartidoEnVivoPage() {
     },
     enabled: torneoId !== undefined,
     refetchInterval: LIVE_POLL_MS,
+    // D7 (portal-publico-feed-partidos-plan.md): C17 se resolvió por la
+    // opción (b) — esta página sigue pública pase lo que pase, pero
+    // /estadisticas/torneos/{id}/resultados sí gatea por Publicado
+    // (T3.4b). Sin retry: un 404 por torneo despublicado no es transitorio.
+    retry: false,
+  });
+
+  // D7: cabecera con nombre/país del torneo, enlazada a /torneos/:id — el
+  // eslabón partido→torneo que C6 quiere medir. `retry: false` y sin
+  // lanzar en el catch: si el torneo está despublicado, esta consulta
+  // 404ea igual que resultadosQuery (mismo gate) y la cabecera
+  // simplemente no se renderiza, en vez de romper la página.
+  const torneoQuery = useQuery({
+    queryKey: ["torneo-header", torneoId],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}", {
+        params: { path: { torneo_id: torneoId as number } },
+      } as never);
+      if (error) throw error;
+      return data as { id: number; torneo_grupo_id: number };
+    },
+    enabled: torneoId !== undefined,
+    retry: false,
+  });
+  const grupoIdParaHeader = torneoQuery.data?.torneo_grupo_id;
+  const grupoHeaderQuery = useQuery({
+    queryKey: ["torneo-grupo-header", grupoIdParaHeader],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/torneo-grupos/{torneo_grupo_id}", {
+        params: { path: { torneo_grupo_id: grupoIdParaHeader as number } },
+      } as never);
+      if (error) throw error;
+      return data as { nombre: string; pais: string | null };
+    },
+    enabled: grupoIdParaHeader !== undefined,
   });
 
   const eventosQuery = useQuery({
@@ -194,7 +229,18 @@ export function PartidoEnVivoPage() {
     .sort((a, b) => b.minuto - a.minuto);
 
   return (
-    <div className="page en-vivo">
+    <div className="page en-vivo publico">
+      {/* D7: identidad y salida — el visitante que llega desde WhatsApp
+          veía dos nombres flotando, sin torneo, sin fecha y sin vuelta.
+          No se renderiza nada si torneoQuery/grupoHeaderQuery no
+          resolvieron todavía o el torneo está despublicado (404 propio,
+          `retry:false` arriba) — nunca un link roto. */}
+      {torneoQuery.data && grupoHeaderQuery.data && (
+        <p className="en-vivo__torneo-header">
+          <Link to={`/torneos/${torneoQuery.data.id}`}>{grupoHeaderQuery.data.nombre}</Link>
+          {grupoHeaderQuery.data.pais && <span className="muted"> · {grupoHeaderQuery.data.pais}</span>}
+        </p>
+      )}
       <div className="marcador">
         <div className="marcador__equipo">
           <span>{resultado?.equipo_local ?? "Local"}</span>
@@ -212,6 +258,13 @@ export function PartidoEnVivoPage() {
         </span>
         {resultadosQuery.data && <span className="muted">actualizado en vivo</span>}
       </div>
+      {/* D7/C17(b): el torneo sigue existiendo y estando despublicado NO
+          rompe la página (la superficie de partido queda pública pase lo
+          que pase) — pero el marcador de arriba (placeholders "Local"/
+          "- : -") se leería como datos reales sin este aviso explícito. */}
+      {resultadosQuery.isError && (
+        <p className="muted en-vivo__resultados-no-disponibles">Resultados no disponibles para este torneo.</p>
+      )}
 
       <section className="card">
         <h2>Eventos</h2>

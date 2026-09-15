@@ -32,7 +32,13 @@ CREATE TABLE DISCIPLINA (
     -- NULL = no seteado, ordena al final (NULLS LAST) — barra de
     -- navegación tipo SofaScore ordenada por popularidad, no alfabético
     -- (motor-formatos-plantillas-navegacion-plan.md, requerimiento #3).
-    Orden_Popularidad INT
+    Orden_Popularidad INT,
+    -- Portal Público (portal-publico-feed-partidos-plan.md, F3): id
+    -- legible y estable para un deep link compartible (`/?deporte=futbol`).
+    -- Generado por fn_generar_disciplina_slug (06_triggers.sql), nunca
+    -- por el cliente. UNIQUE (unique_disciplina_slug) va en
+    -- 02_constraints.sql, mismo patrón que unique_disciplina_nombre.
+    Slug VARCHAR(60) NOT NULL
 );
 
 -- Tamano_Plantilla_Max (3B-4, docs/plans/cierre-backlog-todos-plan.md):
@@ -66,7 +72,13 @@ CREATE TABLE TORNEO_GRUPO (
     Nombre VARCHAR(100) NOT NULL,
     Estado VARCHAR(20) NOT NULL DEFAULT 'Activo',
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Portal Público (portal-publico-feed-partidos-plan.md, C3): nacen
+    -- NULL — el formulario de edición de grupo las carga. País es texto
+    -- libre corto (D14b pide un <select> de países en el formulario, no
+    -- un CHECK acá: la validación de formato no cruza a nivel de base).
+    Pais VARCHAR(60),
+    Logo_URL VARCHAR(500)
 );
 
 CREATE TABLE TORNEO (
@@ -153,7 +165,13 @@ CREATE TABLE TORNEO (
     -- plan no llegó a especificar. El default explícito (FALSE) es más
     -- seguro y no requiere esa inferencia.)
     Permite_Cambios_Ilimitados BOOLEAN NOT NULL DEFAULT FALSE,
-    Maximo_Cambios_Por_Equipo INT
+    Maximo_Cambios_Por_Equipo INT,
+    -- Portal Público (portal-publico-feed-partidos-plan.md, C2/E-M2):
+    -- gatea si un torneo es visible para un caller anónimo. DEFAULT
+    -- FALSE acá porque esto es CREATE TABLE (entorno nuevo, sin filas que
+    -- backfillear) — 31_migracion_portal_publico.sql documenta por qué
+    -- una base YA PROVISIONADA hace ADD COLUMN...DEFAULT TRUE primero.
+    Publicado BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- Disciplina_ID/Modalidad_ID son NOT NULL desde
@@ -172,7 +190,10 @@ CREATE TABLE EQUIPOS (
     Modalidad_ID INT NOT NULL,
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    Estado VARCHAR(20) DEFAULT 'Activo'
+    Estado VARCHAR(20) DEFAULT 'Activo',
+    -- Portal Público (portal-publico-feed-partidos-plan.md, C3): nace
+    -- NULL — el formulario "URL del escudo" de EquiposAdmin.tsx la carga.
+    Logo_URL VARCHAR(500)
 );
 
 -- JUGADORES = identidad de la persona (única por Cedula). El perfil por

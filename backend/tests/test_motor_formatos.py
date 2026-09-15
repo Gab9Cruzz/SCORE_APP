@@ -155,7 +155,9 @@ async def test_generar_fixture_liga_par(client: AsyncClient, torneo_admin_header
     assert resp.status_code == 200, resp.text
     assert resp.json()["estado"] == "En_Curso"
 
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partidos = resp.json()
     # 4 equipos: 3 jornadas, 2 partidos por jornada = 6 partidos.
     assert len(partidos) == 6
@@ -175,7 +177,9 @@ async def test_generar_fixture_liga_impar_tiene_bye_rotativo(
     resp = await client.post(f"/api/v1/torneos/{torneo_id}/fixture", headers=torneo_admin_headers)
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partidos = resp.json()
     # 3 equipos: 3 jornadas, 1 partido por jornada (uno descansa siempre) = 3.
     assert len(partidos) == 3
@@ -191,7 +195,9 @@ async def test_generar_fixture_ida_vuelta_duplica_con_local_visitante_invertido(
     resp = await client.post(f"/api/v1/torneos/{torneo_id}/fixture", headers=torneo_admin_headers)
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partidos = resp.json()
     assert len(partidos) == 12  # 6 ida + 6 vuelta
     pares_ida = {(p["equipos_id_local"], p["equipos_id_visitante"]) for p in partidos if p["jornada"] <= 3}
@@ -220,7 +226,7 @@ async def test_sorteo_bracket_con_byes(client: AsyncClient, torneo_admin_headers
     )
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket")
+    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket", headers=torneo_admin_headers)
     assert resp.status_code == 200, resp.text
     partidos = resp.json()
 
@@ -253,7 +259,7 @@ async def test_sorteo_bracket_2_equipos_sin_tercer_lugar(client: AsyncClient, to
     resp = await client.post(f"/api/v1/torneos/{torneo_id}/sorteo", json={}, headers=torneo_admin_headers)
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket")
+    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket", headers=torneo_admin_headers)
     partidos = resp.json()
     assert len(partidos) == 1
     assert partidos[0]["ronda_nombre"] == "Final"
@@ -273,7 +279,7 @@ async def test_rehacer_sorteo_sin_finalizados_regenera(client: AsyncClient, torn
     resp = await client.post(f"/api/v1/torneos/{torneo_id}/sorteo", json={}, headers=torneo_admin_headers)
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket")
+    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket", headers=torneo_admin_headers)
     # 4 equipos, sin byes -> 2 semifinales + 1 final + 1 tercer lugar = 4.
     assert len(resp.json()) == 4
 
@@ -351,7 +357,9 @@ async def test_grupos_playoffs_de_punta_a_punta(client: AsyncClient, torneo_admi
     resp = await client.post(f"/api/v1/torneos/{torneo_id}/sorteo", json={"semilla": "grupos-fijo"}, headers=torneo_admin_headers)
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partidos_grupos = resp.json()
     assert len(partidos_grupos) == 2  # 2 grupos de 2 -> 1 partido cada uno
     grupo_ids = {p["grupo_id"] for p in partidos_grupos}
@@ -373,7 +381,11 @@ async def test_grupos_playoffs_de_punta_a_punta(client: AsyncClient, torneo_admi
     # T41: la tabla de posiciones separa por grupo — cada una tiene 1 solo
     # equipo con PJ=1 (el otro perdió, pero también jugó 1).
     for grupo_id in grupo_ids:
-        resp = await client.get(f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones", params={"grupo_id": grupo_id})
+        resp = await client.get(
+            f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones",
+            params={"grupo_id": grupo_id},
+            headers=torneo_admin_headers,
+        )
         tabla = resp.json()
         assert len(tabla) == 2
         assert all(fila["grupo_id"] == grupo_id for fila in tabla)
@@ -382,7 +394,7 @@ async def test_grupos_playoffs_de_punta_a_punta(client: AsyncClient, torneo_admi
     resp = await client.post(f"/api/v1/torneos/{torneo_id}/playoffs", headers=torneo_admin_headers)
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket")
+    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket", headers=torneo_admin_headers)
     bracket = resp.json()
     # 2 clasificados (1 por grupo) -> Final directa, sin Tercer Lugar
     # (tamano_bracket < 4, EC-58) — mismo criterio que T50.
@@ -413,7 +425,9 @@ async def test_generar_playoffs_con_clasificados_override_persiste_en_torneo(
     resp = await client.post(f"/api/v1/torneos/{torneo_id}/sorteo", json={"semilla": "override-fijo"}, headers=torneo_admin_headers)
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partidos_grupos = resp.json()
     for p in partidos_grupos:
         await _finalizar_con_resultado(db_session, p["id"], p["equipos_id_local"], p["equipos_id_visitante"])
@@ -425,7 +439,7 @@ async def test_generar_playoffs_con_clasificados_override_persiste_en_torneo(
     )
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket")
+    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket", headers=torneo_admin_headers)
     bracket = resp.json()
     assert len(bracket) == 1  # 1 clasificado por grupo -> Final directa, no 4 equipos
 
@@ -448,7 +462,9 @@ async def test_generar_playoffs_con_clasificados_menor_a_1_es_rechazado(
     )
     resp = await client.post(f"/api/v1/torneos/{torneo_id}/sorteo", json={"semilla": "invalido-fijo"}, headers=torneo_admin_headers)
     assert resp.status_code == 200, resp.text
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     for p in resp.json():
         await _finalizar_con_resultado(db_session, p["id"], p["equipos_id_local"], p["equipos_id_visitante"])
 

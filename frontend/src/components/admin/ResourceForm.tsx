@@ -144,9 +144,19 @@ export function ResourceForm(props: ResourceFormProps) {
             <input
               type={inputType}
               value={(values[f.name] as string | number | null | undefined) ?? ""}
-              onChange={(e) =>
-                setField(f.name, f.type === "number" ? (e.target.value ? Number(e.target.value) : null) : e.target.value)
-              }
+              onChange={(e) => {
+                if (f.type === "number") {
+                  setField(f.name, e.target.value ? Number(e.target.value) : null);
+                  return;
+                }
+                // Vacío -> null, no "" (portal-publico-feed-partidos-plan.md,
+                // C3): mismo criterio que "reference"/"select" arriba —
+                // antes de esto ningún campo type:"text" era opcional, así
+                // que este caso no existía. Un logo_url="" mandado al
+                // backend fallaría el validador de esquema https:// que
+                // solo tolera string-con-https o None.
+                setField(f.name, e.target.value || null);
+              }}
             />
           </label>
         );

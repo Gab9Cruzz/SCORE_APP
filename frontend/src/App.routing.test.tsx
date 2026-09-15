@@ -148,6 +148,91 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
     await waitFor(() => expect(screen.getByRole("heading", { name: "Mis partidos" })).toBeInTheDocument());
   });
 
+  it("anónimo tipeando /dashboard directo lo sigue alcanzando (F20: se esconde el link, no la ruta)", async () => {
+    renderApp("/dashboard");
+    expect(await screen.findByRole("heading", { name: "Dashboard de Torneo" })).toBeInTheDocument();
+  });
+
+  it("anónimo no ve los links de Dashboard ni Control de Mesa en el NavBar (T1.1/T1.2, C7)", async () => {
+    renderApp("/dashboard");
+    await screen.findByRole("heading", { name: "Dashboard de Torneo" });
+    expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Control de Mesa" })).not.toBeInTheDocument();
+  });
+
+  it("Arbitro logueado ve el link a Control de Mesa (T1.1, C7)", async () => {
+    mockLogin("Arbitro");
+    renderApp("/login");
+    await iniciarSesion();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Mis partidos" })).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: "Control de Mesa" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+    // D6: sin esto, T1.2 (esconder Dashboard al anónimo) + C16 ("/"
+    // redirige a /dashboard con sesión) dejaban a CUALQUIER logueado sin
+    // ningún link de vuelta al portal público.
+    expect(screen.getByRole("link", { name: "Portal público" })).toBeInTheDocument();
+  });
+
+  it("ruta inexistente cae en / (catch-all, T1.2); anónimo ve el feed público, no el dashboard interno (T4.1/C16)", async () => {
+    server.use(
+      http.get("http://127.0.0.1:8000/api/v1/partidos/feed", () =>
+        HttpResponse.json({ fecha_pedida: "2026-09-15", fecha_efectiva: "2026-09-15", total_disponible: 0, partidos: [] }),
+      ),
+      http.get("http://127.0.0.1:8000/api/v1/disciplinas/con-partidos", () => HttpResponse.json([])),
+    );
+    renderApp("/esto-no-existe");
+    expect(await screen.findByText("Actualizado", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Dashboard de Torneo" })).not.toBeInTheDocument();
+  });
+
+  it("ruta inexistente cae en / (catch-all); logueado sigue yendo a /dashboard (T4.1/C16 no cambia el arranque de nadie con sesión)", async () => {
+    mockLogin("TorneoAdmin");
+    renderApp("/login");
+    await iniciarSesion();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Torneo Admin" })).toBeInTheDocument());
+
+    renderApp("/esto-no-existe");
+    expect(await screen.findByRole("heading", { name: "Dashboard de Torneo" })).toBeInTheDocument();
+  });
+
+  it("T5.5: /torneos/:torneoId monta la vista pública de torneo, sin sesión", async () => {
+    server.use(
+      http.get("http://127.0.0.1:8000/api/v1/torneos/7", () =>
+        HttpResponse.json({ id: 7, torneo_grupo_id: 1, formato: "Liga", fecha_inicio: "2099-01-01", estado: "Activo" }),
+      ),
+      http.get("http://127.0.0.1:8000/api/v1/torneo-grupos/1", () =>
+        HttpResponse.json({ id: 1, nombre: "Torneo Público Test", pais: null, logo_url: null }),
+      ),
+      http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/7/posiciones", () => HttpResponse.json([])),
+      http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/7/resultados", () => HttpResponse.json([])),
+      http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/7/goleadores", () => HttpResponse.json([])),
+    );
+    renderApp("/torneos/7");
+    expect(await screen.findByRole("heading", { name: "Torneo Público Test" })).toBeInTheDocument();
+  });
+
+  it("T4.1/C16: \"/\" para anónimo muestra el feed público, no un redirect a /dashboard", async () => {
+    server.use(
+      http.get("http://127.0.0.1:8000/api/v1/partidos/feed", () =>
+        HttpResponse.json({ fecha_pedida: "2026-09-15", fecha_efectiva: "2026-09-15", total_disponible: 0, partidos: [] }),
+      ),
+      http.get("http://127.0.0.1:8000/api/v1/disciplinas/con-partidos", () => HttpResponse.json([])),
+    );
+    renderApp("/");
+    expect(await screen.findByText("Actualizado", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Dashboard de Torneo" })).not.toBeInTheDocument();
+  });
+
+  it("T4.1/C16: \"/\" con sesión sigue redirigiendo a /dashboard — el arranque de un usuario logueado no cambia", async () => {
+    mockLogin("AdminGeneral");
+    renderApp("/login");
+    await iniciarSesion();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Torneo Admin" })).toBeInTheDocument());
+
+    renderApp("/");
+    expect(await screen.findByRole("heading", { name: "Dashboard de Torneo" })).toBeInTheDocument();
+  });
+
   it("el fallo de GET /auth/me tras el login no rompe el login ni el redirect por rol", async () => {
     // Fase 3, D2: /auth/me se pide aparte del login para tener el id. Si
     // esa llamada falla, el login ya fue exitoso (login() usa el rol que

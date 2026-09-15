@@ -51,6 +51,7 @@ class TorneoRepository(BaseRepository[Torneo]):
         torneo_ids_permitidos: Sequence[int] | None = None,
         torneo_grupo_id: int | None = None,
         incluir_archivados: bool = False,
+        solo_publicados: bool = False,
         **filtros: object,
     ) -> list[Torneo]:
         """Override de BaseRepository.list: agrega un filtro `IN` opcional
@@ -69,10 +70,16 @@ class TorneoRepository(BaseRepository[Torneo]):
         acceso directo/scoped a un grupo puntual sigue funcionando aunque
         esté Archivado. Solo el listado GENERAL (sin `torneo_grupo_id`)
         excluye por default las ediciones de un grupo Archivado, salvo
-        `incluir_archivados=True`."""
+        `incluir_archivados=True`.
+
+        `solo_publicados` (portal-publico-feed-partidos-plan.md, E-B3a):
+        excluye `Publicado=False` — el router lo prende cuando el caller
+        es anónimo, sin importar `torneo_grupo_id`/`incluir_archivados`."""
         stmt = select(Torneo).join(TorneoGrupo, TorneoGrupo.id == Torneo.torneo_grupo_id)
         if torneo_ids_permitidos is not None:
             stmt = stmt.where(Torneo.id.in_(torneo_ids_permitidos))
+        if solo_publicados:
+            stmt = stmt.where(Torneo.publicado.is_(True))
         if torneo_grupo_id is not None:
             stmt = stmt.where(Torneo.torneo_grupo_id == torneo_grupo_id)
         elif not incluir_archivados:

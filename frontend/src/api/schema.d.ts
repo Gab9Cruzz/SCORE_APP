@@ -88,6 +88,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/disciplinas/con-partidos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Disciplinas Con Partidos
+         * @description Portal Público (portal-publico-feed-partidos-plan.md, E-L4/E-M3):
+         *     sidecar de la barra pública de deportes, endpoint propio — NO un
+         *     campo del envelope de `GET /partidos/feed` (eso era circular con
+         *     `fecha_efectiva`, ver F4/E-L4). Sin filtro de disciplina: nunca está
+         *     vacío mientras el feed tenga contenido en algún deporte, ni siquiera
+         *     un feriado sin partidos de la disciplina que el visitante tenía
+         *     elegida. Va ANTES de `/{disciplina_id}`, mismo motivo que
+         *     `/con-modalidades`.
+         */
+        get: operations["listar_disciplinas_con_partidos_api_v1_disciplinas_con_partidos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/disciplinas/{disciplina_id}": {
         parameters: {
             query?: never;
@@ -254,7 +281,9 @@ export interface paths {
          * Generar Playoffs
          * @description Solo Grupos + Playoffs, y solo cuando la Fase de Grupos ya terminó:
          *     cruza los clasificados de cada grupo (1°A-2°B...) y sortea el bracket
-         *     de la fase eliminatoria — T42/T51.
+         *     de la fase eliminatoria — T42/T51. `data.clasificados_por_grupo`
+         *     (control-mesa-reactividad-playoffs-plan.md, Fase 3 §6): opcional,
+         *     default None = usa el config del torneo sin cambios.
          */
         post: operations["generar_playoffs_api_v1_torneos__torneo_id__playoffs_post"];
         delete?: never;
@@ -273,6 +302,10 @@ export interface paths {
         /**
          * Bracket
          * @description Solo lectura, público (mismo criterio que /estadisticas) — T46.
+         *
+         *     Gateado por Publicado (portal-publico-feed-partidos-plan.md, C18/E-B3a):
+         *     sin esto, el bracket completo de un torneo borrador seguía siendo
+         *     enumerable por un anónimo aunque el detalle del torneo ya 404eara.
          */
         get: operations["bracket_api_v1_torneos__torneo_id__bracket_get"];
         put?: never;
@@ -616,6 +649,39 @@ export interface paths {
         patch: operations["actualizar_evento_api_v1_eventos__evento_id__patch"];
         trace?: never;
     };
+    "/api/v1/partidos/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Feed Partidos
+         * @description Portal Público (portal-publico-feed-partidos-plan.md, T3.3/C12):
+         *     partidos de UN día, público, sin auth. Va ANTES de `/{partido_id}` en
+         *     este router para que FastAPI no interprete "feed" como un id.
+         *
+         *     No es una lista plana — devuelve un envelope con `fecha_pedida` (la
+         *     pedida) y `fecha_efectiva` (la que en verdad se muestra: sin `fecha`,
+         *     o con `ventana_fallback_dias>0`, cae a la fecha publicada más cercana
+         *     — atrás primero, después adelante, acotada a `ventana_fallback_dias`
+         *     días). El corte por `limit` respeta el borde de un bloque de
+         *     torneo — puede devolver más filas que `limit` (el bloque completo
+         *     entra siempre), nunca corta un torneo a la mitad. Ver
+         *     `FeedService.obtener_feed` para el detalle completo.
+         *
+         *     Ejemplo: `GET /api/v1/partidos/feed?disciplina_id=1&limit=20`.
+         */
+        get: operations["feed_partidos_api_v1_partidos_feed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/partidos": {
         parameters: {
             query?: never;
@@ -797,6 +863,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/partidos/{partido_id}/deshacer-cierre-forzado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deshacer Cierre Forzado
+         * @description Área 4 (T17) — deshace un "Fin de Partido forzado" reciente, solo
+         *     dentro de la ventana de gracia calculada server-side (ver
+         *     HitoPartidoService.deshacer_fin_forzado para las 3 guardas). Mismo
+         *     ownership-check que el resto de este router (árbitro asignado o
+         *     scoping de torneo — sin rol nuevo).
+         */
+        post: operations["deshacer_cierre_forzado_api_v1_partidos__partido_id__deshacer_cierre_forzado_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/partidos/{partido_id}/hitos/{hito_id}": {
         parameters: {
             query?: never;
@@ -816,59 +906,6 @@ export interface paths {
          *     (Flujo 5 del plan).
          */
         patch: operations["corregir_hito_partido_api_v1_partidos__partido_id__hitos__hito_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/partidos/{partido_id}/deshacer-cierre-forzado": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                partido_id: number;
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Deshacer Cierre Forzado
-         * @description Área 4 (T17) — deshace un "Fin de Partido forzado" reciente, solo
-         *     dentro de la ventana de gracia calculada server-side.
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    partido_id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Successful Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["DeshacerCierreForzadoOut"];
-                    };
-                };
-                /** @description Validation Error */
-                422: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["HTTPValidationError"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/partidos/{partido_id}/convocados": {
@@ -1412,7 +1449,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Resultados Partidos */
+        /**
+         * Resultados Partidos
+         * @description T3.4b/C17 (portal-publico-feed-partidos-plan.md): gateado como el
+         *     resto — C17 se resolvió por la opción (b) (la superficie de PARTIDO
+         *     queda pública pase lo que pase), pero la superficie de TORNEO (esta
+         *     ruta) sí gatea. `PartidoEnVivo.tsx` consume este endpoint y tolera un
+         *     404 con el copy de D7 ("Resultados no disponibles para este torneo")
+         *     en vez de romper a medio renderizar.
+         */
         get: operations["resultados_partidos_api_v1_estadisticas_torneos__torneo_id__resultados_get"];
         put?: never;
         post?: never;
@@ -1749,6 +1794,17 @@ export interface components {
             version?: string | null;
         };
         /**
+         * DeshacerCierreForzadoOut
+         * @description POST /partidos/{id}/deshacer-cierre-forzado — el partido vuelve a
+         *     'En curso' (o al estado que corresponda según los Hitos que queden).
+         */
+        DeshacerCierreForzadoOut: {
+            /** Partido Id */
+            partido_id: number;
+            /** Estado */
+            estado: string;
+        };
+        /**
          * DisciplinaConModalidadesOut
          * @description Vista jerárquica para CatalogoDisciplinasPage (D-Eng arquitectura):
          *     una sola llamada trae la disciplina con su roster de modalidades, en
@@ -1766,11 +1822,28 @@ export interface components {
             estado: "Activo" | "Inactivo";
             /** Orden Popularidad */
             orden_popularidad?: number | null;
+            /** Slug */
+            slug: string;
             /**
              * Modalidades
              * @default []
              */
             modalidades: components["schemas"]["ModalidadOut"][];
+        };
+        /**
+         * DisciplinaConPartidosOut
+         * @description E-L4/E-M3 — GET /disciplinas/con-partidos: sidecar de la barra
+         *     pública de deportes, endpoint propio (no un campo del envelope del
+         *     feed — eso era circular, ver F4). Solo lo que la pill necesita
+         *     pintarse y armar su propio link (`/?deporte=<slug>`).
+         */
+        DisciplinaConPartidosOut: {
+            /** Id */
+            id: number;
+            /** Slug */
+            slug: string;
+            /** Nombre */
+            nombre: string;
         };
         /** DisciplinaOut */
         DisciplinaOut: {
@@ -1785,6 +1858,8 @@ export interface components {
             estado: "Activo" | "Inactivo";
             /** Orden Popularidad */
             orden_popularidad?: number | null;
+            /** Slug */
+            slug: string;
         };
         /**
          * DisciplinaUpdate
@@ -1845,6 +1920,8 @@ export interface components {
              * Format: date
              */
             fecha_fin: string;
+            /** Publicado */
+            publicado: boolean;
         };
         /** EquipoActivoOut */
         EquipoActivoOut: {
@@ -1949,6 +2026,8 @@ export interface components {
              * @enum {string}
              */
             estado: "Activo" | "Inactivo";
+            /** Logo Url */
+            logo_url?: string | null;
             /**
              * Fecha Registro
              * Format: date-time
@@ -1976,6 +2055,8 @@ export interface components {
             modalidad_id?: number | null;
             /** Estado */
             estado?: ("Activo" | "Inactivo") | null;
+            /** Logo Url */
+            logo_url?: string | null;
         };
         /**
          * EstadoCronometroOut
@@ -2141,6 +2222,90 @@ export interface components {
              */
             fecha_modificacion: string;
         };
+        /**
+         * FeedEquipoOut
+         * @description F6: `goles` vive DENTRO del equipo (antes goles_local/goles_visitante
+         *     sueltos) — agrupa lo que ya es semánticamente del mismo lado.
+         */
+        FeedEquipoOut: {
+            /** Id */
+            id: number;
+            /** Nombre */
+            nombre: string;
+            /** Logo Url */
+            logo_url: string | null;
+            /** Goles */
+            goles: number;
+        };
+        /** FeedPartidoOut */
+        FeedPartidoOut: {
+            /** Partido Id */
+            partido_id: number;
+            torneo: components["schemas"]["FeedTorneoOut"];
+            /** Disciplina Id */
+            disciplina_id: number;
+            /** Disciplina */
+            disciplina: string;
+            local: components["schemas"]["FeedEquipoOut"];
+            visitante: components["schemas"]["FeedEquipoOut"];
+            /**
+             * Fecha Partido
+             * Format: date-time
+             */
+            fecha_partido: string;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Programado" | "En curso" | "Finalizado" | "Cancelado";
+        };
+        /**
+         * FeedResponseOut
+         * @description Envelope de `GET /api/v1/partidos/feed` — ver el docstring del
+         *     handler (routes/partidos.py) para las 3 reglas no obvias (F12):
+         *     fallback de fecha y su ventana, orden determinista
+         *     torneo_grupo→torneo→fecha→id, y el corte en borde de bloque de
+         *     torneo (`total_disponible` puede ser mayor a `len(partidos)` — no
+         *     porque falten partidos del bloque cortado, sino porque el bloque
+         *     completo que sí entró puede por sí solo superar el `limit` pedido,
+         *     ver E-L5).
+         */
+        FeedResponseOut: {
+            /**
+             * Fecha Pedida
+             * Format: date
+             */
+            fecha_pedida: string;
+            /**
+             * Fecha Efectiva
+             * Format: date
+             */
+            fecha_efectiva: string;
+            /** Total Disponible */
+            total_disponible: number;
+            /** Partidos */
+            partidos: components["schemas"]["FeedPartidoOut"][];
+        };
+        /**
+         * FeedTorneoOut
+         * @description F6: anidado — antes eran 5 campos planos (torneo/torneo_id/
+         *     torneo_grupo/pais/logo_torneo) con tres convenciones de nombre
+         *     distintas conviviendo. `id` es el de la EDICIÓN (Torneo_ID, lo que
+         *     resuelve /torneos/:id), `grupo` es el nombre mostrado (compuesto en
+         *     runtime en el resto del sistema, acá viene directo de TORNEO_GRUPO).
+         */
+        FeedTorneoOut: {
+            /** Id */
+            id: number;
+            /** Nombre */
+            nombre: string;
+            /** Grupo */
+            grupo: string;
+            /** Pais */
+            pais: string | null;
+            /** Logo Url */
+            logo_url: string | null;
+        };
         /** FilaInvalida */
         FilaInvalida: {
             /** Fila Index */
@@ -2292,18 +2457,8 @@ export interface components {
             motivo_cierre?: ("Clima" | "Incidente" | "Lesion_Grave" | "Orden_Seguridad" | "Otro") | null;
             /** Motivo Cierre Detalle */
             motivo_cierre_detalle?: string | null;
-            /**
-             * Deshacer Disponible Hasta
-             * Format: date-time
-             */
+            /** Deshacer Disponible Hasta */
             deshacer_disponible_hasta?: string | null;
-        };
-        /** DeshacerCierreForzadoOut */
-        DeshacerCierreForzadoOut: {
-            /** Partido Id */
-            partido_id: number;
-            /** Estado */
-            estado: string;
         };
         /**
          * HitoPartidoUpdate
@@ -2783,6 +2938,21 @@ export interface components {
              */
             fecha_inicio: string;
         };
+        /**
+         * PlayoffsRequest
+         * @description control-mesa-reactividad-playoffs-plan.md, Fase 3 §6 — cuántos
+         *     equipos clasifican por grupo, opcional: si no se manda, se usa
+         *     `Torneo.clasificados_por_grupo` (o 2 si tampoco está seteado, igual
+         *     que antes de este cambio). Si se manda, además de generar los
+         *     playoffs con ese valor, queda PERSISTIDO en `Torneo.clasificados_por_grupo`
+         *     (Gate Final T2 de ese plan: persistir, no efímero) — la próxima
+         *     generación para este torneo no vuelve a preguntar salvo que el
+         *     operador quiera cambiarlo.
+         */
+        PlayoffsRequest: {
+            /** Clasificados Por Grupo */
+            clasificados_por_grupo?: number | null;
+        };
         /** PosicionOut */
         PosicionOut: {
             /** Torneo Id */
@@ -3105,6 +3275,10 @@ export interface components {
              * @enum {string}
              */
             estado: "Activo" | "Archivado";
+            /** Pais */
+            pais?: string | null;
+            /** Logo Url */
+            logo_url?: string | null;
             /**
              * Fecha Registro
              * Format: date-time
@@ -3129,6 +3303,10 @@ export interface components {
              * @enum {string}
              */
             estado: "Activo" | "Archivado";
+            /** Pais */
+            pais?: string | null;
+            /** Logo Url */
+            logo_url?: string | null;
             /**
              * Fecha Registro
              * Format: date-time
@@ -3147,12 +3325,20 @@ export interface components {
          *     en runtime, nunca se guarda concatenado) y/o archivar/reactivar (3B-7,
          *     docs/plans/cierre-backlog-todos-plan.md). Los dos campos opcionales:
          *     un PATCH que solo archiva no debería tener que repetir el nombre.
+         *
+         *     pais/logo_url (portal-publico-feed-partidos-plan.md, C3): cabecera del
+         *     feed/vista pública de torneo — ver D14b, el frontend usa un <select>
+         *     de países para `pais`, no un input libre (esta capa no lo valida).
          */
         TorneoGrupoUpdate: {
             /** Nombre */
             nombre?: string | null;
             /** Estado */
             estado?: ("Activo" | "Archivado") | null;
+            /** Pais */
+            pais?: string | null;
+            /** Logo Url */
+            logo_url?: string | null;
         };
         /** TorneoOut */
         TorneoOut: {
@@ -3222,6 +3408,8 @@ export interface components {
              * @enum {string}
              */
             estado: "Activo" | "Inactivo" | "Finalizado";
+            /** Publicado */
+            publicado: boolean;
             /**
              * Fecha Registro
              * Format: date-time
@@ -3270,6 +3458,8 @@ export interface components {
             permite_cambios_ilimitados?: boolean | null;
             /** Maximo Cambios Por Equipo */
             maximo_cambios_por_equipo?: number | null;
+            /** Publicado */
+            publicado?: boolean | null;
         };
         /** TraspasoCreate */
         TraspasoCreate: {
@@ -3537,6 +3727,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DisciplinaConModalidadesOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_disciplinas_con_partidos_api_v1_disciplinas_con_partidos_get: {
+        parameters: {
+            query?: {
+                fecha?: string | null;
+                ventana_fallback_dias?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisciplinaConPartidosOut"][];
                 };
             };
             /** @description Validation Error */
@@ -3957,7 +4179,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PlayoffsRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -4960,6 +5186,41 @@ export interface operations {
             };
         };
     };
+    feed_partidos_api_v1_partidos_feed_get: {
+        parameters: {
+            query?: {
+                disciplina_id?: number | null;
+                deporte?: string | null;
+                fecha?: string | null;
+                limit?: number;
+                ventana_fallback_dias?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedResponseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listar_partidos_api_v1_partidos_get: {
         parameters: {
             query?: {
@@ -5281,6 +5542,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HitoPartidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deshacer_cierre_forzado_api_v1_partidos__partido_id__deshacer_cierre_forzado_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeshacerCierreForzadoOut"];
                 };
             };
             /** @description Validation Error */

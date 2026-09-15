@@ -36,6 +36,7 @@ class PartidoRepository(BaseRepository[Partido]):
         limit: int = 100,
         torneo_ids_permitidos: Sequence[int] | None = None,
         incluir_archivados: bool = False,
+        solo_publicados: bool = False,
         **filtros: object,
     ) -> list[Partido]:
         """Override de BaseRepository.list: mismo mecanismo exacto que
@@ -64,6 +65,11 @@ class PartidoRepository(BaseRepository[Partido]):
         )
         if torneo_ids_permitidos is not None:
             stmt = stmt.where(Partido.torneo_id.in_(torneo_ids_permitidos))
+        # Portal Público (portal-publico-feed-partidos-plan.md, E-B3a):
+        # sin esto, `GET /partidos?torneo_id=` enumeraba el fixture
+        # completo de un torneo despublicado aunque su detalle ya 404eara.
+        if solo_publicados:
+            stmt = stmt.where(Torneo.publicado.is_(True))
         if not incluir_archivados:
             stmt = stmt.where(not_(and_(TorneoGrupo.estado == "Archivado", Partido.estado == "Programado")))
         for campo, valor in filtros.items():

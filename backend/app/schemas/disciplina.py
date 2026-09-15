@@ -24,6 +24,10 @@ class DisciplinaOut(BaseModel):
     nombre: str
     estado: EstadoDisciplina
     orden_popularidad: int | None = None
+    # Portal Público (portal-publico-feed-partidos-plan.md, F3): id legible
+    # para el deep link `/?deporte=<slug>` — generado por
+    # fn_generar_disciplina_slug (06_triggers.sql), nunca por el cliente.
+    slug: str
 
 
 class DisciplinaConModalidadesOut(DisciplinaOut):
@@ -32,3 +36,16 @@ class DisciplinaConModalidadesOut(DisciplinaOut):
     vez de que el cliente arme el árbol cruzando dos listas planas."""
 
     modalidades: list[ModalidadOut] = []
+
+
+class DisciplinaConPartidosOut(BaseModel):
+    """E-L4/E-M3 — GET /disciplinas/con-partidos: sidecar de la barra
+    pública de deportes, endpoint propio (no un campo del envelope del
+    feed — eso era circular, ver F4). Solo lo que la pill necesita
+    pintarse y armar su propio link (`/?deporte=<slug>`)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    slug: str
+    nombre: str

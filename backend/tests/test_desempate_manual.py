@@ -116,7 +116,9 @@ async def test_orden_automatico_desempata_alfabetico_sin_override(
     vw_tabla_posiciones decide: Alfa antes que Beta."""
     torneo_id, equipos = await _torneo_grupos_de_3(client, torneo_admin_headers)
 
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partidos = resp.json()
     assert len(partidos) == 3
 
@@ -137,7 +139,11 @@ async def test_orden_automatico_desempata_alfabetico_sin_override(
             await _finalizar(db_session, p["id"], p["equipos_id_local"], p["equipos_id_visitante"], 0, 1)
 
     grupo_id = p_ab["grupo_id"]
-    resp = await client.get(f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones", params={"grupo_id": grupo_id})
+    resp = await client.get(
+        f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones",
+        params={"grupo_id": grupo_id},
+        headers=torneo_admin_headers,
+    )
     tabla = resp.json()
     assert [f["equipo"] for f in tabla] == ["Charlie", "Alfa", "Beta"]
     assert tabla[0]["pts"] == 6
@@ -157,7 +163,9 @@ async def test_definir_orden_manual_desempata_dentro_del_empate_pero_nunca_por_e
     el desempate de ÚLTIMA instancia, no un ranking absoluto."""
     torneo_id, equipos = await _torneo_grupos_de_3(client, torneo_admin_headers)
 
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partidos = resp.json()
 
     def _partido_entre(a: str, b: str) -> dict:
@@ -176,7 +184,11 @@ async def test_definir_orden_manual_desempata_dentro_del_empate_pero_nunca_por_e
             await _finalizar(db_session, p["id"], p["equipos_id_local"], p["equipos_id_visitante"], 0, 1)
 
     grupo_id = p_ab["grupo_id"]
-    resp = await client.get(f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones", params={"grupo_id": grupo_id})
+    resp = await client.get(
+        f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones",
+        params={"grupo_id": grupo_id},
+        headers=torneo_admin_headers,
+    )
     grupo_equipo_id_por_equipo = {f["equipo"]: f["grupo_equipo_id"] for f in resp.json()}
 
     # Beta primero dentro del empate (orden_manual=1), Alfa segundo (=2) —
@@ -204,7 +216,11 @@ async def test_definir_orden_manual_desempata_dentro_del_empate_pero_nunca_por_e
     )
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get(f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones", params={"grupo_id": grupo_id})
+    resp = await client.get(
+        f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones",
+        params={"grupo_id": grupo_id},
+        headers=torneo_admin_headers,
+    )
     tabla = resp.json()
     assert [f["equipo"] for f in tabla] == ["Charlie", "Beta", "Alfa"], (
         "Charlie debía seguir primero por puntos pese a orden_manual=99; "
@@ -226,11 +242,15 @@ async def test_torneo_admin_de_otro_torneo_no_puede_definir_orden_manual(
     auto-asignado (D4) a ESTE torneo nuevo — pero torneo_admin_headers es
     una cuenta TorneoAdmin totalmente distinta, sin relación con él."""
     torneo_id, _equipos = await _torneo_grupos_de_3(client, torneo_admin_con_torneo_headers)
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_con_torneo_headers
+    )
     p = resp.json()[0]
     await _finalizar(db_session, p["id"], p["equipos_id_local"], p["equipos_id_visitante"], 0, 0)
     resp = await client.get(
-        f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones", params={"grupo_id": p["grupo_id"]}
+        f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones",
+        params={"grupo_id": p["grupo_id"]},
+        headers=torneo_admin_con_torneo_headers,
     )
     grupo_equipo_id = resp.json()[0]["grupo_equipo_id"]
 
@@ -245,7 +265,9 @@ async def test_orden_manual_invalido_o_de_otro_rol_es_rechazado(
     client: AsyncClient, torneo_admin_headers: dict[str, str], arbitro_headers: dict[str, str], db_session: AsyncSession
 ):
     torneo_id, equipos = await _torneo_grupos_de_3(client, torneo_admin_headers)
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partidos = resp.json()
     # Cualquier partido alcanza — solo hace falta un grupo_equipo_id real,
     # pero vw_tabla_posiciones solo lista equipos con algún partido
@@ -253,7 +275,9 @@ async def test_orden_manual_invalido_o_de_otro_rol_es_rechazado(
     p = partidos[0]
     await _finalizar(db_session, p["id"], p["equipos_id_local"], p["equipos_id_visitante"], 0, 0)
     resp = await client.get(
-        f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones", params={"grupo_id": p["grupo_id"]}
+        f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones",
+        params={"grupo_id": p["grupo_id"]},
+        headers=torneo_admin_headers,
     )
     grupo_equipo_id = resp.json()[0]["grupo_equipo_id"]
 
@@ -274,7 +298,9 @@ async def test_quitar_el_orden_manual_vuelve_al_automatico(
     client: AsyncClient, torneo_admin_headers: dict[str, str], db_session: AsyncSession
 ):
     torneo_id, equipos = await _torneo_grupos_de_3(client, torneo_admin_headers)
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partidos = resp.json()
 
     def _partido_entre(a: str, b: str) -> dict:
@@ -285,7 +311,11 @@ async def test_quitar_el_orden_manual_vuelve_al_automatico(
     await _finalizar(db_session, p_ab["id"], p_ab["equipos_id_local"], p_ab["equipos_id_visitante"], 0, 0)
 
     grupo_id = p_ab["grupo_id"]
-    resp = await client.get(f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones", params={"grupo_id": grupo_id})
+    resp = await client.get(
+        f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones",
+        params={"grupo_id": grupo_id},
+        headers=torneo_admin_headers,
+    )
     filas_por_equipo = {f["equipo"]: f for f in resp.json() if f["equipo"] in ("Alfa", "Beta")}
 
     # Fuerza a Beta primero.
@@ -296,7 +326,11 @@ async def test_quitar_el_orden_manual_vuelve_al_automatico(
     )
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get(f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones", params={"grupo_id": grupo_id})
+    resp = await client.get(
+        f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones",
+        params={"grupo_id": grupo_id},
+        headers=torneo_admin_headers,
+    )
     tabla = [f for f in resp.json() if f["equipo"] in ("Alfa", "Beta")]
     assert [f["equipo"] for f in tabla] == ["Beta", "Alfa"]
 
@@ -310,7 +344,11 @@ async def test_quitar_el_orden_manual_vuelve_al_automatico(
     assert resp.status_code == 200, resp.text
     assert resp.json()["orden_manual"] is None
 
-    resp = await client.get(f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones", params={"grupo_id": grupo_id})
+    resp = await client.get(
+        f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones",
+        params={"grupo_id": grupo_id},
+        headers=torneo_admin_headers,
+    )
     tabla = [f for f in resp.json() if f["equipo"] in ("Alfa", "Beta")]
     # Vuelve al fallback alfabético — Alfa antes que Beta.
     assert [f["equipo"] for f in tabla] == ["Alfa", "Beta"]

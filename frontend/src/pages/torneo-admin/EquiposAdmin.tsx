@@ -7,7 +7,7 @@ import { ResourceForm, type ResourceFieldValue, type ResourceFormField } from ".
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
 import { useCatalogo } from "../../hooks/useCatalogo";
 import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
-import { iconoDisciplina } from "./iconosDisciplina";
+import { iconoDisciplina } from "../../components/iconosDisciplina";
 
 type Modo = { tipo: "lista" } | { tipo: "crear" } | { tipo: "editar"; fila: EquipoRow };
 
@@ -107,6 +107,16 @@ export function EquiposAdminPage() {
         optionsLoading: catalogo.cargando,
         options: catalogo.modalidadesDe(disciplinaId).map((m) => ({ value: m.id, label: m.nombre })),
       },
+      {
+        // portal-publico-feed-partidos-plan.md, C3: escudo del equipo
+        // para el feed público y el detalle de torneo. Opcional — sin
+        // esto, el escudo cae al fallback de iniciales (avatarUtils.ts).
+        // El backend exige https:// (E-S2); se explica acá para que el
+        // 422 no sorprenda.
+        name: "logo_url",
+        label: "URL del escudo (https://...)",
+        type: "text",
+      },
     ];
   };
 
@@ -149,6 +159,7 @@ export function EquiposAdminPage() {
           disciplina_id: modo.fila.disciplina_id,
           modalidad_id: modo.fila.modalidad_id,
           estado: modo.fila.estado,
+          logo_url: modo.fila.logo_url ?? "",
         }
       : undefined;
     const campos = editando

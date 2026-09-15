@@ -15,6 +15,8 @@ const EVENTOS = "http://127.0.0.1:8000/api/v1/eventos";
 const CONVOCADOS_1 = "http://127.0.0.1:8000/api/v1/partidos/1/convocados";
 const PLANTILLA_1 = "http://127.0.0.1:8000/api/v1/estadisticas/equipos/1/plantilla";
 const PLANTILLA_2 = "http://127.0.0.1:8000/api/v1/estadisticas/equipos/2/plantilla";
+const TORNEO_1 = "http://127.0.0.1:8000/api/v1/torneos/1";
+const GRUPO_9 = "http://127.0.0.1:8000/api/v1/torneo-grupos/9";
 
 const PARTIDO = {
   id: 1,
@@ -46,6 +48,8 @@ function mockBase() {
     http.get(PLANTILLA_2, () =>
       HttpResponse.json([{ jugador_id: 3, jugador: "Mateo Salcedo", equipo_id: 2, equipo: "Águilas del Sur", dorsal: 9, jugador_perfil_id: 30 }]),
     ),
+    http.get(TORNEO_1, () => HttpResponse.json({ id: 1, torneo_grupo_id: 9 })),
+    http.get(GRUPO_9, () => HttpResponse.json({ nombre: "Liga Demo", pais: "Ecuador" })),
   );
 }
 
@@ -144,5 +148,32 @@ describe("PartidoEnVivoPage — generalizada a Detalle del Partido (control-mesa
     expect(within(filaCambio).getByText("Tiburones FC")).toBeInTheDocument();
     expect(within(filaCambio).getByText(/Sale:.*Andrés Vera/)).toBeInTheDocument();
     expect(within(filaCambio).getByText(/Entra:.*Bruno Ibarra/)).toBeInTheDocument();
+  });
+
+  // --- D7 (portal-publico-feed-partidos-plan.md): identidad y salida ---
+
+  it("D7: la cabecera enlaza al torneo con nombre y país", async () => {
+    mockBase();
+    renderEn("/partidos/1", "/partidos/:partidoId");
+
+    const link = await screen.findByRole("link", { name: /Liga Demo/ });
+    expect(link).toHaveAttribute("href", "/torneos/1");
+    expect(screen.getByText(/Ecuador/)).toBeInTheDocument();
+  });
+
+  it("D7/C17(b): torneo despublicado (404 en resultados) muestra el aviso explícito, no el marcador '- : -' como si fuera real", async () => {
+    mockBase();
+    server.use(
+      http.get(RESULTADOS_1, () => HttpResponse.json({ detail: "Torneo con id=1 no encontrado." }, { status: 404 })),
+      http.get(TORNEO_1, () => HttpResponse.json({ detail: "Torneo con id=1 no encontrado." }, { status: 404 })),
+    );
+    renderEn("/partidos/1", "/partidos/:partidoId");
+
+    expect(await screen.findByText("Resultados no disponibles para este torneo.")).toBeInTheDocument();
+    // Sin cabecera de torneo (el mismo 404 la tapa) y sin el "- : -" que
+    // D7 identificó como el problema: el marcador queda como Local/Visitante
+    // por el otro fallback existente, pero el aviso explícito es lo que
+    // distingue "no hay resultado todavía" de "no podés ver este torneo".
+    expect(screen.queryByRole("link", { name: /Liga Demo/ })).not.toBeInTheDocument();
   });
 });

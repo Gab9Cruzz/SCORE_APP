@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../api/client";
 import { useCatalogo } from "../../hooks/useCatalogo";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
-import { iconoDisciplina } from "./iconosDisciplina";
+import { iconoDisciplina } from "../../components/iconosDisciplina";
 
 interface EquipoDetalle {
   id: number;

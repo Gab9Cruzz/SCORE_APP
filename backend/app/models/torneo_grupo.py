@@ -26,3 +26,8 @@ class TorneoGrupo(TimestampMixin, Base):
     # cascada — 'Archivado' solo oculta el grupo de /torneo-grupos por
     # default, sus TORNEO (ediciones) existentes no se tocan.
     estado: Mapped[str] = mapped_column(String(20), default="Activo")
+    # Portal Público (portal-publico-feed-partidos-plan.md, C3): país y
+    # logo de la competición para la cabecera del feed/vista pública de
+    # torneo. Ambos NULL hasta que el admin los cargue.
+    pais: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

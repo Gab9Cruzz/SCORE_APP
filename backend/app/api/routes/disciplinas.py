@@ -1,10 +1,19 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles
 from app.db.session import get_db
-from app.schemas.disciplina import DisciplinaConModalidadesOut, DisciplinaOut, DisciplinaUpdate, EstadoDisciplina
+from app.schemas.disciplina import (
+    DisciplinaConModalidadesOut,
+    DisciplinaConPartidosOut,
+    DisciplinaOut,
+    DisciplinaUpdate,
+    EstadoDisciplina,
+)
 from app.services.disciplina import DisciplinaService
+from app.services.feed import FeedService
 
 router = APIRouter(prefix="/disciplinas", tags=["Disciplinas"])
 
@@ -39,6 +48,25 @@ async def listar_disciplinas_con_modalidades(
     roster de modalidades en una sola llamada, en vez de que el cliente
     arme el árbol cruzando /disciplinas y /modalidades por separado."""
     return await DisciplinaService(session).list_con_modalidades(estado=estado)
+
+
+@router.get("/con-partidos", response_model=list[DisciplinaConPartidosOut])
+async def listar_disciplinas_con_partidos(
+    fecha: date | None = None,
+    ventana_fallback_dias: int = Query(default=7, ge=0, le=7),
+    session: AsyncSession = Depends(get_db),
+) -> list[DisciplinaConPartidosOut]:
+    """Portal Público (portal-publico-feed-partidos-plan.md, E-L4/E-M3):
+    sidecar de la barra pública de deportes, endpoint propio — NO un
+    campo del envelope de `GET /partidos/feed` (eso era circular con
+    `fecha_efectiva`, ver F4/E-L4). Sin filtro de disciplina: nunca está
+    vacío mientras el feed tenga contenido en algún deporte, ni siquiera
+    un feriado sin partidos de la disciplina que el visitante tenía
+    elegida. Va ANTES de `/{disciplina_id}`, mismo motivo que
+    `/con-modalidades`."""
+    return await FeedService(session).obtener_disciplinas_con_partidos(
+        fecha_pedida=fecha, ventana_fallback_dias=ventana_fallback_dias
+    )
 
 
 @router.get("/{disciplina_id}", response_model=DisciplinaOut)

@@ -722,3 +722,119 @@ describe("TorneosAdminPage — filtro por asignación (rbac-licencias-torneos-pl
     expect(screen.getByText("Torneo No Asignado")).toBeInTheDocument();
   });
 });
+
+// --- Portal Público (portal-publico-feed-partidos-plan.md, C2/C3/T5.2c) ---
+
+describe("TorneosAdminPage — Portal Público", () => {
+  function unGrupo(publicado: boolean) {
+    return [
+      {
+        id: 1,
+        nombre: "Liga Demo",
+        estado: "Activo",
+        pais: null,
+        logo_url: null,
+        ediciones: [
+          {
+            id: 20,
+            numero_edicion: 1,
+            disciplina_id: 1,
+            modalidad_id: 1,
+            estado: "Activo",
+            fecha_inicio: "2026-04-01",
+            fecha_fin: "2026-06-30",
+            publicado,
+          },
+        ],
+      },
+    ];
+  }
+
+  it("D16: la tarjeta muestra el estado de publicación y el label cambia con él", async () => {
+    mockCatalogos();
+    server.use(
+      http.get("http://127.0.0.1:8000/api/v1/torneo-grupos", () => HttpResponse.json(unGrupo(false))),
+    );
+    const Wrapper = createWrapper();
+    render(<TorneosAdminPage />, { wrapper: Wrapper });
+
+    await screen.findByText("Liga Demo");
+    expect(screen.getByText(/No publicado/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Vista previa (no publicado)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publicar" })).toBeInTheDocument();
+  });
+
+  it("Publicar dispara el PATCH con publicado:true y refresca la tarjeta", async () => {
+    mockCatalogos();
+    let bodyRecibido: unknown;
+    server.use(
+      http.get("http://127.0.0.1:8000/api/v1/torneo-grupos", () => HttpResponse.json(unGrupo(false))),
+      http.patch("http://127.0.0.1:8000/api/v1/torneos/:id", async ({ request }) => {
+        bodyRecibido = await request.json();
+        return HttpResponse.json({ id: 20, publicado: true });
+      }),
+    );
+    const user = userEvent.setup();
+    const Wrapper = createWrapper();
+    render(<TorneosAdminPage />, { wrapper: Wrapper });
+
+    await screen.findByText("Liga Demo");
+    await user.click(screen.getByRole("button", { name: "Publicar" }));
+
+    await waitFor(() => expect(bodyRecibido).toEqual({ publicado: true }));
+  });
+
+  it("Ver página pública navega a /torneos/:id (la edición, no el grupo)", async () => {
+    mockCatalogos();
+    server.use(
+      http.get("http://127.0.0.1:8000/api/v1/torneo-grupos", () => HttpResponse.json(unGrupo(true))),
+    );
+    const user = userEvent.setup();
+    const Wrapper = createWrapper();
+    render(<TorneosAdminPage />, { wrapper: Wrapper });
+
+    await screen.findByText("Liga Demo");
+    await user.click(screen.getByRole("button", { name: "Ver página pública" }));
+    expect(mockNavigate).toHaveBeenCalledWith("/torneos/20");
+  });
+
+  it("Editar precarga nombre/país/logo y guarda vía PATCH /torneo-grupos/:id", async () => {
+    mockCatalogos();
+    let bodyRecibido: unknown;
+    server.use(
+      http.get("http://127.0.0.1:8000/api/v1/torneo-grupos", () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            nombre: "Liga Demo",
+            estado: "Activo",
+            pais: "Ecuador",
+            logo_url: null,
+            ediciones: unGrupo(false)[0].ediciones,
+          },
+        ]),
+      ),
+      http.patch("http://127.0.0.1:8000/api/v1/torneo-grupos/:id", async ({ request }) => {
+        bodyRecibido = await request.json();
+        return HttpResponse.json({ id: 1, nombre: "Liga Demo Editada", pais: "Ecuador", logo_url: null });
+      }),
+    );
+    const user = userEvent.setup();
+    const Wrapper = createWrapper();
+    render(<TorneosAdminPage />, { wrapper: Wrapper });
+
+    await screen.findByText("Liga Demo");
+    await user.click(screen.getByRole("button", { name: "Editar" }));
+
+    expect(await screen.findByDisplayValue("Liga Demo")).toBeInTheDocument();
+    expect(screen.getByLabelText("País")).toHaveValue("Ecuador");
+
+    await user.clear(screen.getByLabelText("Nombre del torneo"));
+    await user.type(screen.getByLabelText("Nombre del torneo"), "Liga Demo Editada");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() =>
+      expect(bodyRecibido).toEqual({ nombre: "Liga Demo Editada", pais: "Ecuador", logo_url: null }),
+    );
+  });
+});

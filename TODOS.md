@@ -653,3 +653,66 @@ Genuinamente pendiente (no implementado en esta pasada):
 - **`/design-consultation` para un DESIGN.md formal del proyecto** — deuda de
   diseño conocida y recomendada por 5 planes consecutivos de este repo
   (incluido este), nunca ejecutada. No específica de ninguna feature puntual.
+
+## Deferido desde el plan de Reactividad en Control de Mesa + Playoffs en Estadísticas
+(`docs/plans/control-mesa-reactividad-playoffs-plan.md`) — implementado
+2026-09-14 (T1-T11 del plan; T12 abajo queda pendiente)
+
+- **Row-locking en `EventoPartidoService.create` (camino en vivo) para 2
+  tarjetas simultáneas del mismo jugador** — gap de concurrencia preexistente
+  (no introducido por este plan): `registrar_resultado_directo` ya usa
+  `get_or_404_bloqueado` para el mismo problema, pero el alta de evento en
+  vivo no tiene un lock de fila equivalente. Race extrema (2 amarillas para
+  el mismo jugador llegando al servidor casi al mismo tiempo, antes de que
+  el dedup de `reglas_tarjetas.procesar_doble_amarilla` corra) podría
+  producir 2 rojas automáticas. Cherry-pick evaluado y diferido en la Fase 1
+  de ese plan (0D, cherry-pick #2) — fuera del blast radius directo del
+  pedido, riesgo bajo, sin bloquear el resto del plan.
+- **Sanciones disciplinarias que acumulan tarjetas ENTRE partidos** (ej. 3
+  amarillas en el torneo = suspensión para el próximo) — explícitamente
+  fuera de alcance de ese plan (el pedido pedía "en el mismo partido", no
+  acumulación por torneo). Candidato a un plan propio si surge demanda real
+  de un torneo que lo necesite.
+
+## Deferido desde el plan de Portal Público: Navbar de Disciplinas + Feed
+de Partidos del Día (`docs/plans/portal-publico-feed-partidos-plan.md`) —
+implementado 2026-09-15 (R1+R2+R3 completos)
+
+- **Auto-refresh en vivo del feed** (polling o WebSocket) — C14. El feed
+  no se actualiza solo; el rótulo "Actualizado HH:MM" + botón "Recargar"
+  (D9) es la mitigación barata que sí entró.
+- **Uploader de imágenes para escudos/logos** — C14. `Logo_URL` acepta una
+  URL de texto (mismo criterio que `JUGADORES.Foto_URL`), sin subida de
+  archivos.
+- **Preview de Open Graph POR torneo/partido** (exige SSR o un endpoint
+  de prerender) — C14/C4. Los meta tags OG son estáticos (mismo preview
+  "Score-App" para todo link); el botón "Compartir" es el que entrega el
+  valor real de distribución.
+- **Query params `fecha`/`disciplina_id` en `GET /api/v1/partidos`** —
+  C5b, hueco #5 del plan original. Ningún consumidor de esta entrega los
+  necesita (el feed usa su propio endpoint, `GET /partidos/feed`);
+  agregarlos ahora sería el segundo camino paralelo que el plan marcó
+  como riesgo. Diferido hasta que aparezca un consumidor real.
+- **`tz` como parámetro del feed** (F8) — la cabecera rotula la fecha
+  explícita del servidor (C15), que alcanza para el wedge de una liga
+  local, pero un consumidor en otro huso horario no tiene salida
+  programática. Reentra si aparece un torneo fuera del huso del servidor.
+- **Flag para forzar la barra de deportes con una sola disciplina**
+  (F19a) — hoy la barra se oculta con ≤1 disciplina con contenido (C8,
+  deliberado: "27 pills muertas son peores que ninguna barra"). Reentra
+  si hace falta demostrar el requerimiento #2 (navbar de disciplinas)
+  antes de tener una segunda disciplina activa con partidos.
+- **Envelope de error con código estable** (`{detail, codigo, sugerencia}`,
+  F9) — se simplificó: los 404 nuevos (torneo despublicado, disciplina
+  inexistente) reusan el `NotFoundError` genérico ya existente en el
+  repo, que de por sí no filtra si un torneo despublicado existe (la
+  propiedad de seguridad que F9 pedía). No se construyó el envelope
+  `codigo`/`sugerencia` nuevo por no tener otro consumidor en el repo.
+- **Selector de fecha como tira de fechas reales** (D3) — se implementó
+  como flechas día anterior/siguiente sobre `fecha_efectiva` en vez de una
+  tira scrolleable de fechas; cumple la garantía real de D3 (la fecha
+  seleccionada nunca miente) con menos superficie.
+- **Minuto en vivo en la fila del feed** (D2 lo mencionaba) — el feed
+  muestra un indicador "EN VIVO" en vez del minuto real: pedirlo exigiría
+  una consulta de cronómetro por fila (N+1), el mismo costo que
+  `preflight-inicio` ya evita a propósito en el resto del repo.

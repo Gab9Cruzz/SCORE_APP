@@ -5,7 +5,7 @@ import { api, apiErrorMessage } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
 import { ResourceForm, type ResourceFieldValue, type ResourceFormField } from "../../components/admin/ResourceForm";
 import { useCatalogo } from "../../hooks/useCatalogo";
-import { FiltroDisciplinasBar } from "./FiltroDisciplinasBar";
+import { FiltroDisciplinasBar } from "../../components/FiltroDisciplinasBar";
 
 interface EdicionResumen {
   id: number;
@@ -15,6 +15,8 @@ interface EdicionResumen {
   estado: string;
   fecha_inicio: string;
   fecha_fin: string;
+  // Portal Público (portal-publico-feed-partidos-plan.md, C2/T5.2c/D16).
+  publicado: boolean;
 }
 interface TorneoGrupo {
   id: number;
@@ -22,7 +24,22 @@ interface TorneoGrupo {
   // 3B-7 (docs/plans/cierre-backlog-todos-plan.md): baja lógica, sin cascada.
   estado: "Activo" | "Archivado";
   ediciones: EdicionResumen[];
+  // Portal Público (portal-publico-feed-partidos-plan.md, C3).
+  pais: string | null;
+  logo_url: string | null;
 }
+
+// D14b: <select> de países, no texto libre — TORNEO_GRUPO.Pais es
+// VARCHAR(60) libre a nivel de base y se llenaría con "Argentina"/"ARG"/
+// "argentina" en la misma pantalla si fuera un input. Lista corta, no
+// ISO-3166 completa: el wedge de este portal es Latinoamérica + los
+// destinos más comunes, ampliable sin migración (es solo texto).
+const PAISES = [
+  "Argentina", "Bolivia", "Brasil", "Chile", "Colombia", "Costa Rica",
+  "Cuba", "Ecuador", "El Salvador", "España", "Estados Unidos", "Guatemala",
+  "Honduras", "México", "Nicaragua", "Panamá", "Paraguay", "Perú",
+  "Puerto Rico", "República Dominicana", "Uruguay", "Venezuela",
+];
 interface TorneoCreatePayload {
   // Ambos opcionales en el payload (ediciones-catalogo-disciplinas-plan.md,
   // D-Eng-5): obligatorios al crear un grupo nuevo, omitidos en una nueva
@@ -67,7 +84,15 @@ const formatearFecha = (iso: string) => new Date(iso).toLocaleDateString("es-AR"
 // presentes — "en curso" primero, no alfabético.
 const ORDEN_ESTADOS = ["Activo", "Inactivo", "Finalizado"];
 
-type Modo = { tipo: "lista" } | { tipo: "crear-grupo" } | { tipo: "nueva-edicion"; grupo: TorneoGrupo };
+type Modo =
+  | { tipo: "lista" }
+  | { tipo: "crear-grupo" }
+  | { tipo: "nueva-edicion"; grupo: TorneoGrupo }
+  // Portal Público (portal-publico-feed-partidos-plan.md, C3/C19): no
+  // existía ningún formulario de edición de torneo — TorneosAdmin.tsx
+  // solo tenía "crear-grupo"/"nueva-edicion". País/logo son del GRUPO
+  // (aplican a todas sus ediciones, D-Eng-1), no de una edición puntual.
+  | { tipo: "editar-grupo"; grupo: TorneoGrupo };
 
 /** La edición que abre "Ver Torneo": la Activa más reciente si hay una, o
  * la de numero_edicion más alto si no (las ediciones ya vienen ordenadas
@@ -269,6 +294,46 @@ export function TorneosAdminPage() {
       const { data, error } = await api.PATCH("/api/v1/torneo-grupos/{torneo_grupo_id}", {
         params: { path: { torneo_grupo_id: id } },
         body: { estado },
+      } as never);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["torneo-grupos"] }),
+  });
+
+  // Portal Público (C2/T5.2c): publicar/despublicar UNA edición puntual
+  // (Publicado vive en TORNEO, no en TORNEO_GRUPO — un grupo con varias
+  // ediciones puede tener unas publicadas y otras no).
+  const publicarEdicion = useMutation({
+    mutationFn: async ({ torneoId, publicado }: { torneoId: number; publicado: boolean }) => {
+      const { data, error } = await api.PATCH("/api/v1/torneos/{torneo_id}", {
+        params: { path: { torneo_id: torneoId } },
+        body: { publicado },
+      } as never);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["torneo-grupos"] }),
+  });
+
+  // Portal Público (C3/C19): país/logo/nombre del grupo — antes solo
+  // existía el rename desde la propia tarjeta (ver cambiarEstadoGrupo);
+  // esto reusa el mismo PATCH /torneo-grupos/{id}, con más campos.
+  const editarGrupo = useMutation({
+    mutationFn: async ({
+      id,
+      nombre,
+      pais,
+      logo_url,
+    }: {
+      id: number;
+      nombre: string;
+      pais: string | null;
+      logo_url: string | null;
+    }) => {
+      const { data, error } = await api.PATCH("/api/v1/torneo-grupos/{torneo_grupo_id}", {
+        params: { path: { torneo_grupo_id: id } },
+        body: { nombre, pais, logo_url },
       } as never);
       if (error) throw error;
       return data;
@@ -580,6 +645,40 @@ export function TorneosAdminPage() {
     );
   }
 
+  if (modo.tipo === "editar-grupo") {
+    const grupo = modo.grupo;
+    // D14b: <select> de países, no un input libre — ver PAISES arriba.
+    const campos: ResourceFormField[] = [
+      { name: "nombre", label: "Nombre del torneo", type: "text", required: true },
+      { name: "pais", label: "País", type: "select", choices: PAISES },
+      { name: "logo_url", label: "URL del logo (https://...)", type: "text" },
+    ];
+    return (
+      <div className="page">
+        <h1>Editar — {grupo.nombre}</h1>
+        <ResourceForm
+          fields={campos}
+          initialValues={{ nombre: grupo.nombre, pais: grupo.pais, logo_url: grupo.logo_url }}
+          onSubmit={(values) =>
+            editarGrupo.mutate(
+              {
+                id: grupo.id,
+                nombre: String(values.nombre ?? grupo.nombre),
+                pais: (values.pais as string | null) ?? null,
+                logo_url: (values.logo_url as string | null) ?? null,
+              },
+              { onSuccess: volver },
+            )
+          }
+          submitting={editarGrupo.isPending}
+          submitError={editarGrupo.isError ? apiErrorMessage(editarGrupo.error) : null}
+          submitLabel="Guardar cambios"
+          onCancel={volver}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="page">
       <div className="page__header">
@@ -661,6 +760,16 @@ export function TorneosAdminPage() {
                   {formatearFecha(edicion.fecha_fin)})
                 </p>
               )}
+              {/* Portal Público, D16: el admin ve el estado de
+                  publicación al lado de la acción — sin esto, "Ver página
+                  pública" carga perfecto CON sesión (el 404 es solo para
+                  anónimos, C2) y el admin se va convencido de que el link
+                  funciona hasta que alguien más lo abre y ve un 404. */}
+              {edicion && (
+                <p className="muted">
+                  {edicion.publicado ? "🟢 Publicado" : "⚪ No publicado"}
+                </p>
+              )}
               <div className="tarjeta-torneo__acciones">
                 <button type="button" onClick={() => setModo({ tipo: "nueva-edicion", grupo })}>
                   + Nueva edición
@@ -672,6 +781,33 @@ export function TorneosAdminPage() {
                 >
                   Ver Torneo →
                 </button>
+                <button type="button" className="link-button" onClick={() => setModo({ tipo: "editar-grupo", grupo })}>
+                  Editar
+                </button>
+                {/* T5.2c: sin esto la vista pública de torneo (T5.2) no
+                    tiene ninguna puerta de entrada — el botón Compartir
+                    vive DENTRO de ella. El label avisa cuando el link que
+                    se va a copiar todavía no sirve para nadie más (D16). */}
+                <button
+                  type="button"
+                  className="link-button"
+                  disabled={!edicion}
+                  onClick={() => edicion && navigate(`/torneos/${edicion.id}`)}
+                >
+                  {edicion?.publicado ? "Ver página pública" : "Vista previa (no publicado)"}
+                </button>
+                {edicion && (
+                  <button
+                    type="button"
+                    className="link-button"
+                    disabled={publicarEdicion.isPending}
+                    onClick={() =>
+                      publicarEdicion.mutate({ torneoId: edicion.id, publicado: !edicion.publicado })
+                    }
+                  >
+                    {edicion.publicado ? "Despublicar" : "Publicar"}
+                  </button>
+                )}
                 {/* 3B-7: baja lógica, sin cascada — ver el comentario de
                     cambiarEstadoGrupo. Nunca un botón "Eliminar" de
                     verdad: la recomendación del plan fue explícita en no
@@ -690,6 +826,9 @@ export function TorneosAdminPage() {
                   {grupo.estado === "Archivado" ? "Reactivar" : "Archivar"}
                 </button>
               </div>
+              {publicarEdicion.isError && (
+                <p className="error-text">{apiErrorMessage(publicarEdicion.error)}</p>
+              )}
             </div>
           );
         })}

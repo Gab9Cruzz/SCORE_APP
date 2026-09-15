@@ -72,3 +72,10 @@ class Torneo(TimestampMixin, Base):
     # no en Modalidad/Disciplina.
     permite_cambios_ilimitados: Mapped[bool] = mapped_column(Boolean, default=False)
     maximo_cambios_por_equipo: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Portal Público (portal-publico-feed-partidos-plan.md, C2/E-M2): gatea
+    # si un caller ANÓNIMO puede ver este torneo (detalle + posiciones/
+    # goleadores/resultados + feed). Un usuario con sesión siempre lo ve,
+    # publicado o no (E-S1: no hay ownership-check acá, solo anónimo vs.
+    # logueado). default=False acá (torneo nuevo); la migración 31_
+    # backfillea TRUE para las filas preexistentes.
+    publicado: Mapped[bool] = mapped_column(Boolean, default=False)

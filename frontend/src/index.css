@@ -44,13 +44,22 @@ select {
   min-height: 100%;
 }
 
+/* D13: el header público es su propia estructura, no un hijo más de
+ * .nav-bar__links — la barra pública de disciplinas es una fila propia
+ * bajo la marca/sesión, no un elemento que compita por el mismo flex row. */
 .nav-bar {
   display: flex;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 0.4rem;
   padding: 0.75rem 1rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+}
+
+.nav-bar__fila1 {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   flex-wrap: wrap;
 }
 
@@ -1151,6 +1160,35 @@ td:first-child {
   line-height: 1;
 }
 
+/* D11 (portal-publico-feed-partidos-plan.md): .chip-disciplina mide
+ * ~33px de alto (padding .45rem .85rem + font-size .9rem), por debajo
+ * del mínimo de 44px que el propio plan exige (C10e) para un toque en
+ * móvil. Variante propia — no se toca el chip del back-office, no mover
+ * la densidad de TorneosAdmin. */
+.chip-disciplina--publico {
+  min-height: 44px;
+  padding-top: 0.7rem;
+  padding-bottom: 0.7rem;
+}
+
+/* Barra pública de disciplinas — header global (T2.2/T2.3/D5). */
+.barra-disciplinas-publica {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding: 0.4rem 0;
+  mask-image: linear-gradient(to right, #000 92%, transparent 100%);
+}
+
+/* D5a: altura reservada desde el primer render — evita que la llegada de
+ * la respuesta empuje el feed hacia abajo justo cuando el usuario va a
+ * tocar la primera fila. Misma altura que la barra con contenido real
+ * (44px de chip + el padding vertical de arriba). */
+.barra-disciplinas-publica--cargando {
+  min-height: calc(44px + 0.8rem);
+}
+
 /* Bitácora de accesos — el resultado se lee de un vistazo por color Y por
    texto (el color solo no alcanza: falla en monocromo y para daltonismo). */
 .acceso-ok {
@@ -1273,6 +1311,41 @@ td:first-child {
   width: 88px;
   height: 88px;
   font-size: 1.6rem;
+}
+
+/* Escudo de equipo / logo de torneo — Portal Público
+ * (portal-publico-feed-partidos-plan.md, D14a). Mismo patrón que
+ * .avatar-jugador pero cuadrado con esquinas redondeadas, no círculo: un
+ * escudo/logo real suele ser rectangular, a diferencia de una foto de
+ * jugador recortada en círculo. */
+.escudo {
+  border-radius: 6px;
+  object-fit: contain;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.escudo--chico {
+  width: 24px;
+  height: 24px;
+  font-size: 0.7rem;
+  border-radius: 4px;
+}
+
+.escudo--mediano {
+  width: 44px;
+  height: 44px;
+  font-size: 1rem;
+}
+
+.escudo--grande {
+  width: 72px;
+  height: 72px;
+  font-size: 1.4rem;
 }
 
 .perfil-jugador__header {
@@ -1755,4 +1828,291 @@ td:first-child {
   color: #2a2205;
   border-radius: var(--radius);
   font-weight: 600;
+}
+
+/* ============================================================
+ * Portal Público (portal-publico-feed-partidos-plan.md)
+ * D17: caret/selección/scrollbar/focus-ring del navegador salen de la
+ * paleta de acá arriba, no de los defaults — es lo más barato que separa
+ * una página diseñada de una ensamblada.
+ * ============================================================ */
+.publico ::selection {
+  background: var(--accent);
+  color: #05201d;
+}
+.publico a {
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+}
+
+.publico-torneo__header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.publico-torneo__header h1 {
+  margin: 0 0 0.15rem;
+}
+
+.publico-torneo__compartir {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-end;
+}
+
+.publico-torneo__tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1rem;
+}
+
+.publico-torneo__tabs button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0.6rem 0.2rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.publico-torneo__tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.publico-torneo__resultados {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.publico-torneo__resultado-fila {
+  display: grid;
+  grid-template-columns: 48px 1fr 64px 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.4rem;
+  min-height: 44px;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.publico-torneo__resultado-fila:hover {
+  background: var(--surface-alt);
+}
+
+.publico-torneo__marcador {
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  font-weight: 600;
+}
+
+.publico__no-encontrado {
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+}
+
+/* D7: cabecera de torneo en el detalle de partido — un link chico arriba
+ * del marcador, no compite en jerarquía visual con el resultado. */
+.en-vivo__torneo-header {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
+/* ============================================================
+ * Feed de Partidos del Día (T4.1-T4.7, D1-D4, D9, D10)
+ * ============================================================ */
+
+.feed-partidos__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.feed-partidos__selector-fecha {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 600;
+}
+
+.feed-partidos__selector-fecha button {
+  min-height: 44px;
+  min-width: 44px;
+  font-size: 1.1rem;
+}
+
+.feed-partidos__fecha-label {
+  min-width: 12ch;
+  text-align: center;
+}
+
+.feed-partidos__frescura {
+  font-size: 0.85rem;
+}
+
+.feed-partidos__vacio,
+.feed-partidos__truncado {
+  text-align: center;
+  padding: 1rem;
+}
+
+/* Bloque de torneo — cabecera clicable + filas, HERMANOS no anidados (T5.3). */
+.bloque-torneo {
+  margin-bottom: 1.25rem;
+}
+
+.bloque-torneo__header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.25rem;
+  color: var(--text);
+  text-decoration: none;
+  min-height: 44px;
+}
+
+.bloque-torneo__header:hover .bloque-torneo__nombre {
+  text-decoration: underline;
+}
+
+.bloque-torneo__nombre {
+  font-weight: 700;
+}
+
+.bloque-torneo__pais {
+  font-size: 0.8rem;
+}
+
+.bloque-torneo__filas {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* D1: grid explícito de 3 columnas — hora/minuto a la izquierda, equipos
+ * (dos renglones apilados) al medio, marcador a la derecha. Reemplaza la
+ * enumeración horizontal de 6 elementos que no entraba en 400px con
+ * nombres reales. */
+.fila-partido {
+  display: grid;
+  grid-template-columns: 48px 1fr 40px;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
+  min-height: 44px;
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.fila-partido:last-child {
+  border-bottom: none;
+}
+
+.fila-partido:hover {
+  background: var(--surface-alt);
+}
+
+.fila-partido__hora {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.fila-partido--finalizado .fila-partido__hora {
+  color: var(--text-muted);
+}
+
+.fila-partido__en-vivo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.65rem;
+}
+
+.fila-partido__en-vivo-punto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulso-en-vivo 1.4s ease-in-out infinite;
+}
+
+@keyframes pulso-en-vivo {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.fila-partido__equipos {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.fila-partido__equipo {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.fila-partido__nombre-equipo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fila-partido__marcador {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.fila-partido--finalizado .fila-partido__marcador {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* D10: skeleton con la misma métrica del grid de arriba — no un spinner
+ * genérico, el feed tiene forma conocida. */
+.feed-partidos__esqueleto {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.feed-partidos__esqueleto-fila {
+  height: 60px;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-alt) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: esqueleto-brillo 1.5s ease-in-out infinite;
+}
+
+@keyframes esqueleto-brillo {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }

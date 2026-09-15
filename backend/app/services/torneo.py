@@ -63,6 +63,7 @@ class TorneoService:
         torneo_grupo_id: int | None = None,
         torneo_ids_permitidos: list[int] | None = None,
         incluir_archivados: bool = False,
+        solo_publicados: bool = False,
     ) -> list[TorneoOut]:
         """`torneo_ids_permitidos` (rbac-licencias-torneos-plan.md, E1):
         restringe el listado a estos IDs — lo arma el router a partir de
@@ -73,7 +74,11 @@ class TorneoService:
         `incluir_archivados` (cascada-archivado-alineaciones-traspasos-
         plan.md): ver TorneoRepository.list — ningún consumidor actual lo
         pasa `True`, el default excluye por igual las ediciones de un
-        grupo Archivado del listado general."""
+        grupo Archivado del listado general.
+
+        `solo_publicados` (portal-publico-feed-partidos-plan.md, E-B3a):
+        `True` cuando el router resolvió un caller anónimo — excluye los
+        torneos con `Publicado=False`. `False` (con sesión) no filtra."""
         torneos = await self.repo.list(
             skip=skip,
             limit=limit,
@@ -81,6 +86,7 @@ class TorneoService:
             torneo_grupo_id=torneo_grupo_id,
             torneo_ids_permitidos=torneo_ids_permitidos,
             incluir_archivados=incluir_archivados,
+            solo_publicados=solo_publicados,
         )
         configs = await self._configs_por_torneo([t.id for t in torneos])
         return [self._a_salida(t, configs.get(t.id)) for t in torneos]

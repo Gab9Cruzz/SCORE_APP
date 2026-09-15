@@ -8,6 +8,8 @@ import { DashboardPage } from "./pages/Dashboard";
 import { LicenseRevokedScreen } from "./pages/LicenseRevokedScreen";
 import { LoginPage } from "./pages/Login";
 import { PartidoEnVivoPage } from "./pages/PartidoEnVivo";
+import { DetalleTorneoPublicoPage } from "./pages/publico/DetalleTorneoPublico";
+import { FeedPartidosPage } from "./pages/publico/FeedPartidos";
 import { MisPartidosPage } from "./pages/arbitro/MisPartidos";
 import { AccesosAdminPage } from "./pages/admin/AccesosAdmin";
 import { AuditoriaAdminPage } from "./pages/admin/AuditoriaAdmin";
@@ -28,7 +30,7 @@ import { TorneoDashboardPage } from "./pages/torneo-admin/torneo-dashboard/Torne
 import { TraspasosDelTorneoPage } from "./pages/torneo-admin/torneo-dashboard/TraspasosDelTorneo";
 
 export function App() {
-  const { licenseRevoked } = useAuth();
+  const { licenseRevoked, session } = useAuth();
 
   // rbac-licencias-torneos-plan.md, §5.2: chequeado ANTES que las rutas
   // normales — reemplaza el shell entero (nav incluida), sin importar en
@@ -44,7 +46,14 @@ export function App() {
       <NavBar />
       <main>
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          {/* portal-publico-feed-partidos-plan.md, T4.1/C16: "/" decide
+              por sesión — es el único cambio de esta entrega que toca a
+              TODO usuario existente, así que va con su propio test
+              (App.routing.test.tsx) y este comentario explicando por qué.
+              Un anónimo ve el feed público (la nueva home); un usuario
+              logueado sigue exactamente donde ya estaba, redirigido a
+              /dashboard — el arranque de nadie con sesión cambia. */}
+          <Route path="/" element={session ? <Navigate to="/dashboard" replace /> : <FeedPartidosPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route
@@ -76,6 +85,12 @@ export function App() {
               PartidosDelTorneo.tsx. La ruta vieja se mantiene tal cual —
               Dashboard.tsx la linkea como "Ver en vivo →". */}
           <Route path="/partidos/:partidoId" element={<PartidoEnVivoPage />} />
+
+          {/* Vista pública de torneo (portal-publico-feed-partidos-plan.md,
+              T5.2) — pública, sin RequireRole: posiciones/resultados/
+              goleadores con los endpoints de /estadisticas/* que ya eran
+              públicos. Gateada por Publicado del lado del backend (C2). */}
+          <Route path="/torneos/:torneoId" element={<DetalleTorneoPublicoPage />} />
 
           {/* Módulo Árbitro (roles-3-modulos-plan.md, Fase 3, D3 + Fase 4,
               D1): ruta única, sin layout/Outlet — hoy es una sola
@@ -173,7 +188,18 @@ export function App() {
             <Route path="plantillas/lote" element={<RegistroLoteAdminPage />} />
           </Route>
 
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* portal-publico-feed-partidos-plan.md, T1.2 (C7/F20): el
+              catch-all cae en "/" en vez de "/dashboard" directo. Hoy "/"
+              sigue redirigiendo a "/dashboard" para todos (T4.1/C16 todavía
+              no aterrizó — eso es R3), así que el comportamiento no cambia
+              todavía; cuando "/" empiece a decidir por sesión, un anónimo
+              que aterriza acá por una ruta inexistente cae en el feed
+              público en vez del dashboard interno. "/dashboard" tipeado
+              directo sigue alcanzable sin sesión (decisión F20): esta
+              pantalla no tiene módulos de Control de Mesa y ya consume
+              solo endpoints públicos, así que no se le agregó RequireRole
+              — se le sacó el link, no el acceso. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
     </div>

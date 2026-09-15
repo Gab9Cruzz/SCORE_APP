@@ -49,6 +49,7 @@ class PartidoService:
         arbitro_id: int | None = None,
         torneo_ids_permitidos: Sequence[int] | None = None,
         incluir_archivados: bool = False,
+        solo_publicados: bool = False,
     ) -> list[Partido]:
         # arbitro_id (Fase 3, D1): filtro más, mismo mecanismo genérico de
         # BaseRepository.list — no hace falta tocar el repositorio.
@@ -58,6 +59,9 @@ class PartidoService:
         # incluir_archivados (cascada-archivado-alineaciones-traspasos-
         # plan.md): ver PartidoRepository.list — ningún consumidor actual
         # lo pasa `True`.
+        # solo_publicados (portal-publico-feed-partidos-plan.md, E-B3a):
+        # mismo mecanismo que TorneoService.list — `True` cuando el router
+        # resolvió un caller anónimo.
         return await self.repo.list(
             skip=skip,
             limit=limit,
@@ -66,6 +70,7 @@ class PartidoService:
             arbitro_id=arbitro_id,
             torneo_ids_permitidos=torneo_ids_permitidos,
             incluir_archivados=incluir_archivados,
+            solo_publicados=solo_publicados,
         )
 
     async def create(self, data: PartidoCreate) -> Partido:

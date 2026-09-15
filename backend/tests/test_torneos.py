@@ -53,7 +53,10 @@ async def test_admin_crea_torneo(client: AsyncClient, admin_general_headers: dic
     assert body["numero_edicion"] == 1
     assert isinstance(body["torneo_grupo_id"], int)
 
-    resp = await client.get(f"/api/v1/torneos/{body['id']}")
+    # portal-publico-feed-partidos-plan.md, E-M2: un torneo nuevo nace
+    # Publicado=False — con sesión lo sigue viendo igual (E-S1), por eso
+    # el chequeo de existencia va con headers.
+    resp = await client.get(f"/api/v1/torneos/{body['id']}", headers=admin_general_headers)
     assert resp.status_code == 200
 
 
@@ -144,8 +147,11 @@ async def test_segunda_edicion_de_un_grupo_existente_autonumera(
     assert segunda.json()["disciplina_id"] == DISCIPLINA_FUTBOL_ID
     assert segunda.json()["modalidad_id"] == MODALIDAD_FUTBOL_11_ID
 
-    # El selector de ediciones (Fase 2, parte B) lee esto.
-    resp = await client.get(f"/api/v1/torneos?torneo_grupo_id={grupo_id}")
+    # El selector de ediciones (Fase 2, parte B) lee esto. Con headers
+    # (E-M2/E-B3a): ambas ediciones nacieron Publicado=False.
+    resp = await client.get(
+        f"/api/v1/torneos?torneo_grupo_id={grupo_id}", headers=admin_general_headers
+    )
     assert resp.status_code == 200
     numeros = sorted(t["numero_edicion"] for t in resp.json())
     assert numeros == [1, 2]
@@ -268,8 +274,9 @@ async def test_baja_logica_de_torneo(client: AsyncClient, admin_general_headers:
     assert resp.status_code == 200
     assert resp.json()["estado"] == "Inactivo"
 
-    # Sigue existiendo (borrado lógico, no físico).
-    resp = await client.get(f"/api/v1/torneos/{torneo_id}")
+    # Sigue existiendo (borrado lógico, no físico). Con headers — nació
+    # Publicado=False (E-M2), anónimo vería 404 acá.
+    resp = await client.get(f"/api/v1/torneos/{torneo_id}", headers=admin_general_headers)
     assert resp.status_code == 200
     assert resp.json()["estado"] == "Inactivo"
 

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles, require_torneo_access
+from app.api.deps import get_current_user, require_roles, require_torneo_access, verificar_torneo_visible
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.fase import FaseOut
@@ -68,8 +68,16 @@ async def generar_playoffs(
     return FaseOut.model_validate(fase)
 
 
-@router.get("/{torneo_id}/bracket", response_model=list[PartidoOut])
+@router.get(
+    "/{torneo_id}/bracket",
+    response_model=list[PartidoOut],
+    dependencies=[Depends(verificar_torneo_visible)],
+)
 async def bracket(torneo_id: int, session: AsyncSession = Depends(get_db)) -> list[PartidoOut]:
-    """Solo lectura, público (mismo criterio que /estadisticas) — T46."""
+    """Solo lectura, público (mismo criterio que /estadisticas) — T46.
+
+    Gateado por Publicado (portal-publico-feed-partidos-plan.md, C18/E-B3a):
+    sin esto, el bracket completo de un torneo borrador seguía siendo
+    enumerable por un anónimo aunque el detalle del torneo ya 404eara."""
     partidos = await MotorFormatosService(session).bracket(torneo_id)
     return [PartidoOut.model_validate(p) for p in partidos]

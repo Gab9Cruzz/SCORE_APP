@@ -418,6 +418,37 @@ BEFORE INSERT OR UPDATE OF Disciplina_ID, Modalidad_ID ON EQUIPOS
 FOR EACH ROW EXECUTE FUNCTION fn_validar_equipo_modalidad();
 
 -- ------------------------------------------------------------
+-- Función y trigger: slug de DISCIPLINA (portal-publico-feed-partidos-
+-- plan.md, E-B2). Único mecanismo de alta real de una disciplina fuera
+-- de 05_seed.sql/11_catalogo_disciplinas.sql (routes/disciplinas.py no
+-- tiene POST), así que el slug se genera acá, no en Python — evita un
+-- slugify duplicado del lado del cliente que tenga que coincidir por
+-- casualidad con el que generó un deep link ya compartido.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_generar_disciplina_slug()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Ojo con M7: en UPDATE solo si Slug todavía es NULL — un rename vía
+    -- PATCH /disciplinas/{id} no debe cambiar (y romper) un deep link ya
+    -- compartido.
+    IF TG_OP = 'INSERT' OR NEW.Slug IS NULL THEN
+        NEW.Slug := regexp_replace(
+            regexp_replace(
+                translate(lower(NEW.Nombre), 'áéíóúüñ', 'aeiouun'),
+                '[^a-z0-9]+', '-', 'g'
+            ),
+            '(^-+)|(-+$)', '', 'g'
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_disciplina_generar_slug
+BEFORE INSERT OR UPDATE OF Nombre ON DISCIPLINA
+FOR EACH ROW EXECUTE FUNCTION fn_generar_disciplina_slug();
+
+-- ------------------------------------------------------------
 -- Función y trigger: exclusividad de un jugador por torneo.
 -- Un mismo perfil de disciplina no puede tener dos membresías Activo al
 -- mismo tiempo dentro del mismo TORNEO (aunque sea en dos equipos

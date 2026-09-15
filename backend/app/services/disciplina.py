@@ -37,6 +37,7 @@ class DisciplinaService:
                 id=d.id,
                 nombre=d.nombre,
                 estado=d.estado,
+                slug=d.slug,
                 modalidades=modalidades_por_disciplina.get(d.id, []),
             )
             for d in disciplinas

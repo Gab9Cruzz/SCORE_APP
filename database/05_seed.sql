@@ -29,8 +29,13 @@ INSERT INTO EVENTOS (Nombre, Descripcion) VALUES
 -- acá mismo. 11_catalogo_disciplinas.sql vuelve a insertar ambas filas
 -- después (idempotente vía ON CONFLICT DO NOTHING) sin duplicarlas, junto
 -- con el resto del catálogo maestro.
-INSERT INTO DISCIPLINA (Nombre) VALUES
-    ('Fútbol');
+-- Slug explícito (portal-publico-feed-partidos-plan.md, F3): este INSERT
+-- corre ANTES que 06_triggers.sql (orden 01-02-03-04-05-06) — todavía no
+-- existe fn_generar_disciplina_slug para poblarlo solo, y la columna es
+-- NOT NULL. Las 27 disciplinas restantes (11_catalogo_disciplinas.sql)
+-- corren después de 06 y sí lo reciben del trigger.
+INSERT INTO DISCIPLINA (Nombre, Slug) VALUES
+    ('Fútbol', 'futbol');
 
 INSERT INTO MODALIDAD (Disciplina_ID, Nombre, Tamano_Equipo) VALUES
     ((SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol'), 'Fútbol 11', 11);
@@ -43,11 +48,15 @@ INSERT INTO TORNEO_GRUPO (Nombre) VALUES
 -- Torneo
 -- Modalidad_ID es NOT NULL (catálogo unificado) — Copa Ecotec 2026 se jugó
 -- con 11 por lado, de ahí "Fútbol 11".
-INSERT INTO TORNEO (Nombre, Disciplina_ID, Modalidad_ID, Torneo_Grupo_ID, Numero_Edicion, Fecha_Inicio, Fecha_Fin) VALUES
+-- Publicado=TRUE explícito (portal-publico-feed-partidos-plan.md, F1): el
+-- CREATE TABLE de 01_schema.sql defaultea a FALSE para un torneo nuevo
+-- (E-M2), pero el torneo de demo tiene que ser visible en el portal
+-- público sin un paso manual extra — es el "hello world" del feed.
+INSERT INTO TORNEO (Nombre, Disciplina_ID, Modalidad_ID, Torneo_Grupo_ID, Numero_Edicion, Fecha_Inicio, Fecha_Fin, Publicado) VALUES
     ('Copa Ecotec 2026',
      (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol'),
      (SELECT ID FROM MODALIDAD WHERE Nombre = 'Fútbol 11' AND Disciplina_ID = (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Fútbol')),
-     (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Copa Ecotec'), 1, '2026-01-10', '2026-03-30');
+     (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Copa Ecotec'), 1, '2026-01-10', '2026-03-30', TRUE);
 
 -- Configuración de tiempos del torneo (gestion-avanzada-equipos-control-
 -- mesa-plan.md) — todo torneo creado vía TorneoService recibe una fila acá

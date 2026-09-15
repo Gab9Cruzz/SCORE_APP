@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +12,9 @@ from app.api.deps import (
 )
 from app.db.session import get_db
 from app.models.usuario import Usuario
+from app.exceptions.errors import NotFoundError
 from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
+from app.repositories.disciplina import DisciplinaRepository
 from app.repositories.partido import PartidoRepository
 from app.schemas.hito_partido import (
     DeshacerCierreForzadoOut,
@@ -24,6 +28,7 @@ from app.schemas.hito_partido import (
 from app.schemas.convocado_a_partido import ConvocadoAgregarRequest, ConvocadoOut, ConvocatoriaSetRequest
 from app.schemas.partido import (
     EstadoPartido,
+    FeedResponseOut,
     PartidoCreate,
     PartidoOut,
     PartidoUpdate,
@@ -32,6 +37,7 @@ from app.schemas.partido import (
 )
 from app.services.convocado_a_partido import ConvocadoAPartidoService
 from app.services.estadisticas import EstadisticasService
+from app.services.feed import FeedService
 from app.services.hito_partido import HitoPartidoService
 from app.services.partido import PartidoService
 
@@ -51,6 +57,52 @@ async def _torneo_id_del_body(data: PartidoCreate) -> int:
 async def _torneo_id_de_partido(partido_id: int, session: AsyncSession = Depends(get_db)) -> int:
     partido = await PartidoRepository(session).get_or_404(partido_id)
     return partido.torneo_id
+
+
+@router.get("/feed", response_model=FeedResponseOut)
+async def feed_partidos(
+    disciplina_id: int | None = None,
+    # F3: `deporte` (slug) es el que un deep link de WhatsApp manda
+    # (`/?deporte=futbol`) — disciplina_id (numérico) queda para
+    # consumidores que ya lo tienen resuelto (la propia barra pública).
+    # Si vienen los dos, gana disciplina_id (más específico, sin
+    # ambigüedad de mayúsculas/tildes).
+    deporte: str | None = None,
+    fecha: date | None = None,
+    limit: int = Query(default=200, le=200),
+    # F5: 7 en la carga inicial (sin `fecha` en la URL) — D3/E-G3.
+    # Navegar explícito a una fecha manda 0: ese día no tiene fallback,
+    # se ve exactamente lo que ese día tiene (o su empty state real).
+    ventana_fallback_dias: int = Query(default=7, ge=0, le=7),
+    session: AsyncSession = Depends(get_db),
+) -> FeedResponseOut:
+    """Portal Público (portal-publico-feed-partidos-plan.md, T3.3/C12):
+    partidos de UN día, público, sin auth. Va ANTES de `/{partido_id}` en
+    este router para que FastAPI no interprete "feed" como un id.
+
+    No es una lista plana — devuelve un envelope con `fecha_pedida` (la
+    pedida) y `fecha_efectiva` (la que en verdad se muestra: sin `fecha`,
+    o con `ventana_fallback_dias>0`, cae a la fecha publicada más cercana
+    — atrás primero, después adelante, acotada a `ventana_fallback_dias`
+    días). El corte por `limit` respeta el borde de un bloque de
+    torneo — puede devolver más filas que `limit` (el bloque completo
+    entra siempre), nunca corta un torneo a la mitad. Ver
+    `FeedService.obtener_feed` para el detalle completo.
+
+    Ejemplo: `GET /api/v1/partidos/feed?disciplina_id=1&limit=20`.
+    """
+    disciplina_id_resuelto = disciplina_id
+    if disciplina_id_resuelto is None and deporte:
+        encontradas = await DisciplinaRepository(session).list(slug=deporte, limit=1)
+        if not encontradas:
+            raise NotFoundError("Disciplina", deporte)
+        disciplina_id_resuelto = encontradas[0].id
+    return await FeedService(session).obtener_feed(
+        fecha_pedida=fecha,
+        disciplina_id=disciplina_id_resuelto,
+        limit=limit,
+        ventana_fallback_dias=ventana_fallback_dias,
+    )
 
 
 @router.get("", response_model=list[PartidoOut])
@@ -92,6 +144,10 @@ async def listar_partidos(
         arbitro_id=arbitro_id,
         torneo_ids_permitidos=torneo_ids_permitidos,
         incluir_archivados=incluir_archivados,
+        # E-B3a (portal-publico-feed-partidos-plan.md): mismo criterio que
+        # GET /torneos — un anónimo no debe poder enumerar el fixture de
+        # un torneo despublicado por esta vía, aunque su detalle 404ee.
+        solo_publicados=usuario is None,
     )
 
 

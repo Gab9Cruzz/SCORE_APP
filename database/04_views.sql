@@ -66,6 +66,14 @@ WHERE p.Estado = 'Programado'
   AND t.Estado  = 'Activo'
   AND el.Estado = 'Activo'
   AND ev.Estado = 'Activo'
+  -- Portal Público (portal-publico-feed-partidos-plan.md, C2/E-B3a): esta
+  -- vista no tiene forma de saber quién pregunta (a diferencia de
+  -- `GET /torneos/{id}`, que sí distingue anónimo de logueado vía
+  -- `verificar_torneo_visible`), así que el filtro es incondicional — un
+  -- torneo despublicado no aparece en "Próximos partidos" ni para un
+  -- admin logueado. Decisión explícita (C18/E-B3a), no un descuido: el
+  -- widget de Dashboard.tsx ya consume solo endpoints públicos.
+  AND t.Publicado = TRUE
 ORDER BY p.Fecha_Partido;
 
 -- ------------------------------------------------------------
@@ -197,6 +205,62 @@ LEFT JOIN vw_goles_acreditados ga ON ga.PARTIDOS_ID = p.ID
 GROUP BY p.ID, p.TORNEO_ID, el.ID, el.Nombre, ev_eq.ID, ev_eq.Nombre,
          p.Fecha_Partido, p.Jornada, p.Fase, p.Grupo, p.Fase_ID, p.Grupo_ID, p.Estado,
          p.Es_Walkover, p.Walkover_Equipo_Ausente_ID;
+
+-- ------------------------------------------------------------
+-- Feed de Partidos del Día — Portal Público
+-- (portal-publico-feed-partidos-plan.md, T3.2/C5/E-L1/E-L3)
+--
+-- Construida SOBRE vw_resultados_partidos (Decisión Eng #10, prohibido
+-- reimplementar el conteo de goles — esa vista ya resuelve autogol vía
+-- vw_goles_acreditados y walkover). Le suma 5 JOIN explícitos: TORNEO,
+-- TORNEO_GRUPO, DISCIPLINA y EQUIPOS ×2 (vw_resultados_partidos no
+-- expone Logo_URL/Estado de los equipos, solo ID/Nombre).
+--
+-- Sin filtro de fecha acá adentro (E-L2): el predicado de fecha tiene que
+-- ser un rango semiabierto (Fecha_Partido >= :fecha AND < :fecha+1) para
+-- poder usar idx_partidos_fecha — lo aplica el caller (FeedRepository)
+-- sobre esta vista, no la vista misma.
+--
+-- Filtros de estado (E-L3): EQUIPOS.Estado, TORNEO.Estado y
+-- DISCIPLINA.Estado son todos nullable a nivel de columna — se usa
+-- `IS DISTINCT FROM 'Inactivo'` en vez de `= 'Activo'`, que descartaría
+-- filas NULL en silencio. TORNEO.Estado admite 'Finalizado' además de
+-- 'Activo' (E-L1): un torneo que el admin marca Finalizado el día de la
+-- final no debe desaparecer del feed de ese mismo día.
+-- ------------------------------------------------------------
+CREATE OR REPLACE VIEW vw_feed_partidos AS
+SELECT
+    r.Partido_ID,
+    r.Torneo_ID,
+    t.Nombre                                                          AS Torneo,
+    tg.ID                                                             AS Torneo_Grupo_ID,
+    tg.Nombre                                                         AS Torneo_Grupo,
+    tg.Pais,
+    CASE WHEN tg.Logo_URL LIKE 'https://%' THEN tg.Logo_URL END       AS Logo_Torneo,
+    t.Disciplina_ID,
+    d.Nombre                                                          AS Disciplina,
+    r.Equipo_Local_ID,
+    r.Equipo_Local,
+    CASE WHEN el.Logo_URL LIKE 'https://%' THEN el.Logo_URL END       AS Logo_Local,
+    r.Equipo_Visitante_ID,
+    r.Equipo_Visitante,
+    CASE WHEN ev.Logo_URL LIKE 'https://%' THEN ev.Logo_URL END       AS Logo_Visitante,
+    r.Fecha_Partido,
+    r.Estado,
+    r.Goles_Local,
+    r.Goles_Visitante
+FROM vw_resultados_partidos r
+JOIN TORNEO       t  ON t.ID  = r.Torneo_ID
+JOIN TORNEO_GRUPO tg ON tg.ID = t.Torneo_Grupo_ID
+JOIN DISCIPLINA   d  ON d.ID  = t.Disciplina_ID
+JOIN EQUIPOS      el ON el.ID = r.Equipo_Local_ID
+JOIN EQUIPOS      ev ON ev.ID = r.Equipo_Visitante_ID
+WHERE t.Publicado = TRUE
+  AND t.Estado IS DISTINCT FROM 'Inactivo'
+  AND tg.Estado <> 'Archivado'
+  AND r.Estado <> 'Cancelado'
+  AND el.Estado IS DISTINCT FROM 'Inactivo'
+  AND ev.Estado IS DISTINCT FROM 'Inactivo';
 
 -- ------------------------------------------------------------
 -- Tabla de posiciones

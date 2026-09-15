@@ -38,6 +38,13 @@ interface FiltroDisciplinasBarProps {
 /** Barra de navegación horizontal tipo SofaScore para la Pestaña Torneos
  * (equipos-disciplina-navegacion-plan.md, Fase 2 parte D).
  *
+ * Movido de pages/torneo-admin/ a components/ (portal-publico-feed-
+ * partidos-plan.md, T2.1/E-M5, commit propio sin cambio de comportamiento):
+ * ahora es compartido entre el back-office (TorneosAdmin) y el portal
+ * público (BarraDisciplinasPublica, que compone su propia UI encima de
+ * los mismos chips/estilos en vez de reusar este componente entero —
+ * el visitante público no filtra por modalidad ni estado).
+ *
  * Tres decisiones que la hacen usable y no un muro:
  *
  * 1. Solo muestra disciplinas QUE TIENEN TORNEOS (Decisión #6), no las 28

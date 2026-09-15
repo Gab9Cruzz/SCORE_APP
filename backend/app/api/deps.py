@@ -10,9 +10,10 @@ from app.core.config import get_settings
 from app.core.http import ip_del_cliente
 from app.core.security import decode_access_token
 from app.db.session import get_db
-from app.exceptions.errors import AuthError, ForbiddenError, LicenseRevokedError
+from app.exceptions.errors import AuthError, ForbiddenError, LicenseRevokedError, NotFoundError
 from app.models.usuario import Usuario
 from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
+from app.repositories.torneo import TorneoRepository
 from app.repositories.usuario import UsuarioRepository
 
 settings = get_settings()
@@ -89,6 +90,29 @@ async def get_current_user_optional(
     if usuario is None or not usuario.licencia_activa:
         return None
     return usuario
+
+
+async def verificar_torneo_visible(
+    torneo_id: int,
+    usuario: Usuario | None = Depends(get_current_user_optional),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Portal Público (portal-publico-feed-partidos-plan.md, C2/T3.4b):
+    404 en vez del recurso cuando el caller es anónimo y el torneo tiene
+    `Publicado=False` — el detalle de un torneo (y sus posiciones/
+    goleadores/resultados) deja de ser enumerable por un visitante sin
+    sesión. Un caller CON sesión (cualquier rol — E-S1, no hay ownership
+    check acá, solo anónimo/logueado) sigue viendo el torneo completo:
+    `MesaPanel.tsx` y el resto del back-office llaman exactamente los
+    mismos endpoints y no deben notar el cambio.
+
+    Reusa el mismo `NotFoundError` genérico ("Torneo con id=X no
+    encontrado") que un torneo INEXISTENTE — un anónimo no puede
+    distinguir "no existe" de "existe pero no está publicado" (F9: evitar
+    la fuga de que un torneo borrador existe)."""
+    torneo = await TorneoRepository(session).get_or_404(torneo_id)
+    if usuario is None and not torneo.publicado:
+        raise NotFoundError("Torneo", torneo_id)
 
 
 def require_roles(*roles: str) -> Callable:

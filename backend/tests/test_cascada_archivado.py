@@ -61,13 +61,19 @@ async def test_grupo_archivado_sigue_apareciendo_con_torneo_grupo_id_explicito(
     grupo_id = torneo["torneo_grupo_id"]
     await _archivar(client, admin_general_headers, grupo_id)
 
-    resp = await client.get("/api/v1/torneos", params={"torneo_grupo_id": grupo_id})
+    # Con headers (portal-publico-feed-partidos-plan.md, E-M2): el torneo
+    # nace Publicado=False, así que un chequeo anónimo de "existe y se ve"
+    # no aplica acá — lo que este test verifica es el filtro de archivado.
+    resp = await client.get(
+        "/api/v1/torneos", params={"torneo_grupo_id": grupo_id}, headers=admin_general_headers
+    )
     assert resp.status_code == 200
     ids = {t["id"] for t in resp.json()}
     assert torneo["id"] in ids
 
-    # El GET puntual por ID tampoco filtra — nunca lo hizo, sigue igual.
-    resp = await client.get(f"/api/v1/torneos/{torneo['id']}")
+    # El GET puntual por ID tampoco filtra por archivado — nunca lo hizo,
+    # sigue igual (con headers por el mismo motivo que arriba).
+    resp = await client.get(f"/api/v1/torneos/{torneo['id']}", headers=admin_general_headers)
     assert resp.status_code == 200
 
 
@@ -75,7 +81,9 @@ async def test_incluir_archivados_true_trae_todo(client: AsyncClient, admin_gene
     torneo = await _crear_torneo(client, admin_general_headers, "Grupo Incluir Archivados")
     await _archivar(client, admin_general_headers, torneo["torneo_grupo_id"])
 
-    resp = await client.get("/api/v1/torneos", params={"incluir_archivados": True})
+    resp = await client.get(
+        "/api/v1/torneos", params={"incluir_archivados": True}, headers=admin_general_headers
+    )
     assert resp.status_code == 200
     ids = {t["id"] for t in resp.json()}
     assert torneo["id"] in ids
@@ -88,7 +96,7 @@ async def test_reactivar_grupo_devuelve_su_edicion_al_listado_general(
     grupo_id = torneo["torneo_grupo_id"]
     await _archivar(client, admin_general_headers, grupo_id)
 
-    resp = await client.get("/api/v1/torneos")
+    resp = await client.get("/api/v1/torneos", headers=admin_general_headers)
     assert torneo["id"] not in {t["id"] for t in resp.json()}
 
     resp = await client.patch(
@@ -96,7 +104,7 @@ async def test_reactivar_grupo_devuelve_su_edicion_al_listado_general(
     )
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get("/api/v1/torneos")
+    resp = await client.get("/api/v1/torneos", headers=admin_general_headers)
     assert torneo["id"] in {t["id"] for t in resp.json()}
 
 
@@ -107,7 +115,7 @@ async def test_grupo_activo_no_cambia_comportamiento_de_listado(
     verse afectado por el JOIN nuevo."""
     torneo = await _crear_torneo(client, admin_general_headers, "Grupo Activo Sin Cambios")
 
-    resp = await client.get("/api/v1/torneos")
+    resp = await client.get("/api/v1/torneos", headers=admin_general_headers)
     assert resp.status_code == 200
     assert torneo["id"] in {t["id"] for t in resp.json()}
 
@@ -147,18 +155,24 @@ async def test_partido_programado_de_grupo_archivado_excluido_del_listado(
     await db_session.commit()
     await db_session.refresh(partido)
 
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo["id"]})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo["id"]}, headers=admin_general_headers
+    )
     assert partido.id in {p["id"] for p in resp.json()}
 
     await _archivar(client, admin_general_headers, torneo["torneo_grupo_id"])
 
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo["id"]})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo["id"]}, headers=admin_general_headers
+    )
     assert resp.status_code == 200
     assert partido.id not in {p["id"] for p in resp.json()}
 
     # incluir_archivados=true lo trae de vuelta.
     resp = await client.get(
-        "/api/v1/partidos", params={"torneo_id": torneo["id"], "incluir_archivados": True}
+        "/api/v1/partidos",
+        params={"torneo_id": torneo["id"], "incluir_archivados": True},
+        headers=admin_general_headers,
     )
     assert partido.id in {p["id"] for p in resp.json()}
 
@@ -168,7 +182,9 @@ async def test_partido_programado_de_grupo_archivado_excluido_del_listado(
         json={"estado": "Activo"},
         headers=admin_general_headers,
     )
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo["id"]})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo["id"]}, headers=admin_general_headers
+    )
     assert partido.id in {p["id"] for p in resp.json()}
 
 
@@ -212,7 +228,9 @@ async def test_partido_en_curso_de_grupo_archivado_no_se_excluye(
 
     await _archivar(client, admin_general_headers, torneo["torneo_grupo_id"])
 
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo["id"]})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo["id"]}, headers=admin_general_headers
+    )
     assert resp.status_code == 200
     assert partido.id in {p["id"] for p in resp.json()}
 

@@ -10,6 +10,10 @@
  * Las claves son los nombres exactos de 11_catalogo_disciplinas.sql. La
  * búsqueda es tolerante a mayúsculas/acentos porque el nombre viene de la
  * base y un cambio de tipeo no debería dejar la barra sin iconos.
+ *
+ * Movido de pages/torneo-admin/ a components/ (portal-publico-feed-
+ * partidos-plan.md, T2.1/E-M5): ahora es un componente compartido entre
+ * el back-office y el portal público, no exclusivo de TorneosAdmin.
  */
 const ICONOS: Record<string, string> = {
   futbol: "⚽",

@@ -35,3 +35,7 @@ class Equipo(TimestampMixin, Base):
     modalidad_id: Mapped[int] = mapped_column(ForeignKey("modalidad.id"))
     # Valores válidos: Activo, Inactivo (chk_equipos_estado)
     estado: Mapped[str] = mapped_column(String(20), default="Activo")
+    # Portal Público (portal-publico-feed-partidos-plan.md, C3): escudo del
+    # equipo para el feed y el detalle de torneo. NULL = fallback a
+    # iniciales (mismo patrón que JUGADORES.foto_url/AvatarJugador.tsx).
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

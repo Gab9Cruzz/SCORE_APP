@@ -1,7 +1,14 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_current_user_optional, require_roles, require_torneo_access
+from app.api.deps import (
+    get_current_user,
+    get_current_user_optional,
+    require_roles,
+    require_torneo_access,
+    verificar_torneo_visible,
+)
+from app.core.metricas import registrar_evento
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
@@ -47,11 +54,29 @@ async def listar_torneos(
         torneo_grupo_id=torneo_grupo_id,
         torneo_ids_permitidos=torneo_ids_permitidos,
         incluir_archivados=incluir_archivados,
+        # E-B3a (portal-publico-feed-partidos-plan.md): con solo el
+        # detalle gateado (C2/T3.4b), un anónimo igual podía enumerar
+        # torneos borrador acá — gatear detalle y dejar el listado abierto
+        # era el peor de los dos mundos. `None` = con sesión, sin filtro.
+        solo_publicados=usuario is None,
     )
 
 
-@router.get("/{torneo_id}", response_model=TorneoOut)
-async def obtener_torneo(torneo_id: int, session: AsyncSession = Depends(get_db)) -> TorneoOut:
+@router.get(
+    "/{torneo_id}",
+    response_model=TorneoOut,
+    dependencies=[Depends(verificar_torneo_visible)],
+)
+async def obtener_torneo(
+    torneo_id: int,
+    session: AsyncSession = Depends(get_db),
+    usuario: Usuario | None = Depends(get_current_user_optional),
+) -> TorneoOut:
+    # C6/T5.2d: "hits por semana a la vista pública de torneo" — solo
+    # anónimo, para no mezclar tráfico del back-office (MesaPanel llama
+    # esta misma ruta) con el de un visitante real de /torneos/:id.
+    if usuario is None:
+        registrar_evento("torneo_hit", torneo_id=torneo_id)
     return await TorneoService(session).get(torneo_id)
 
 

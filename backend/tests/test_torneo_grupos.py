@@ -89,8 +89,9 @@ async def test_archivar_torneo_grupo_lo_oculta_del_listado_sin_tocar_ediciones(
     ids = {g["id"] for g in resp.json()}
     assert grupo_id in ids
 
-    # La edición (TORNEO) no se tocó — sigue consultable/jugable tal cual.
-    resp = await client.get(f"/api/v1/torneos/{torneo_id}")
+    # La edición (TORNEO) no se tocó — sigue consultable/jugable tal cual
+    # (con headers: nace Publicado=False, portal-publico-feed-partidos-plan.md E-M2).
+    resp = await client.get(f"/api/v1/torneos/{torneo_id}", headers=admin_general_headers)
     assert resp.status_code == 200, resp.text
 
 

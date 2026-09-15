@@ -215,7 +215,7 @@ async def test_el_minimo_se_puede_volver_a_null(
     assert resp.status_code == 200, resp.text
     assert resp.json()["minimo_jugadores_para_iniciar"] is None
 
-    resp = await client.get(f"/api/v1/torneos/{ctx['torneo_id']}")
+    resp = await client.get(f"/api/v1/torneos/{ctx['torneo_id']}", headers=admin_general_headers)
     assert resp.json()["minimo_jugadores_para_iniciar"] is None
 
 

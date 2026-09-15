@@ -153,6 +153,9 @@ class TorneoUpdate(BaseModel):
     maximo_titulares_permitido: int | None = None
     permite_cambios_ilimitados: bool | None = None
     maximo_cambios_por_equipo: int | None = None
+    # Portal Público (portal-publico-feed-partidos-plan.md, C2/C3):
+    # publicar/despublicar desde el formulario de TorneosAdmin.tsx.
+    publicado: bool | None = None
 
 
 class TorneoOut(TorneoBase):
@@ -170,6 +173,7 @@ class TorneoOut(TorneoBase):
     torneo_grupo_id: int
     numero_edicion: int
     estado: EstadoTorneo
+    publicado: bool
     fecha_registro: datetime
     fecha_modificacion: datetime
     # Override: TorneoBase la tipa como *Create (lo que se manda); acá es

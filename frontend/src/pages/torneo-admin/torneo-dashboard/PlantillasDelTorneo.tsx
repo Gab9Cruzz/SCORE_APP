@@ -8,7 +8,7 @@ import { useCatalogo } from "../../../hooks/useCatalogo";
 import { useEtiquetaJugadorPorPerfil } from "../../../hooks/useEtiquetaJugadorPorPerfil";
 import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
 import { AvatarJugador } from "../AvatarJugador";
-import { iconoDisciplina } from "../iconosDisciplina";
+import { iconoDisciplina } from "../../../components/iconosDisciplina";
 import type { RegistroLoteAlcanceTorneo } from "../RegistroLoteAdmin";
 import { ModalPerfilJugador } from "./ModalPerfilJugador";
 import type { TorneoDashboardContext } from "./TorneoDashboard";

@@ -49,6 +49,35 @@ SCRIPTS_VIGENTES = [
     "28_migracion_reglas_cambio.sql",
     "29_migracion_maximo_titulares.sql",
     "30_migracion_fin_forzado.sql",
+    "31_migracion_portal_publico.sql",
+]
+
+# F10/E-L6 (portal-publico-feed-partidos-plan.md): el test de cobertura de
+# directorio de abajo exige que TODO archivo de /database quede en una de
+# las dos listas. Estos son migraciones HISTÓRICAS (escritas para un
+# esquema que ya no existe — ver el docstring del módulo) o migraciones de
+# un plan aparte todavía en curso, no cubierto por este archivo: si algún
+# día se integran a SCRIPTS_VIGENTES, se sacan de acá.
+SCRIPTS_HISTORICOS = [
+    "07_migracion_roles_arbitro.sql",
+    "08_migracion_equipos_jugadores.sql",
+    "09_migracion_torneo_ediciones.sql",
+    "12_migracion_catalogo_disciplinas.sql",
+    "13_migracion_equipos_disciplina.sql",
+    "15_migracion_popularidad_disciplinas.sql",
+    "16_migracion_foto_jugadores.sql",
+    "17_migracion_motor_formatos.sql",
+    "26_migracion_rbac_licencias_torneos.sql",
+]
+
+# Seeds que se corren a mano cuando hacen falta (ej. `seed_portal_demo.sql`,
+# portal-publico-feed-partidos-plan.md F1) — no numerados, no forman parte
+# del camino de migración automático ni prometen correr limpio contra
+# CUALQUIER estado de la base (ej. seed_portal_demo.sql asume que
+# 11_catalogo_disciplinas.sql ya corrió), así que quedan fuera de
+# SCRIPTS_VIGENTES a propósito.
+SEEDS_MANUALES = [
+    "seed_portal_demo.sql",
 ]
 
 DB_SCRIPTS = "torneos_mvp_scripts_test"
@@ -156,4 +185,91 @@ async def test_la_demo_no_usa_equipo_fantasma_para_inscripciones_individuales(ba
     assert mal_ancladas == 0, (
         f"{mal_ancladas} inscripción(es) de una modalidad Individual con Equipo_ID en vez de "
         "Jugador_Perfil_ID (patrón viejo de equipo fantasma)"
+    )
+
+
+def test_todo_archivo_de_database_esta_clasificado():
+    """F10/E-L6 test 2 (portal-publico-feed-partidos-plan.md): cobertura de
+    directorio. `set(glob) - SQL_FILES - SCRIPTS_HISTORICOS - SEEDS_MANUALES`
+    tiene que ser exactamente SCRIPTS_VIGENTES — si no, un script nuevo se
+    agregó a /database sin decidir dónde va, y ese es el modo de falla más
+    silencioso de los tres que describe C13: `SCRIPTS_VIGENTES` nunca se
+    abre, el delta de columnas da 0 y todo queda verde con una migración
+    que nadie corrió nunca."""
+    archivos_en_disco = {p.name for p in DATABASE_DIR.glob("*.sql")}
+    clasificados = set(SQL_FILES) | set(SCRIPTS_HISTORICOS) | set(SEEDS_MANUALES) | set(SCRIPTS_VIGENTES)
+    sin_clasificar = archivos_en_disco - clasificados
+    assert not sin_clasificar, (
+        f"{sorted(sin_clasificar)} no está en SQL_FILES, SCRIPTS_VIGENTES, SCRIPTS_HISTORICOS "
+        "ni SEEDS_MANUALES (test_scripts_sql.py) — agregalo a SCRIPTS_VIGENTES si tiene que "
+        "correr limpio contra el esquema actual, o a SCRIPTS_HISTORICOS/SEEDS_MANUALES si no."
+    )
+    fantasma = clasificados - archivos_en_disco
+    assert not fantasma, f"{sorted(fantasma)} está listado en test_scripts_sql.py pero no existe en /database"
+
+
+@pytest_asyncio.fixture(scope="module")
+async def columnas_por_tabla():
+    """F10/E-L6 test 1: compara las columnas de una base armada solo con
+    01-06 contra las de una base armada con 01-06 + SCRIPTS_VIGENTES. Si
+    coinciden, toda columna que agrega una migración vigente ya está
+    espejada en 01_schema.sql (C13) — que es exactamente lo que se rompe
+    si alguien olvida ese espejo: el símbolo síntoma es
+    `column "x" does not exist` en 40 suites, sin mencionar dónde arreglarlo.
+    """
+    DB_SOLO_BASE = "torneos_mvp_columnas_base_test"
+    DB_CON_VIGENTES = "torneos_mvp_columnas_vigentes_test"
+
+    async def _armar(nombre: str, scripts: list[str]) -> set[tuple[str, str]]:
+        maint = await _connect("postgres")
+        try:
+            await maint.execute(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = $1 AND pid <> pg_backend_pid()",
+                nombre,
+            )
+            await maint.execute(f'DROP DATABASE IF EXISTS "{nombre}"')
+            await maint.execute(f'CREATE DATABASE "{nombre}"')
+        finally:
+            await maint.close()
+
+        con = await asyncpg.connect(
+            host=_url.host or "localhost", port=_url.port or 5432,
+            user=_url.username, password=_url.password, database=nombre,
+        )
+        try:
+            for filename in scripts:
+                await con.execute((DATABASE_DIR / filename).read_text(encoding="utf-8"))
+            filas = await con.fetch(
+                "SELECT table_name, column_name FROM information_schema.columns "
+                "WHERE table_schema = 'public'"
+            )
+            return {(f["table_name"], f["column_name"]) for f in filas}
+        finally:
+            await con.close()
+            maint = await _connect("postgres")
+            try:
+                await maint.execute(f'DROP DATABASE IF EXISTS "{nombre}"')
+            finally:
+                await maint.close()
+
+    solo_base = await _armar(DB_SOLO_BASE, SQL_FILES)
+    con_vigentes = await _armar(DB_CON_VIGENTES, SQL_FILES + SCRIPTS_VIGENTES)
+    return solo_base, con_vigentes
+
+
+async def test_01_schema_espeja_todas_las_columnas_de_scripts_vigentes(columnas_por_tabla):
+    solo_base, con_vigentes = columnas_por_tabla
+    faltantes_en_01_schema = con_vigentes - solo_base
+    assert not faltantes_en_01_schema, (
+        f"{sorted(faltantes_en_01_schema)} existen después de correr SCRIPTS_VIGENTES pero no "
+        "después de correr solo 01-06 — alguna migración de SCRIPTS_VIGENTES agrega una columna "
+        "que no está espejada en 01_schema.sql (C13). Agregala ahí también."
+    )
+    # No debería poder pasar (una migración no borra columnas), pero si
+    # pasa el mensaje tiene que decir qué, no un AssertionError pelado.
+    sobrantes_en_01_schema = solo_base - con_vigentes
+    assert not sobrantes_en_01_schema, (
+        f"{sorted(sobrantes_en_01_schema)} existen en 01-06 pero desaparecen tras correr "
+        "SCRIPTS_VIGENTES — alguna migración vigente hace DROP COLUMN de algo que 01_schema.sql declara."
     )

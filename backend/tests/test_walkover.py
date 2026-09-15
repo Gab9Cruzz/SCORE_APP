@@ -56,7 +56,7 @@ async def test_walkover_en_eliminacion_siempre_permitido_y_avanza_al_ganador(
         await client.post(f"/api/v1/torneos/{torneo_id}/sorteo", json={"semilla": "walkover-fijo"}, headers=torneo_admin_headers)
     ).status_code == 200
 
-    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket")
+    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket", headers=torneo_admin_headers)
     bracket = resp.json()
     primera_ronda = [p for p in bracket if p["partido_siguiente_id"] is not None]
     partido = primera_ronda[0]
@@ -77,7 +77,7 @@ async def test_walkover_en_eliminacion_siempre_permitido_y_avanza_al_ganador(
     assert body["walkover_equipo_ausente_id"] == ausente
 
     # El PRESENTE avanzó al partido siguiente, no un empate ni el ausente.
-    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket")
+    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket", headers=torneo_admin_headers)
     siguiente = next(p for p in resp.json() if p["id"] == partido["partido_siguiente_id"])
     assert presente in (siguiente["equipos_id_local"], siguiente["equipos_id_visitante"])
     assert ausente not in (siguiente["equipos_id_local"], siguiente["equipos_id_visitante"])
@@ -91,7 +91,9 @@ async def test_walkover_en_liga_sin_habilitar_es_rechazado(client: AsyncClient, 
         await client.post(f"/api/v1/torneos/{torneo_id}/fixture", headers=torneo_admin_headers)
     ).status_code == 200
 
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partido = resp.json()[0]
 
     resp = await client.post(
@@ -118,7 +120,9 @@ async def test_walkover_en_liga_habilitado_deja_3_0_en_la_tabla(
         await client.post(f"/api/v1/torneos/{torneo_id}/fixture", headers=torneo_admin_headers)
     ).status_code == 200
 
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partido = resp.json()[0]
     ausente = partido["equipos_id_local"]
     presente = partido["equipos_id_visitante"]
@@ -130,7 +134,9 @@ async def test_walkover_en_liga_habilitado_deja_3_0_en_la_tabla(
     )
     assert resp.status_code == 200, resp.text
 
-    resp = await client.get(f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones")
+    resp = await client.get(
+        f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones", headers=torneo_admin_headers
+    )
     tabla = {f["equipo_id"]: f for f in resp.json()}
     assert tabla[presente]["gf"] == 3
     assert tabla[presente]["gc"] == 0
@@ -152,7 +158,9 @@ async def test_walkover_equipo_ausente_debe_ser_uno_de_los_dos(
         permite_walkover_grupos=True,
     )
     await client.post(f"/api/v1/torneos/{torneo_id}/fixture", headers=torneo_admin_headers)
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partido = resp.json()[0]
     otro_torneo_equipo = (await _crear_equipos(client, torneo_admin_headers, 1, "Ajeno"))[0]
 
@@ -176,7 +184,9 @@ async def test_walkover_sobre_partido_ya_finalizado_es_rechazado(
         permite_walkover_grupos=True,
     )
     await client.post(f"/api/v1/torneos/{torneo_id}/fixture", headers=torneo_admin_headers)
-    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_headers
+    )
     partido = resp.json()[0]
 
     resp = await client.post(

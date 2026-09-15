@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -151,3 +151,62 @@ class ResultadoDirectoCreate(BaseModel):
     # goles) — fn_validar_ganador_corrido lo exige al pasar a 'Finalizado'.
     # Un torneo 'Periodos' lo ignora (el resultado sale del marcador de goles).
     ganador_corrido_id: int | None = None
+
+
+# ------------------------------------------------------------
+# Portal Público — Feed de Partidos del Día
+# (portal-publico-feed-partidos-plan.md, T3.3/F6/F7)
+# ------------------------------------------------------------
+
+
+class FeedTorneoOut(BaseModel):
+    """F6: anidado — antes eran 5 campos planos (torneo/torneo_id/
+    torneo_grupo/pais/logo_torneo) con tres convenciones de nombre
+    distintas conviviendo. `id` es el de la EDICIÓN (Torneo_ID, lo que
+    resuelve /torneos/:id), `grupo` es el nombre mostrado (compuesto en
+    runtime en el resto del sistema, acá viene directo de TORNEO_GRUPO)."""
+
+    id: int
+    nombre: str
+    grupo: str
+    pais: str | None
+    logo_url: str | None
+
+
+class FeedEquipoOut(BaseModel):
+    """F6: `goles` vive DENTRO del equipo (antes goles_local/goles_visitante
+    sueltos) — agrupa lo que ya es semánticamente del mismo lado."""
+
+    id: int
+    nombre: str
+    logo_url: str | None
+    goles: int
+
+
+class FeedPartidoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    partido_id: int
+    torneo: FeedTorneoOut
+    disciplina_id: int
+    disciplina: str
+    local: FeedEquipoOut
+    visitante: FeedEquipoOut
+    fecha_partido: datetime
+    estado: EstadoPartido
+
+
+class FeedResponseOut(BaseModel):
+    """Envelope de `GET /api/v1/partidos/feed` — ver el docstring del
+    handler (routes/partidos.py) para las 3 reglas no obvias (F12):
+    fallback de fecha y su ventana, orden determinista
+    torneo_grupo→torneo→fecha→id, y el corte en borde de bloque de
+    torneo (`total_disponible` puede ser mayor a `len(partidos)` — no
+    porque falten partidos del bloque cortado, sino porque el bloque
+    completo que sí entró puede por sí solo superar el `limit` pedido,
+    ver E-L5)."""
+
+    fecha_pedida: date
+    fecha_efectiva: date
+    total_disponible: int
+    partidos: list[FeedPartidoOut]

@@ -152,7 +152,9 @@ async def test_resultado_directo_partido_sin_los_dos_equipos_definidos_es_rechaz
     )
     assert resp.status_code in (200, 201), resp.text
 
-    resp_partidos = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    resp_partidos = await client.get(
+        "/api/v1/partidos", params={"torneo_id": torneo_id}, headers=torneo_admin_con_torneo_headers
+    )
     partido_tbd = next(
         p for p in resp_partidos.json() if p["equipos_id_local"] is None or p["equipos_id_visitante"] is None
     )

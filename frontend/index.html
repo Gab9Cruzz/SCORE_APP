@@ -4,7 +4,21 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Score-App</title>
+    <!-- Portal Público (portal-publico-feed-partidos-plan.md, T5.2b/C4):
+         meta tags OG ESTÁTICOS — el mismo preview para todo link
+         compartido (torneo, partido, feed). Un preview por torneo exige
+         SSR o un endpoint de prerender (diferido, C14/C4) — el botón
+         Compartir de cada página pública es el que entrega el valor
+         real; esto solo evita que el link se vea como texto pelado. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Score-App" />
+    <meta property="og:title" content="Score-App" />
+    <meta property="og:description" content="Resultados y tablas de posiciones en vivo." />
+    <meta property="og:image" content="/favicon.svg" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Score-App" />
+    <meta name="twitter:description" content="Resultados y tablas de posiciones en vivo." />
   </head>
   <body>
     <div id="root"></div>

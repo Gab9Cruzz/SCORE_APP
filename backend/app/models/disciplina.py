@@ -29,3 +29,7 @@ class Disciplina(Base):
     # plantillas-navegacion-plan.md, requerimiento #3 (barra tipo
     # SofaScore ordenada por popularidad, no alfabético).
     orden_popularidad: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Portal Público (portal-publico-feed-partidos-plan.md, F3): generado
+    # por fn_generar_disciplina_slug (06_triggers.sql), nunca por Python —
+    # ver DisciplinaOut.slug.
+    slug: Mapped[str] = mapped_column(String(60))
