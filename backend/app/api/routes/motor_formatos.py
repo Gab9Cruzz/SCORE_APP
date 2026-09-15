@@ -5,7 +5,7 @@ from app.api.deps import get_current_user, require_roles, require_torneo_access
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.fase import FaseOut
-from app.schemas.motor_formatos import SorteoRequest
+from app.schemas.motor_formatos import PlayoffsRequest, SorteoRequest
 from app.schemas.partido import PartidoOut
 from app.services.motor_formatos import MotorFormatosService
 
@@ -53,13 +53,18 @@ async def sortear(
 )
 async def generar_playoffs(
     torneo_id: int,
+    data: PlayoffsRequest = PlayoffsRequest(),
     session: AsyncSession = Depends(get_db),
     usuario_actual: Usuario = Depends(get_current_user),
 ) -> FaseOut:
     """Solo Grupos + Playoffs, y solo cuando la Fase de Grupos ya terminó:
     cruza los clasificados de cada grupo (1°A-2°B...) y sortea el bracket
-    de la fase eliminatoria — T42/T51."""
-    fase = await MotorFormatosService(session).generar_playoffs(torneo_id, usuario_actual.id)
+    de la fase eliminatoria — T42/T51. `data.clasificados_por_grupo`
+    (control-mesa-reactividad-playoffs-plan.md, Fase 3 §6): opcional,
+    default None = usa el config del torneo sin cambios."""
+    fase = await MotorFormatosService(session).generar_playoffs(
+        torneo_id, usuario_actual.id, clasificados_por_grupo=data.clasificados_por_grupo
+    )
     return FaseOut.model_validate(fase)
 
 

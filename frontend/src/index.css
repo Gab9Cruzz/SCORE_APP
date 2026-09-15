@@ -383,6 +383,27 @@ td:first-child {
   min-width: 2.5em;
 }
 
+/* control-mesa-reactividad-playoffs-plan.md, Fase 2/3 — jugador+equipo en
+   2 líneas (no 1 string concatenado): evita el wrap ilegible de "[Equipo]
+   | Sale: A ➔ Entra: B" (45-60+ caracteres con dorsal) en celular a
+   360-400px. */
+.eventos-timeline__detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.eventos-timeline__badge-auto {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.eventos-timeline__fila--auto {
+  opacity: 0.85;
+}
+
 /* Control de Mesa — mobile-first, botones grandes para uso en cancha */
 .partidos-list--tappable button {
   width: 100%;

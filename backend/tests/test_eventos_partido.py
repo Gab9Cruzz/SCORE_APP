@@ -218,3 +218,35 @@ async def test_registrar_evento_en_partido_finalizado_es_rechazado(
     )
     assert resp.status_code == 400, resp.text
     assert "en curso" in resp.json()["detail"].lower()
+
+
+async def test_segunda_amarilla_en_vivo_autogenera_roja(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares
+):
+    """control-mesa-reactividad-playoffs-plan.md, Fase 3 §3 — el mismo
+    listener que resultado-directo, pero en el camino EN VIVO
+    (EventoPartidoService.create): 2 tarjetas amarillas seguidas para el
+    mismo jugador deben autogenerar 1 sola Tarjeta Roja."""
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
+
+    resp1 = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 3, "minuto": 10},
+        headers=arbitro_headers,
+    )
+    assert resp1.status_code == 201, resp1.text
+
+    resp2 = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 3, "minuto": 20},
+        headers=arbitro_headers,
+    )
+    assert resp2.status_code == 201, resp2.text
+
+    resp = await client.get("/api/v1/eventos-partido", params={"partidos_id": 3})
+    eventos = resp.json()
+    amarillas = [e for e in eventos if e["eventos_id"] == 3 and e["jugador_id"] == 5]
+    rojas = [e for e in eventos if e["eventos_id"] == 4 and e["jugador_id"] == 5]
+    assert len(amarillas) == 2
+    assert len(rojas) == 1
+    assert rojas[0]["equipo_id"] == 3

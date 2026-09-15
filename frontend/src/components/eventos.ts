@@ -73,25 +73,56 @@ export function deriveHistorialElegibilidad(eventosRegistrados: EventoRegistrado
  * para que cada consumidor use el que le corresponde sin ambigüedad de
  * polaridad ("Sale" necesita `titulares`, "Entra" necesita `suplentes`).
  *
- * Sin convocatoria guardada para este partido (`titularesPerfilIds` vacío):
- * AMBOS sets vuelven vacíos, EXPLÍCITAMENTE — degradación con gracia (D4,
- * `partido.py:170-179`: "resultado directo" existe para partidos sin
- * alineación registrada). Cada call-site debe chequear
+ * `convocadosPerfilIds` (control-mesa-reactividad-playoffs-plan.md, Fase 3
+ * §2 — corrección del bug de "filtrado estricto de suplentes"): TODAS las
+ * filas de `GET /convocados` (titulares + suplentes), no solo las
+ * titulares. Antes de esta corrección, `suplentes` se calculaba como "todo
+ * el plantel del CLUB que no es titular" — un jugador nunca convocado a
+ * ESTE partido igual aparecía en "Entra". Ahora un jugador de `plantilla`
+ * que no está en `convocadosPerfilIds` no entra a ninguno de los dos sets.
+ *
+ * Sin convocatoria guardada para este partido (`convocadosPerfilIds`
+ * vacío): AMBOS sets vuelven vacíos, EXPLÍCITAMENTE — degradación con
+ * gracia (D4, `partido.py:170-179`: "resultado directo" existe para
+ * partidos sin alineación registrada). Cada call-site debe chequear
  * `titulares.size === 0 && suplentes.size === 0` y mostrar la plantilla
  * completa + un aviso, en vez de asumir que un set vacío "no filtra" por
  * accidente. */
 export function deriveTitularSuplente(
+  convocadosPerfilIds: Set<number>,
   titularesPerfilIds: Set<number>,
   plantilla: PlantillaJugador[],
 ): { titulares: Set<number>; suplentes: Set<number> } {
-  if (titularesPerfilIds.size === 0) {
+  if (convocadosPerfilIds.size === 0) {
     return { titulares: new Set(), suplentes: new Set() };
   }
   const titulares = new Set<number>();
   const suplentes = new Set<number>();
   for (const j of plantilla) {
+    if (!convocadosPerfilIds.has(j.jugador_perfil_id)) continue; // no convocado a ESTE partido
     if (titularesPerfilIds.has(j.jugador_perfil_id)) titulares.add(j.jugador_id);
     else suplentes.add(j.jugador_id);
   }
   return { titulares, suplentes };
+}
+
+/** Quiénes están "en cancha" AHORA para elegir en un "Sale": titulares que
+ * no salieron/fueron expulsados, MÁS suplentes que ya entraron (y no
+ * volvieron a salir) — control-mesa-reactividad-playoffs-plan.md, Fase 3
+ * §1 ("estado mutante en cambios"). Sin esto, un suplente que entra por un
+ * Cambio queda inelegible para un Cambio posterior en el MISMO
+ * batch/timeline (lesiones rápidas, etc.). Compone `salidosOExpulsados` y
+ * `yaEntraron` (ya derivados por `deriveHistorialElegibilidad`) en vez de
+ * reimplementar el historial — 1 sola fuente de verdad para ambos ejes de
+ * la elegibilidad ("Sale" y "Entra"), mismo criterio de polaridad
+ * explícita que `deriveTitularSuplente`. */
+export function deriveEnCancha(
+  titularesJugadorIds: Set<number>,
+  salidosOExpulsados: Set<number>,
+  yaEntraron: Set<number>,
+): Set<number> {
+  const enCancha = new Set(titularesJugadorIds);
+  for (const id of yaEntraron) enCancha.add(id);
+  for (const id of salidosOExpulsados) enCancha.delete(id);
+  return enCancha;
 }

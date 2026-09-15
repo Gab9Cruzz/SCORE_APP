@@ -16,6 +16,7 @@ from app.schemas.evento_partido import EventoPartidoCreate, EventoPartidoUpdate
 from app.services.minuto_partido import calcular_minuto_actual
 from app.services.permisos import verificar_arbitro_asignado
 from app.services.reglas_cambio import validar_reglas_cambio
+from app.services.reglas_tarjetas import procesar_doble_amarilla
 
 
 def _verificar_partido_en_curso(partido: Partido) -> None:
@@ -89,7 +90,39 @@ class EventoPartidoService:
 
         datos = data.model_dump()
         datos["minuto"] = minuto
-        return await self.repo.create(**datos)
+        evento = await self.repo.create(**datos)
+        await self._procesar_doble_amarilla_si_corresponde(evento, minuto)
+        return evento
+
+    async def _procesar_doble_amarilla_si_corresponde(self, evento: EventoPartido, minuto: int) -> None:
+        """control-mesa-reactividad-playoffs-plan.md, Fase 3 §3 — listener
+        de doble amarilla en el camino EN VIVO. Espejo del wiring en
+        `PartidoService.registrar_resultado_directo` (mismo módulo
+        `reglas_tarjetas`, ver su docstring): ambos caminos de inserción de
+        eventos necesitan la regla, no solo uno."""
+        evento_catalogo = await self.evento_catalogo_repo.get_or_404(evento.eventos_id)
+        if evento_catalogo.nombre != "Tarjeta Amarilla":
+            return
+        rojas = await self.evento_catalogo_repo.list(limit=1, nombre="Tarjeta Roja")
+        if not rojas:
+            return
+        roja_auto = await procesar_doble_amarilla(
+            evento_partido_repo=self.repo,
+            partido_id=evento.partidos_id,
+            jugador_id=evento.jugador_id,
+            equipo_id=evento.equipo_id,
+            eventos_id_amarilla=evento.eventos_id,
+            eventos_id_roja=rojas[0].id,
+            minuto=minuto,
+        )
+        if roja_auto is None:
+            return
+        # `procesar_doble_amarilla` devuelve sin persistir (ver su
+        # docstring) — acá SÍ se commitea de inmediato, mismo criterio que
+        # `self.repo.create()` arriba (este método ya hace un commit por
+        # evento, a diferencia de `registrar_resultado_directo`).
+        self.session.add(roja_auto)
+        await self.session.commit()
 
     async def _minuto_en_vivo(self, partido: Partido) -> int:
         config = await self.config_repo.get_by_torneo(partido.torneo_id)

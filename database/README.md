@@ -42,6 +42,22 @@ Cada una aplica un plan concreto sobre una base **ya provisionada**
 | `15_migracion_popularidad_disciplinas.sql`, `16_migracion_foto_jugadores.sql`, `17_migracion_motor_formatos.sql` | `motor-formatos-plantillas-navegacion-plan.md` (en curso al momento de escribir esto) |
 | `18_migracion_auditoria_cambios.sql` | Auditoría de cambios: alta/modificación/baja de cualquier entidad (tabla `AUDITORIA`) — numerada 18 y no 15 porque 15-17 ya estaban tomados por el plan de arriba |
 | `19_migracion_plantilla_base_equipo.sql`, `20_migracion_control_mesa_tiempos.sql` | `gestion-avanzada-equipos-control-mesa-plan.md` — Plantilla Base de equipo (`EQUIPO_JUGADOR_BASE`) y Motor de Tiempos + Control de Mesa (`CONFIGURACION_TIEMPO_TORNEO`, `HITOS_PARTIDO`, `PARTIDOS.Ganador_Corrido_ID`) |
+| `21_migracion_desempate_manual.sql` | Desempate manual en la tabla de posiciones (3A-12, EC-51, `cierre-backlog-todos-plan.md`) — `GRUPO_EQUIPO.Orden_Manual` |
+| `22_migracion_rate_limiting_login.sql` | Rate limiting de login (3B-14, `cierre-backlog-todos-plan.md`) |
+| `23_migracion_archivar_torneo_grupo.sql` | Archivar/eliminar `TORNEO_GRUPO` (3B-7, `cierre-backlog-todos-plan.md`) |
+| `24_migracion_limites_y_walkover.sql` | Límite de plantilla, cupo máximo de inscripciones, walkover/retiro (3B-4/3B-10/3B-13, `cierre-backlog-todos-plan.md`) |
+| `25_migracion_convocados.sql` | Titular/suplente/convocados a un partido (3B-2, `cierre-backlog-todos-plan.md`) — `CONVOCADO_A_PARTIDO` |
+| `26_migracion_rbac_licencias_torneos.sql` | RBAC — asignación de torneos (N:M) + sistema de licenciamiento (`rbac-licencias-torneos-plan.md`) |
+| `27_migracion_minimo_titulares.sql` | Mínimo reglamentario para iniciar un partido + concurrencia/llegadas tardías en convocatoria (`gestionar-partido-alineaciones-plan.md`) |
+| `28_migracion_reglas_cambio.sql` | "Modo en Vivo": reglas de sustitución por torneo — tope de cambios y no-retorno (`modo-vivo-sustituciones-cierre-plan.md`, Área 3) |
+| `29_migracion_maximo_titulares.sql` | "Modo en Vivo": tope SUPERIOR de titulares por equipo (`modo-vivo-sustituciones-cierre-plan.md`, Área 1) |
+| `30_migracion_fin_forzado.sql` | "Modo en Vivo": cierre forzado de partido (`modo-vivo-sustituciones-cierre-plan.md`, Área 4) |
+
+**Nota (2026-09-14):** este índice se quedó desactualizado entre `21` y `30` — ninguna de esas
+migraciones aparecía listada aquí, aunque sí estaban aplicadas (o, en el caso de `21`,
+pendiente de aplicar) contra `torneos_mvp`. Si agregás una migración nueva, agregala a esta
+tabla en el mismo commit — es la causa más probable de que una migración quede sin correr
+contra una base real sin que nadie lo note (ver `control-mesa-reactividad-playoffs-plan.md`).
 
 **Una migración vieja no tiene por qué correr sobre el esquema de hoy, y
 eso no es un bug.** `08` referencia `DISCIPLINA.Tipo`, una columna que `12`

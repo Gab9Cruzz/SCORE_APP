@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveHistorialElegibilidad, deriveTitularSuplente, type PlantillaJugador } from "./eventos";
+import { deriveEnCancha, deriveHistorialElegibilidad, deriveTitularSuplente, type PlantillaJugador } from "./eventos";
 
 const EVENTO_NOMBRE_POR_ID = new Map<number, string>([
   [1, "Gol"],
@@ -50,14 +50,14 @@ describe("deriveHistorialElegibilidad", () => {
 describe("deriveTitularSuplente", () => {
   const plantilla = [plantillaDe(101, 1), plantillaDe(102, 2), plantillaDe(103, 3)];
 
-  it("sin convocatoria guardada (titularesPerfilIds vacío), ambos sets vuelven vacíos explícitamente", () => {
-    const { titulares, suplentes } = deriveTitularSuplente(new Set(), plantilla);
+  it("sin convocatoria guardada (convocadosPerfilIds vacío), ambos sets vuelven vacíos explícitamente", () => {
+    const { titulares, suplentes } = deriveTitularSuplente(new Set(), new Set(), plantilla);
     expect(titulares.size).toBe(0);
     expect(suplentes.size).toBe(0);
   });
 
   it("con convocatoria, separa titulares de suplentes por jugador_id (no jugador_perfil_id)", () => {
-    const { titulares, suplentes } = deriveTitularSuplente(new Set([1, 2]), plantilla);
+    const { titulares, suplentes } = deriveTitularSuplente(new Set([1, 2, 3]), new Set([1, 2]), plantilla);
     expect(titulares.has(101)).toBe(true);
     expect(titulares.has(102)).toBe(true);
     expect(titulares.has(103)).toBe(false);
@@ -65,9 +65,48 @@ describe("deriveTitularSuplente", () => {
     expect(suplentes.has(101)).toBe(false);
   });
 
-  it("titulares y suplentes son disjuntos y cubren toda la plantilla convocada", () => {
-    const { titulares, suplentes } = deriveTitularSuplente(new Set([2]), plantilla);
+  it("titulares y suplentes son disjuntos y cubren toda la plantilla CONVOCADA", () => {
+    const { titulares, suplentes } = deriveTitularSuplente(new Set([1, 2, 3]), new Set([2]), plantilla);
     expect(titulares.size + suplentes.size).toBe(plantilla.length);
     for (const id of titulares) expect(suplentes.has(id)).toBe(false);
+  });
+
+  it("regresión — un jugador del club NUNCA convocado a este partido no aparece en ningún set (control-mesa-reactividad-playoffs-plan.md, Fase 3 §2)", () => {
+    // Perfil 3 (jugador 103) está en la plantilla del club pero NO en
+    // convocadosPerfilIds — antes de la corrección, deriveTitularSuplente
+    // lo trataba igual como "suplente" con solo mirar la plantilla
+    // completa contra los titulares.
+    const { titulares, suplentes } = deriveTitularSuplente(new Set([1, 2]), new Set([1]), plantilla);
+    expect(titulares.has(101)).toBe(true);
+    expect(suplentes.has(102)).toBe(true);
+    expect(titulares.has(103)).toBe(false);
+    expect(suplentes.has(103)).toBe(false); // ni titular ni suplente — nunca convocado
+  });
+});
+
+describe("deriveEnCancha", () => {
+  it("sin cambios registrados, en cancha = exactamente los titulares", () => {
+    const enCancha = deriveEnCancha(new Set([101, 102]), new Set(), new Set());
+    expect(enCancha).toEqual(new Set([101, 102]));
+  });
+
+  it("un titular que salió por Cambio ya no está en cancha", () => {
+    const enCancha = deriveEnCancha(new Set([101, 102]), new Set([101]), new Set());
+    expect(enCancha.has(101)).toBe(false);
+    expect(enCancha.has(102)).toBe(true);
+  });
+
+  it("un suplente que ya entró por Cambio SÍ está en cancha — estado mutante (Fase 3 §1)", () => {
+    const enCancha = deriveEnCancha(new Set([101, 102]), new Set([101]), new Set([201]));
+    expect(enCancha.has(201)).toBe(true);
+    expect(enCancha.size).toBe(2); // 102 (titular que no salió) + 201 (suplente que entró)
+  });
+
+  it("un suplente que entró y luego volvió a salir (2do Cambio) ya no está en cancha", () => {
+    // 201 entró por A (queda en yaEntraron) y después salió en un 2do
+    // Cambio (queda también en salidosOExpulsados) — la resta gana.
+    const enCancha = deriveEnCancha(new Set([101]), new Set([101, 201]), new Set([201]));
+    expect(enCancha.has(201)).toBe(false);
+    expect(enCancha.has(101)).toBe(false);
   });
 });

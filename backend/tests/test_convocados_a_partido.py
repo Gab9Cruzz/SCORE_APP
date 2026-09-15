@@ -4,6 +4,8 @@ docs/plans/cierre-backlog-todos-plan.md). Partido 3 (05_seed.sql): torneo
 (jugador 5) está en Halcones; Carlos Pérez (jugador 1) está en Tiburones.
 """
 from httpx import AsyncClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 PARTIDO_3 = 3
 
@@ -130,3 +132,51 @@ async def test_torneo_admin_puede_definir_convocatoria(client: AsyncClient, torn
 async def test_definir_convocatoria_sin_auth_falla(client: AsyncClient):
     resp = await client.put(f"/api/v1/partidos/{PARTIDO_3}/convocados", json={"convocados": []})
     assert resp.status_code == 401
+
+
+async def test_jugador_traspasado_despues_de_la_fecha_del_partido_es_rechazado(
+    client: AsyncClient, db_session: AsyncSession, arbitro_headers: dict[str, str]
+):
+    """control-mesa-reactividad-playoffs-plan.md, Fase 3 §4 — bug de
+    "date-effective": Partido 3 (05_seed.sql) es Halcones(3) vs
+    Tiburones(1), fecha 2026-01-29. Carlos Pérez (jugador 1, perfil ya
+    existente) está en Tiburones desde 2026-01-01. Acá se lo suma a
+    Halcones con Fecha_Inicio POSTERIOR a la fecha de Partido 3
+    (2026-02-15) — mismo perfil, transferido "hoy" pero recién a partir de
+    una fecha futura respecto de este partido. Antes de este fix,
+    `plantilla_equipo` (vw_jugadores_activos_por_equipo, "vigente hoy") lo
+    ofrecía igual como candidato de Halcones para Partido 3 — exactamente
+    el bug reportado ("convocó a un jugador que no pertenecía a ese equipo
+    en la fecha de ese partido")."""
+    perfil_carlos = await _perfil_de(client, 1)  # Tiburones desde 2026-01-01
+
+    # fn_validar_exclusividad_torneo prohíbe 2 membresías ACTIVAS del mismo
+    # perfil en el mismo torneo a la vez — se cierra la de Tiburones antes
+    # de abrir la de Halcones, como haría un traspaso real.
+    await db_session.execute(
+        text(
+            "UPDATE jugador_equipo SET fecha_fin = '2026-02-10', estado = 'Traspasado' "
+            "WHERE jugador_perfil_id = :perfil_id AND estado = 'Activo'"
+        ),
+        {"perfil_id": perfil_carlos},
+    )
+    insc_halcones = await db_session.execute(
+        text("SELECT id FROM inscripciones_torneo WHERE torneo_id = 1 AND equipo_id = 3")
+    )
+    insc_halcones_id = insc_halcones.scalar_one()
+    await db_session.execute(
+        text(
+            "INSERT INTO jugador_equipo (jugador_perfil_id, inscripcion_torneo_id, dorsal, fecha_inicio) "
+            "VALUES (:perfil_id, :insc_id, 99, '2026-02-15')"
+        ),
+        {"perfil_id": perfil_carlos, "insc_id": insc_halcones_id},
+    )
+    await db_session.commit()
+
+    resp = await client.put(
+        f"/api/v1/partidos/{PARTIDO_3}/convocados",
+        json={"convocados": [{"jugador_perfil_id": perfil_carlos, "titular": False}]},
+        headers=arbitro_headers,
+    )
+    assert resp.status_code == 400, resp.text
+    assert "no pertenece" in resp.json()["detail"].lower()

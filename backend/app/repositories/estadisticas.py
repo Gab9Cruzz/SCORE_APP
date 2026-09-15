@@ -92,6 +92,44 @@ class EstadisticasRepository:
             torneo_id=torneo_id,
         )
 
+    async def plantilla_equipo_en_fecha(
+        self, equipo_id: int, torneo_id: int, fecha_partido: Any
+    ) -> list[dict[str, Any]]:
+        """Plantilla vigente de un equipo A LA FECHA de un partido concreto —
+        distinto de `plantilla_equipo` (vw_jugadores_activos_por_equipo,
+        "hoy"). Usado SOLO por `ConvocadoAPartidoService`: la vista existente
+        no puede tomar un parámetro de fecha (control-mesa-reactividad-
+        playoffs-plan.md, Fase 3 §4), y cambiarle la semántica rompería a sus
+        otros callers legítimos ("plantel vigente ahora" — gestión de
+        equipos, selector de goleador en partido en curso).
+
+        Mismo WHERE de fecha que `fn_validar_jugador_partido`
+        (06_triggers.sql): el candidato que esta consulta ofrece es
+        EXACTAMENTE el que el trigger va a aceptar cuando se cargue un
+        evento real para ese jugador en ese partido — evita la
+        inconsistencia de hoy (se puede convocar a alguien que después el
+        trigger rechaza al cargarle un evento)."""
+        return await self._fetch(
+            """
+            SELECT e.ID AS equipo_id, e.Nombre AS equipo, it.Torneo_ID AS torneo_id,
+                   j.ID AS jugador_id, j.Nombre AS jugador, jpd.ID AS jugador_perfil_id,
+                   je.Dorsal AS dorsal, je.Fecha_Inicio AS fecha_inicio
+            FROM JUGADOR_EQUIPO je
+            JOIN JUGADOR_PERFIL_DISCIPLINA jpd ON jpd.ID = je.Jugador_Perfil_ID
+            JOIN JUGADORES j ON j.ID = jpd.Jugador_ID
+            JOIN INSCRIPCIONES_TORNEO it ON it.ID = je.Inscripcion_Torneo_ID
+            JOIN EQUIPOS e ON e.ID = it.Equipo_ID
+            WHERE e.ID = :equipo_id AND it.Torneo_ID = :torneo_id
+              AND j.Estado = 'Activo' AND e.Estado = 'Activo' AND je.Estado = 'Activo'
+              AND je.Fecha_Inicio <= CAST(:fecha_partido AS date)
+              AND (je.Fecha_Fin IS NULL OR je.Fecha_Fin >= CAST(:fecha_partido AS date))
+            ORDER BY je.Dorsal NULLS LAST, j.Nombre
+            """,
+            equipo_id=equipo_id,
+            torneo_id=torneo_id,
+            fecha_partido=fecha_partido,
+        )
+
     async def estado_perfil(self, jugador_perfil_id: int) -> str | None:
         """Libre/Activo/Suspendido, derivado (Fase 1, EC-10/EC-11) — se
         reusa la vista en vez de reimplementar la lógica acá (Perfil de

@@ -17,6 +17,7 @@ from app.repositories.torneo_grupo import TorneoGrupoRepository
 from app.schemas.partido import PartidoCreate, PartidoUpdate, ResultadoDirectoCreate
 from app.services.permisos import verificar_arbitro_asignado
 from app.services.reglas_cambio import validar_reglas_cambio
+from app.services.reglas_tarjetas import procesar_doble_amarilla
 
 
 class PartidoService:
@@ -217,6 +218,12 @@ class PartidoService:
         self.session.add(HitoPartido(partido_id=id_, tipo_hito="Inicio_Partido", registrado_por=usuario_actual.id))
         await self.session.flush()
 
+        # control-mesa-reactividad-playoffs-plan.md, Fase 3 §3: resuelto UNA
+        # vez fuera del loop (no cambia por evento), igual criterio que
+        # `torneo`/`config` arriba — evita una consulta repetida por evento.
+        rojas_catalogo = await self.evento_catalogo_repo.list(limit=1, nombre="Tarjeta Roja")
+        eventos_id_roja = rojas_catalogo[0].id if rojas_catalogo else None
+
         for evento in data.eventos:
             # goles-por-marcador-slots-plan.md, Fase 1 (hallazgo 6): antes de
             # esta corrección, este método nunca llamaba nada de
@@ -240,6 +247,26 @@ class PartidoService:
             )
             self.session.add(EventoPartido(partidos_id=id_, **evento.model_dump()))
             await self.session.flush()
+
+            # Fase 3 §3: listener de doble amarilla — mismo módulo que usa
+            # EventoPartidoService.create (camino en vivo), para que la
+            # regla no dependa de por cuál pantalla cargó el operador. Se
+            # evalúa DESPUÉS del flush de este evento (visible en la misma
+            # transacción, igual criterio que validar_reglas_cambio arriba
+            # con los eventos de vueltas anteriores del loop).
+            if eventos_id_roja is not None and evento_catalogo.nombre == "Tarjeta Amarilla":
+                roja_auto = await procesar_doble_amarilla(
+                    evento_partido_repo=self.evento_partido_repo,
+                    partido_id=id_,
+                    jugador_id=evento.jugador_id,
+                    equipo_id=evento.equipo_id,
+                    eventos_id_amarilla=evento.eventos_id,
+                    eventos_id_roja=eventos_id_roja,
+                    minuto=evento.minuto,
+                )
+                if roja_auto is not None:
+                    self.session.add(roja_auto)
+                    await self.session.flush()
 
         if config.tipo_cronometro == "Corrido":
             # Antes del Hito Fin_Partido: fn_validar_ganador_corrido exige

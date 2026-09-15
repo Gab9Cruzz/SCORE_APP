@@ -11,7 +11,7 @@ import {
   limpiarEventoPendiente,
 } from "../lib/colaOfflineEventos";
 import { Cronometro } from "./Cronometro";
-import { deriveHistorialElegibilidad, deriveTitularSuplente, TIPOS, TIPO_ICONO, type PlantillaJugador, type TipoEvento } from "./eventos";
+import { deriveEnCancha, deriveHistorialElegibilidad, deriveTitularSuplente, TIPOS, TIPO_ICONO, type PlantillaJugador, type TipoEvento } from "./eventos";
 import { ModalSustitucion } from "./ModalSustitucion";
 
 /** 3B-1 (docs/plans/cierre-backlog-todos-plan.md): distingue "no hay red"
@@ -248,10 +248,23 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
   // plantilla completa + un aviso en vez de asumir un filtrado que no
   // puede cumplir.
   const { titulares: titularesJugadorIds, suplentes: suplentesJugadorIds } = useMemo(
-    () => deriveTitularSuplente(titularesPerfilIds, plantillaCompleta),
-    [titularesPerfilIds, plantillaCompleta],
+    // control-mesa-reactividad-playoffs-plan.md, Fase 3 §2: `perfilesConvocados`
+    // (TODAS las filas convocadas, ya calculado arriba) en vez de solo
+    // titularesPerfilIds — antes un jugador del club nunca convocado a
+    // este partido igual caía en `suplentes` (filtrado estricto de
+    // suplentes, mismo bug que ModalResultadoDirecto.tsx).
+    () => deriveTitularSuplente(perfilesConvocados, titularesPerfilIds, plantillaCompleta),
+    [perfilesConvocados, titularesPerfilIds, plantillaCompleta],
   );
-  const sinConvocatoria = titularesJugadorIds.size === 0 && suplentesJugadorIds.size === 0;
+  const sinConvocatoria = perfilesConvocados.size === 0;
+  // Fase 3 §1 ("estado mutante en cambios"): quién está en cancha AHORA —
+  // titulares vigentes MÁS suplentes que ya entraron por un Cambio
+  // registrado — para que "Sacar"/"Sale" ofrezca también a un suplente que
+  // entró hace un rato, no solo a los titulares originales.
+  const enCanchaJugadorIds = useMemo(
+    () => deriveEnCancha(titularesJugadorIds, salidosOExpulsados, yaEntraron),
+    [titularesJugadorIds, salidosOExpulsados, yaEntraron],
+  );
 
   // Marcador calculado como vw_goles_acreditados: Gol suma al equipo del
   // jugador, Autogol suma al rival. Se recalcula en cada refetch — no hay
@@ -521,7 +534,10 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
             // vigente — no distingue titular/suplente", el comentario que
             // se retira más abajo) — ahora consume el mismo cálculo
             // compartido que la alineación en vivo y ModalSustitucion.
-            titularesJugadorIds={titularesJugadorIds}
+            // "en cancha" (Fase 3 §1, estado mutante), no solo titulares
+            // originales — un suplente que ya entró por un Cambio debe
+            // poder salir de nuevo sin recargar la página.
+            titularesJugadorIds={enCanchaJugadorIds}
             suplentesJugadorIds={suplentesJugadorIds}
             sinConvocatoria={sinConvocatoria}
             minutoActual={minutoActual}
@@ -563,8 +579,13 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
               // jugador sin aviso (el backend ahora sí lo rechaza,
               // `reglas_cambio.validar_reglas_cambio`, pero esta lista no
               // debía ni ofrecerlo).
+              //
+              // `enCanchaJugadorIds` (Fase 3 §1, estado mutante), no solo
+              // `titularesJugadorIds`: un suplente que ya entró por un
+              // Cambio debe aparecer acá con botón "Sacar" para un cambio
+              // posterior, sin esperar a recargar la página.
               const titularesEquipo = plantillaEquipo.filter(
-                (j) => titularesJugadorIds.has(j.jugador_id) && !salidosOExpulsados.has(j.jugador_id),
+                (j) => enCanchaJugadorIds.has(j.jugador_id) && !salidosOExpulsados.has(j.jugador_id),
               );
               return (
                 <div key={equipoId}>
@@ -573,7 +594,7 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
                     <p className="muted">Cambios usados: {cambiosUsadosPorEquipo.get(equipoId) ?? 0}/{maximoCambios}</p>
                   )}
                   {titularesEquipo.length === 0 ? (
-                    <p className="muted">Sin titulares marcados en la convocatoria.</p>
+                    <p className="muted">Sin nadie en cancha marcado en la convocatoria.</p>
                   ) : (
                     <ul className="alineacion-lista">
                       {titularesEquipo.map((j) => (
@@ -642,16 +663,28 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
                 explícitamente en el gate ("el orden siempre debe ser de
                 menor a mayor"), revirtiendo el `.reverse()` que antes
                 mostraba lo más reciente arriba. */}
-            {eventosRegistrados.map((e) => (
-              <EventoTimelineFila
-                key={e.id}
-                evento={e}
-                tipoIcono={TIPO_ICONO[eventoNombrePorId.get(e.eventos_id) as TipoEvento] ?? eventoNombrePorId.get(e.eventos_id) ?? ""}
-                jugadorNombre={[...plantillaLocalQuery.data ?? [], ...plantillaVisitanteQuery.data ?? []].find((j) => j.jugador_id === e.jugador_id)?.jugador ?? `#${e.jugador_id}`}
-                onCorregir={(minuto) => corregirMinutoEvento.mutate({ id: e.id, minuto })}
-                corrigiendo={corregirMinutoEvento.isPending}
-              />
-            ))}
+            {eventosRegistrados.map((e) => {
+              const plantillaTodos = [...(plantillaLocalQuery.data ?? []), ...(plantillaVisitanteQuery.data ?? [])];
+              const jugador = plantillaTodos.find((j) => j.jugador_id === e.jugador_id);
+              const jugadorEntra = e.jugador_id_entra != null ? plantillaTodos.find((j) => j.jugador_id === e.jugador_id_entra) : undefined;
+              const nombreDorsal = (j: PlantillaJugador | undefined, id: number) =>
+                j ? `${j.dorsal != null ? `#${j.dorsal} ` : ""}${j.jugador}` : `#${id}`;
+              return (
+                <EventoTimelineFila
+                  key={e.id}
+                  evento={e}
+                  tipoIcono={TIPO_ICONO[eventoNombrePorId.get(e.eventos_id) as TipoEvento] ?? eventoNombrePorId.get(e.eventos_id) ?? ""}
+                  esCambio={eventoNombrePorId.get(e.eventos_id) === "Cambio"}
+                  // Fase 1/2 (Timeline visual): nombre de jugador + equipo
+                  // en todo hito — antes esta fila no mostraba el equipo.
+                  equipoNombre={equipoNombre.get(e.equipo_id) ?? `#${e.equipo_id}`}
+                  jugadorNombre={nombreDorsal(jugador, e.jugador_id)}
+                  jugadorEntraNombre={e.jugador_id_entra != null ? nombreDorsal(jugadorEntra, e.jugador_id_entra) : null}
+                  onCorregir={(minuto) => corregirMinutoEvento.mutate({ id: e.id, minuto })}
+                  corrigiendo={corregirMinutoEvento.isPending}
+                />
+              );
+            })}
           </ul>
         )}
       </section>
@@ -669,16 +702,22 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
 function EventoTimelineFila(props: {
   evento: EventoPartidoRow;
   tipoIcono: string;
+  esCambio: boolean;
+  equipoNombre: string;
   jugadorNombre: string;
+  jugadorEntraNombre: string | null;
   onCorregir: (minuto: number) => void;
   corrigiendo: boolean;
 }) {
-  const { evento, tipoIcono, jugadorNombre, onCorregir, corrigiendo } = props;
+  const { evento, tipoIcono, esCambio, equipoNombre, jugadorNombre, jugadorEntraNombre, onCorregir, corrigiendo } = props;
   const [editando, setEditando] = useState(false);
   const [minuto, setMinuto] = useState(String(evento.minuto));
+  const ariaLabel = esCambio
+    ? `Minuto ${evento.minuto}, cambio, ${equipoNombre}, sale ${jugadorNombre}, entra ${jugadorEntraNombre ?? ""}`
+    : `Minuto ${evento.minuto}, ${equipoNombre}, ${jugadorNombre}`;
 
   return (
-    <li>
+    <li aria-label={editando ? undefined : ariaLabel}>
       {editando ? (
         <>
           <input
@@ -705,10 +744,26 @@ function EventoTimelineFila(props: {
         </>
       ) : (
         <>
-          <span className="eventos-timeline__minuto">{evento.minuto}'</span>
-          <span>{tipoIcono}</span>
-          <span>{jugadorNombre}</span>
-          <button type="button" className="link-button" aria-label="Corregir minuto" onClick={() => setEditando(true)}>
+          <span className="eventos-timeline__minuto" aria-hidden="true">
+            {evento.minuto}'
+          </span>
+          <span aria-hidden="true">{tipoIcono}</span>
+          <div className="eventos-timeline__detalle" aria-hidden="true">
+            <span>{equipoNombre}</span>
+            {esCambio ? (
+              <span className="muted">
+                Sale: {jugadorNombre} <span aria-hidden="true">➔</span> Entra: {jugadorEntraNombre}
+              </span>
+            ) : (
+              <span className="muted">{jugadorNombre}</span>
+            )}
+          </div>
+          <button
+            type="button"
+            className="link-button"
+            aria-label={`Corregir minuto de ${jugadorNombre}`}
+            onClick={() => setEditando(true)}
+          >
             ✏️
           </button>
         </>
@@ -742,7 +797,12 @@ function CargaEvento(props: {
   eventoNombrePorId: Map<number, string>;
   /** goles-por-marcador-slots-plan.md, Fase 3 Eng (corrección 4): sets
    * explícitos derivados de la convocatoria (`deriveTitularSuplente`) —
-   * ambos vacíos cuando no hay convocatoria guardada (`sinConvocatoria`). */
+   * ambos vacíos cuando no hay convocatoria guardada (`sinConvocatoria`).
+   * `titularesJugadorIds` en realidad recibe "en cancha AHORA"
+   * (`deriveEnCancha`, control-mesa-reactividad-playoffs-plan.md, Fase 3
+   * §1) — titulares vigentes MÁS suplentes que ya entraron por un Cambio
+   * registrado, para que "Sale" siga ofreciendo a un suplente recién
+   * ingresado. */
   titularesJugadorIds: Set<number>;
   suplentesJugadorIds: Set<number>;
   sinConvocatoria: boolean;
@@ -869,14 +929,14 @@ function CargaEvento(props: {
           <p className="muted">
             {props.sinConvocatoria
               ? "¿Quién sale? (sin convocatoria guardada para este partido — mostrando la plantilla completa, sin distinguir titular/suplente)"
-              : "¿Quién sale? (solo titulares)"}
+              : "¿Quién sale? (en cancha)"}
           </p>
           {disponiblesParaSalirCambio.map((j) => (
             <button key={j.jugador_id} type="button" className="tap-button" onClick={() => setSale(j.jugador_id)}>
               {j.dorsal ? `#${j.dorsal} ` : ""}{j.jugador}
             </button>
           ))}
-          {disponiblesParaSalirCambio.length === 0 && <p>No hay titulares disponibles en la plantilla.</p>}
+          {disponiblesParaSalirCambio.length === 0 && <p>No hay nadie en cancha disponible para salir.</p>}
           <button type="button" className="link-button" onClick={() => setEquipoId(null)}>← Cambiar equipo</button>
         </div>
       )}

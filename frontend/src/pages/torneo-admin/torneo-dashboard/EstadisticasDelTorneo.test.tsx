@@ -246,4 +246,65 @@ describe("EstadisticasDelTorneoPage", () => {
       }
     });
   });
+
+  // control-mesa-reactividad-playoffs-plan.md, Fase 3 §6: el bracket de
+  // Playoffs (mismo componente que la pestaña Partidos, BracketView)
+  // debajo de la tabla de posiciones — antes solo vivía en Partidos.
+  describe("Bracket de Playoffs debajo de la tabla de posiciones", () => {
+    it("Grupos_Playoffs: muestra el bracket generado bajo la tabla de posiciones", async () => {
+      CONTEXTO.formato = "Grupos_Playoffs";
+      try {
+        server.use(
+          http.get(TORNEOS, () => HttpResponse.json([{ id: 20, numero_edicion: 1, estado: "Activo" }])),
+          http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/20/posiciones", () => HttpResponse.json([])),
+          http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/20/goleadores", () => HttpResponse.json([])),
+          http.get("http://127.0.0.1:8000/api/v1/torneos/20/bracket", () =>
+            HttpResponse.json([
+              {
+                id: 500,
+                equipos_id_local: 1,
+                equipos_id_visitante: 2,
+                ronda_nombre: "Final",
+                partido_siguiente_id: null,
+                slot_siguiente: null,
+                partido_perdedor_siguiente_id: null,
+                slot_perdedor_siguiente: null,
+                estado: "Programado",
+              },
+            ]),
+          ),
+          http.get("http://127.0.0.1:8000/api/v1/equipos", () =>
+            HttpResponse.json([
+              { id: 1, nombre: "Tigres" },
+              { id: 2, nombre: "Osos" },
+            ]),
+          ),
+        );
+        renderPagina();
+
+        expect(await screen.findByText("Final")).toBeInTheDocument();
+        expect(screen.getByText("Tigres")).toBeInTheDocument();
+        expect(screen.getByText("Osos")).toBeInTheDocument();
+      } finally {
+        CONTEXTO.formato = "Liga";
+      }
+    });
+
+    it("Liga: no pide el bracket (formato sin fase eliminatoria)", async () => {
+      let sePidio = false;
+      server.use(
+        http.get(TORNEOS, () => HttpResponse.json([{ id: 20, numero_edicion: 1, estado: "Activo" }])),
+        http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/20/posiciones", () => HttpResponse.json([])),
+        http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/20/goleadores", () => HttpResponse.json([])),
+        http.get("http://127.0.0.1:8000/api/v1/torneos/20/bracket", () => {
+          sePidio = true;
+          return HttpResponse.json([]);
+        }),
+      );
+      renderPagina();
+
+      await screen.findByText("Goleadores");
+      expect(sePidio).toBe(false);
+    });
+  });
 });

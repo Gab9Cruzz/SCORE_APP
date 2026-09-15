@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -109,5 +109,40 @@ describe("PartidoEnVivoPage — generalizada a Detalle del Partido (control-mesa
     expect(titulares.length).toBe(2); // una lista por equipo
     expect(screen.getByText("Suplentes")).toBeInTheDocument();
     expect(screen.getByText(/Bruno Ibarra/)).toBeInTheDocument();
+  });
+
+  it("el timeline muestra nombre de equipo en todo hito y formato Sale/Entra en Cambio (control-mesa-reactividad-playoffs-plan.md, Fase 1/2)", async () => {
+    mockBase();
+    server.use(
+      http.get(JUGADORES, () =>
+        HttpResponse.json([
+          { id: 5, nombre: "Andrés Vera" },
+          { id: 6, nombre: "Bruno Ibarra" },
+        ]),
+      ),
+      http.get(EVENTOS, () =>
+        HttpResponse.json([
+          { id: 1, nombre: "Gol", estado: "Activo" },
+          { id: 5, nombre: "Cambio", estado: "Activo" },
+        ]),
+      ),
+      http.get(EVENTOS_PARTIDO, () =>
+        HttpResponse.json([
+          { id: 1, partidos_id: 1, jugador_id: 5, equipo_id: 1, eventos_id: 1, jugador_id_entra: null, minuto: 10, estado: "Registrado" },
+          { id: 2, partidos_id: 1, jugador_id: 5, equipo_id: 1, eventos_id: 5, jugador_id_entra: 6, minuto: 62, estado: "Registrado" },
+        ]),
+      ),
+    );
+    renderEn("/partidos/1", "/partidos/:partidoId");
+    await screen.findByText("2 - 1"); // espera a que resultadosQuery resuelva (nombres de equipo)
+
+    const filaGol = (await screen.findByText("10'")).closest("li")!;
+    expect(within(filaGol).getByText("Tiburones FC")).toBeInTheDocument();
+    expect(within(filaGol).getByText(/Andrés Vera/)).toBeInTheDocument();
+
+    const filaCambio = (await screen.findByText("62'")).closest("li")!;
+    expect(within(filaCambio).getByText("Tiburones FC")).toBeInTheDocument();
+    expect(within(filaCambio).getByText(/Sale:.*Andrés Vera/)).toBeInTheDocument();
+    expect(within(filaCambio).getByText(/Entra:.*Bruno Ibarra/)).toBeInTheDocument();
   });
 });

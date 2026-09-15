@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
@@ -150,5 +150,65 @@ describe("MotorFormatosPanel — Grupos + Playoffs", () => {
     );
     expect(await screen.findByText("Fase de Grupos: terminada.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generar Playoffs" })).toBeInTheDocument();
+  });
+
+  it("Generar Playoffs abre un modal (no window.prompt) pre-cargado con clasificados_por_grupo, y persiste el override elegido", async () => {
+    let cuerpoEnviado: { clasificados_por_grupo?: number } | undefined;
+    server.use(
+      http.get(`http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}`, () =>
+        HttpResponse.json({ id: TORNEO_ID, clasificados_por_grupo: 2 }),
+      ),
+      http.post(`http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}/playoffs`, async ({ request }) => {
+        cuerpoEnviado = (await request.json()) as never;
+        return HttpResponse.json({ id: 99, estado: "Pendiente" });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPanel({
+      formato: "Grupos_Playoffs",
+      partidos: [
+        { fase_id: 1, grupo_id: 10, estado: "Finalizado" },
+        { fase_id: 1, grupo_id: 10, estado: "Finalizado" },
+      ],
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Generar Playoffs" }));
+
+    const input = await screen.findByLabelText("Clasificados por grupo");
+    await waitFor(() => expect(input).toHaveValue(2)); // pre-cargado desde el torneo
+
+    await user.clear(input);
+    await user.type(input, "1");
+    const modal = input.closest(".modal-panel") as HTMLElement;
+    await user.click(within(modal).getByRole("button", { name: "Generar Playoffs" }));
+
+    await waitFor(() => expect(cuerpoEnviado).toEqual({ clasificados_por_grupo: 1 }));
+    // El modal se cierra al confirmar con éxito.
+    expect(screen.queryByLabelText("Clasificados por grupo")).not.toBeInTheDocument();
+  });
+
+  it("el modal de Generar Playoffs rechaza un valor menor a 1", async () => {
+    server.use(
+      http.get(`http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}`, () =>
+        HttpResponse.json({ id: TORNEO_ID, clasificados_por_grupo: null }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPanel({
+      formato: "Grupos_Playoffs",
+      partidos: [
+        { fase_id: 1, grupo_id: 10, estado: "Finalizado" },
+        { fase_id: 1, grupo_id: 10, estado: "Finalizado" },
+      ],
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Generar Playoffs" }));
+    const input = await screen.findByLabelText("Clasificados por grupo");
+    await user.clear(input);
+    await user.type(input, "0");
+
+    const modal = input.closest(".modal-panel") as HTMLElement;
+    expect(within(modal).getByRole("button", { name: "Generar Playoffs" })).toBeDisabled();
+    expect(screen.getByText("Tiene que ser al menos 1.")).toBeInTheDocument();
   });
 });

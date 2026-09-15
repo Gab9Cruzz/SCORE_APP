@@ -384,10 +384,21 @@ class MotorFormatosService:
             cruce += clasificados[nombres[i]]
         return cruce
 
-    async def generar_playoffs(self, torneo_id: int, usuario_id: int) -> Fase:
+    async def generar_playoffs(
+        self, torneo_id: int, usuario_id: int, clasificados_por_grupo: int | None = None
+    ) -> Fase:
+        """`clasificados_por_grupo` (control-mesa-reactividad-playoffs-
+        plan.md, Fase 3 §6): override puntual pedido al momento de generar
+        — si se manda, se PERSISTE en `Torneo.clasificados_por_grupo` (Gate
+        Final T2: persistir, no efímero), así la próxima generación de este
+        torneo ya no vuelve a preguntar salvo que el operador lo cambie de
+        nuevo. Si no se manda (None), usa el config existente del torneo
+        sin tocarlo — mismo comportamiento que antes de este cambio."""
         torneo = await self.torneo_repo.get_or_404(torneo_id)
         if torneo.formato != "Grupos_Playoffs":
             raise DomainRuleError("Generar Playoffs es solo para torneos de Formato Grupos + Playoffs.")
+        if clasificados_por_grupo is not None and clasificados_por_grupo < 1:
+            raise DomainRuleError("Deben clasificar al menos 1 equipo por grupo.")
         fase_grupos = await self._fase_orden1(torneo_id, "Grupos")
 
         partidos_grupos = await self._partidos_de_fase(fase_grupos.id)
@@ -397,12 +408,15 @@ class MotorFormatosService:
             raise DomainRuleError("La Fase de Grupos todavía tiene partidos sin terminar.")
         fase_grupos.estado = "Finalizada"  # se computa acá, recién al confirmarse (no hay trigger que la mantenga en vivo)
 
+        if clasificados_por_grupo is not None:
+            torneo.clasificados_por_grupo = clasificados_por_grupo
+
         grupos = await self.grupo_repo.listar_por_fase(fase_grupos.id)
-        clasificados_por_grupo = torneo.clasificados_por_grupo or 2
+        n_clasificados = clasificados_por_grupo if clasificados_por_grupo is not None else (torneo.clasificados_por_grupo or 2)
         clasificados: dict[str, list[int]] = {}
         for g in grupos:
             tabla = await self.estadisticas_repo.tabla_posiciones(torneo_id, grupo_id=g.id)
-            clasificados[g.nombre] = [fila["equipo_id"] for fila in tabla[:clasificados_por_grupo]]
+            clasificados[g.nombre] = [fila["equipo_id"] for fila in tabla[:n_clasificados]]
 
         cruce = self._cruzar_grupos(clasificados)
         nueva_fase = Fase(

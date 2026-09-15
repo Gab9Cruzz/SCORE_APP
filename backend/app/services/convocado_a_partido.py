@@ -109,11 +109,18 @@ class ConvocadoAPartidoService:
         **en otro torneo** — un titular fantasma que `_validar_titulares` no
         cuenta y al que `fn_validar_jugador_partido` le rechaza cualquier
         evento."""
-        candidatos_local = await self.estadisticas_repo.plantilla_equipo(
-            partido.equipos_id_local, partido.torneo_id
+        # control-mesa-reactividad-playoffs-plan.md, Fase 3 §4: date-effective
+        # — `plantilla_equipo` (vw_jugadores_activos_por_equipo) solo sabe
+        # "vigente HOY", nunca a la fecha del partido. `plantilla_equipo_en_fecha`
+        # copia el mismo WHERE que `fn_validar_jugador_partido` para que un
+        # candidato ofrecido acá sea exactamente uno que el trigger aceptaría
+        # al cargarle un evento — sin esto se podía convocar a alguien
+        # traspasado/desvinculado antes de la fecha de este partido.
+        candidatos_local = await self.estadisticas_repo.plantilla_equipo_en_fecha(
+            partido.equipos_id_local, partido.torneo_id, partido.fecha_partido
         )
-        candidatos_visitante = await self.estadisticas_repo.plantilla_equipo(
-            partido.equipos_id_visitante, partido.torneo_id
+        candidatos_visitante = await self.estadisticas_repo.plantilla_equipo_en_fecha(
+            partido.equipos_id_visitante, partido.torneo_id, partido.fecha_partido
         )
         return {
             partido.equipos_id_local: {f["jugador_perfil_id"] for f in candidatos_local},

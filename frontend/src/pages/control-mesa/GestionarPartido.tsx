@@ -596,6 +596,12 @@ export function GestionarPartidoPage() {
             queryClient.invalidateQueries({ queryKey: ["partido", id] });
             queryClient.invalidateQueries({ queryKey: ["partidos-mesa"] });
             setResultadoDirectoAbierto(false);
+            // control-mesa-reactividad-playoffs-plan.md, Fase 1/2/3 §8:
+            // redirect a la vista pública del partido — el operador puede
+            // verificar de inmediato que los datos se renderizan bien para
+            // el usuario final, en vez de quedarse en /control-de-mesa
+            // confiando a ciegas en que el guardado salió bien.
+            navigate(`/partidos/${id}`);
           }}
         />
       )}

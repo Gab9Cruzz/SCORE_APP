@@ -89,6 +89,7 @@ function montar() {
           <Routes>
             <Route path="/control-de-mesa/partido/:partidoId" element={<GestionarPartidoPage />} />
             <Route path="/control-de-mesa" element={<div>LISTA</div>} />
+            <Route path="/partidos/:partidoId" element={<div>VISTA PÚBLICA DEL PARTIDO</div>} />
           </Routes>
         </MemoryRouter>
       </AuthProvider>
@@ -387,5 +388,23 @@ describe("GestionarPartido — la plantilla tiene que llegar a la pantalla", () 
     await user.click(await screen.findByRole("button", { name: /Paso 1 · Convocados/ }));
 
     expect(await screen.findByText(/no tiene jugadores en el roster del torneo/)).toBeInTheDocument();
+  });
+});
+
+describe("GestionarPartido — redirección post-guardado de resultado directo", () => {
+  it("al guardar resultado directo, redirige a la vista pública del partido (control-mesa-reactividad-playoffs-plan.md, Fase 1/2/3 §8)", async () => {
+    sembrarSesion();
+    sembrarBackend([
+      http.post(`${BASE}/partidos/30/resultado-directo`, () => HttpResponse.json({ id: 30, estado: "Finalizado" })),
+    ] as never);
+    const user = userEvent.setup();
+    montar();
+
+    await user.click(await screen.findByRole("button", { name: /Cargar resultado directo/ }));
+    // 0-0 es un resultado válido — sin slots que completar, el botón
+    // "Guardar resultado" ya queda habilitado.
+    await user.click(await screen.findByRole("button", { name: "Guardar resultado" }));
+
+    expect(await screen.findByText("VISTA PÚBLICA DEL PARTIDO")).toBeInTheDocument();
   });
 });

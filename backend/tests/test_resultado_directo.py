@@ -296,6 +296,61 @@ async def test_resultado_directo_valida_doble_salida_del_mismo_jugador(
     assert await _eventos_de(db_session, 3) == []
 
 
+async def test_resultado_directo_doble_amarilla_autogenera_roja(
+    client: AsyncClient, db_session: AsyncSession, arbitro_headers: dict[str, str]
+):
+    """control-mesa-reactividad-playoffs-plan.md, Fase 3 §3 — el listener
+    de doble amarilla debe correr también en el batch de resultado
+    directo (no solo en el camino en vivo): 2 amarillas para el mismo
+    jugador en el mismo payload persisten exactamente 1 roja automática,
+    al minuto de la 2ª amarilla."""
+    resp = await client.post(
+        "/api/v1/partidos/3/resultado-directo",
+        json={
+            "eventos": [
+                {"jugador_id": 6, "equipo_id": 3, "eventos_id": 3, "minuto": 15},  # Amarilla 1, Halcones
+                {"jugador_id": 6, "equipo_id": 3, "eventos_id": 3, "minuto": 50},  # Amarilla 2 → dispara roja
+            ]
+        },
+        headers=arbitro_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    eventos = await _eventos_de(db_session, 3)
+    amarillas = [e for e in eventos if e.eventos_id == 3]
+    rojas = [e for e in eventos if e.eventos_id == 4]
+    assert len(amarillas) == 2
+    assert len(rojas) == 1
+    assert rojas[0].jugador_id == 6
+    assert rojas[0].equipo_id == 3
+    assert rojas[0].minuto == 50  # mismo minuto que la 2ª amarilla
+
+
+async def test_resultado_directo_doble_amarilla_no_duplica_si_ya_hay_roja_manual(
+    client: AsyncClient, db_session: AsyncSession, arbitro_headers: dict[str, str]
+):
+    """El operador puede cargar la roja a mano ANTES de que llegue la 2ª
+    amarilla en el mismo batch (ej. el orden de carga en el modal no
+    coincide con el orden cronológico) — el listener no debe duplicarla."""
+    resp = await client.post(
+        "/api/v1/partidos/3/resultado-directo",
+        json={
+            "eventos": [
+                {"jugador_id": 6, "equipo_id": 3, "eventos_id": 3, "minuto": 15},  # Amarilla 1
+                {"jugador_id": 6, "equipo_id": 3, "eventos_id": 4, "minuto": 45},  # Roja manual
+                {"jugador_id": 6, "equipo_id": 3, "eventos_id": 3, "minuto": 50},  # Amarilla 2 — ya hay roja
+            ]
+        },
+        headers=arbitro_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    eventos = await _eventos_de(db_session, 3)
+    rojas = [e for e in eventos if e.eventos_id == 4]
+    assert len(rojas) == 1
+    assert rojas[0].minuto == 45  # la manual, no una segunda generada
+
+
 async def test_resultado_directo_concurrencia_real_solo_uno_gana(engine: AsyncEngine):
     """Concurrencia REAL contra la base (mismo criterio que
     test_ec6_confirmar_concurrente_no_supera_el_cupo en test_registro_lote.py

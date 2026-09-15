@@ -17,6 +17,7 @@ from app.models.jugador import Jugador
 from app.models.jugador_equipo import JugadorEquipo
 from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
 from app.models.partido import Partido
+from app.models.torneo import Torneo
 
 DISCIPLINA_FUTBOL = 1
 MODALIDAD_FUTBOL_11 = 1
@@ -387,3 +388,74 @@ async def test_grupos_playoffs_de_punta_a_punta(client: AsyncClient, torneo_admi
     # (tamano_bracket < 4, EC-58) — mismo criterio que T50.
     assert len(bracket) == 1
     assert {bracket[0]["equipos_id_local"], bracket[0]["equipos_id_visitante"]} == set(ganadores_por_grupo.values())
+
+
+async def test_generar_playoffs_con_clasificados_override_persiste_en_torneo(
+    client: AsyncClient, torneo_admin_headers: dict[str, str], db_session: AsyncSession
+):
+    """control-mesa-reactividad-playoffs-plan.md, Fase 3 §6 (Gate Final
+    T2: persistir, no efímero) — el torneo se crea con
+    clasificados_por_grupo=2 (ambos equipos de cada grupo de 2
+    "clasifican"), pero el operador pide override=1 al momento de generar.
+    El bracket resultante debe reflejar el override (1 por grupo -> Final
+    directa) y el valor debe quedar guardado en Torneo.clasificados_por_grupo
+    para la próxima vez."""
+    torneo_id, equipos = await _torneo_con_equipos(
+        client,
+        torneo_admin_headers,
+        4,
+        formato="Grupos_Playoffs",
+        nombre="Override Clasificados",
+        equipos_por_grupo=2,
+        clasificados_por_grupo=2,
+    )
+
+    resp = await client.post(f"/api/v1/torneos/{torneo_id}/sorteo", json={"semilla": "override-fijo"}, headers=torneo_admin_headers)
+    assert resp.status_code == 200, resp.text
+
+    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    partidos_grupos = resp.json()
+    for p in partidos_grupos:
+        await _finalizar_con_resultado(db_session, p["id"], p["equipos_id_local"], p["equipos_id_visitante"])
+
+    resp = await client.post(
+        f"/api/v1/torneos/{torneo_id}/playoffs",
+        json={"clasificados_por_grupo": 1},
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = await client.get(f"/api/v1/torneos/{torneo_id}/bracket")
+    bracket = resp.json()
+    assert len(bracket) == 1  # 1 clasificado por grupo -> Final directa, no 4 equipos
+
+    torneo = await db_session.get(Torneo, torneo_id)
+    await db_session.refresh(torneo)
+    assert torneo.clasificados_por_grupo == 1
+
+
+async def test_generar_playoffs_con_clasificados_menor_a_1_es_rechazado(
+    client: AsyncClient, torneo_admin_headers: dict[str, str], db_session: AsyncSession
+):
+    torneo_id, equipos = await _torneo_con_equipos(
+        client,
+        torneo_admin_headers,
+        4,
+        formato="Grupos_Playoffs",
+        nombre="Override Invalido",
+        equipos_por_grupo=2,
+        clasificados_por_grupo=1,
+    )
+    resp = await client.post(f"/api/v1/torneos/{torneo_id}/sorteo", json={"semilla": "invalido-fijo"}, headers=torneo_admin_headers)
+    assert resp.status_code == 200, resp.text
+    resp = await client.get("/api/v1/partidos", params={"torneo_id": torneo_id})
+    for p in resp.json():
+        await _finalizar_con_resultado(db_session, p["id"], p["equipos_id_local"], p["equipos_id_visitante"])
+
+    resp = await client.post(
+        f"/api/v1/torneos/{torneo_id}/playoffs",
+        json={"clasificados_por_grupo": 0},
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 400, resp.text
+    assert "al menos 1" in resp.json()["detail"].lower()

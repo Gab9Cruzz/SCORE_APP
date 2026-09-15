@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { api, apiErrorMessage } from "../../api/client";
 import {
+  deriveEnCancha,
   deriveHistorialElegibilidad,
   deriveTitularSuplente,
   TIPO_ICONO,
@@ -36,7 +37,17 @@ interface EventoTimelineResuelto {
   tipo: TipoEvento;
   equipoId: number;
   jugadorId: number;
+  jugadorIdEntra: number | null;
   minuto: number;
+  /** control-mesa-reactividad-playoffs-plan.md, Fase 3 §3/§6 (T6):
+   * SOLO true para la previsualización client-side de la roja automática
+   * por doble amarilla — nunca se agrega a `otrosEventos`, nunca se manda
+   * al servidor (el servidor es el único que la inserta de verdad, ver
+   * `reglas_tarjetas.py`). Distingue visualmente "esto lo cargó el
+   * operador" de "esto lo infirió la app", y bloquea el botón "Quitar"
+   * (no hay un evento propio que quitar — se quita sacando una de las 2
+   * amarillas). */
+  esAuto?: boolean;
 }
 
 /** "Cargar resultado directo" (control-mesa-centralizacion-fixture-plan.md,
@@ -137,15 +148,23 @@ export function ModalResultadoDirecto(props: {
     () => new Set((convocadosQuery.data ?? []).filter((c) => c.titular).map((c) => c.jugador_perfil_id)),
     [convocadosQuery.data],
   );
+  // control-mesa-reactividad-playoffs-plan.md, Fase 3 §2: TODAS las filas
+  // convocadas (titular+suplente), no solo las titulares — deriveTitularSuplente
+  // las necesita para distinguir "convocado como suplente" de "nunca
+  // convocado a este partido" (el bug de filtrado estricto de suplentes).
+  const convocadosPerfilIds = useMemo(
+    () => new Set((convocadosQuery.data ?? []).map((c) => c.jugador_perfil_id)),
+    [convocadosQuery.data],
+  );
   const plantillaCombinada: PlantillaJugador[] = useMemo(
     () => [...(plantillaLocalQuery.data ?? []), ...(plantillaVisitanteQuery.data ?? [])],
     [plantillaLocalQuery.data, plantillaVisitanteQuery.data],
   );
   const { titulares: titularesJugadorIds, suplentes: suplentesJugadorIds } = useMemo(
-    () => deriveTitularSuplente(titularesPerfilIds, plantillaCombinada),
-    [titularesPerfilIds, plantillaCombinada],
+    () => deriveTitularSuplente(convocadosPerfilIds, titularesPerfilIds, plantillaCombinada),
+    [convocadosPerfilIds, titularesPerfilIds, plantillaCombinada],
   );
-  const sinConvocatoria = titularesJugadorIds.size === 0 && suplentesJugadorIds.size === 0;
+  const sinConvocatoria = convocadosPerfilIds.size === 0;
   const equipoIdDelJugador = useMemo(() => {
     const mapa = new Map(plantillaCombinada.map((j) => [j.jugador_id, j.equipo_id]));
     return (jugadorId: number) => mapa.get(jugadorId);
@@ -247,21 +266,43 @@ export function ModalResultadoDirecto(props: {
   // vez de `eventosRegistrados` del servidor (0E, Fase 1: para un partido
   // 'Programado' la timeline del servidor está vacía por definición — el
   // historial que importa es el que se está construyendo en memoria).
+  //
+  // TODOS los otrosEventos (no solo Cambio, corrección Fase 3 §1 del plan
+  // control-mesa-reactividad-playoffs-plan.md): deriveHistorialElegibilidad
+  // ya distingue "Tarjeta Roja" de "Cambio" internamente (ver su
+  // implementación) — filtrar acá a solo Cambio antes de llamarla dejaba
+  // afuera las expulsiones por roja cargadas en este mismo batch,
+  // inconsistente con MesaPanel.tsx (que le pasa TODOS los eventos
+  // registrados sin filtrar).
   const { salidosOExpulsados, yaEntraron } = useMemo(
     () =>
       deriveHistorialElegibilidad(
-        otrosEventos
-          .filter((e) => e.tipo === "Cambio")
-          .map((e) => ({ jugador_id: e.jugadorId, jugador_id_entra: e.jugadorIdEntra, eventos_id: eventoIdPorNombre.get(e.tipo) ?? -1 })),
+        otrosEventos.map((e) => ({
+          jugador_id: e.jugadorId,
+          jugador_id_entra: e.jugadorIdEntra,
+          eventos_id: eventoIdPorNombre.get(e.tipo) ?? -1,
+        })),
         eventoNombrePorId,
       ),
     [otrosEventos, eventoIdPorNombre, eventoNombrePorId],
   );
 
+  // "Estado mutante en cambios" (Fase 3 §1): quién está en cancha AHORA,
+  // incluyendo suplentes que ya entraron en un Cambio anterior de este
+  // mismo batch — sin esto, un suplente recién ingresado no podía volver a
+  // salir en un Cambio posterior de la misma carga.
+  const enCanchaJugadorIds = useMemo(
+    () => deriveEnCancha(titularesJugadorIds, salidosOExpulsados, yaEntraron),
+    [titularesJugadorIds, salidosOExpulsados, yaEntraron],
+  );
+
   const qbCandidatosSale =
     accionQuickBar === "Cambio"
-      ? plantillaQb.filter((j) => (sinConvocatoria || titularesJugadorIds.has(j.jugador_id)) && !salidosOExpulsados.has(j.jugador_id))
-      : plantillaQb;
+      ? plantillaQb.filter((j) => (sinConvocatoria || enCanchaJugadorIds.has(j.jugador_id)) && !salidosOExpulsados.has(j.jugador_id))
+      : // Cherry-pick auto-aprobado (Fase 1, 0D-1): mismo guard de
+        // ya-expulsado que Cambio — un jugador ya expulsado/salido en este
+        // batch no debería poder recibir OTRA tarjeta.
+        plantillaQb.filter((j) => !salidosOExpulsados.has(j.jugador_id));
   // `!yaEntraron.has(...)` es la validación temprana del batch local (0D,
   // expansión aceptada): un jugador que ya entró en OTRO Cambio de esta
   // misma carga nunca aparece acá como opción — no hace falta un mensaje
@@ -295,22 +336,79 @@ export function ModalResultadoDirecto(props: {
   // explícitamente: "el orden siempre debe ser de menor a mayor"), reactivo
   // a cada inserción (se recalcula en cada render, no hay estado de orden
   // aparte que pueda desincronizarse).
+  // Previsualización de la roja automática por doble amarilla (Fase 3 §3,
+  // §6/T6) — SOLO para render, nunca se agrega a `otrosEventos`: el
+  // servidor es el único que inserta el evento real (`reglas_tarjetas.py`).
+  // Insertarla acá también duplicaría la roja (el batch se procesa en el
+  // ORDEN de envío, no por minuto — ver el comentario largo en
+  // reglas_tarjetas.py). Dedup client-side simplificado y más conservador
+  // que el del servidor: si YA hay una Tarjeta Roja para ese jugador en
+  // `otrosEventos` (en cualquier posición, no solo antes), no se previsualiza
+  // ninguna — evita mostrarle al operador una "auto" fantasma cuando ya
+  // cargó la suya a mano.
+  const previewsRojaAuto: EventoTimelineResuelto[] = useMemo(() => {
+    const amarillasPorJugador = new Map<number, OtroEventoLocal[]>();
+    const jugadoresConRojaManual = new Set<number>();
+    for (const e of otrosEventos) {
+      if (e.tipo === "Tarjeta Roja") jugadoresConRojaManual.add(e.jugadorId);
+      if (e.tipo === "Tarjeta Amarilla") {
+        const lista = amarillasPorJugador.get(e.jugadorId) ?? [];
+        lista.push(e);
+        amarillasPorJugador.set(e.jugadorId, lista);
+      }
+    }
+    const previews: EventoTimelineResuelto[] = [];
+    for (const [jugadorId, amarillas] of amarillasPorJugador) {
+      if (amarillas.length < 2 || jugadoresConRojaManual.has(jugadorId)) continue;
+      const segunda = amarillas[1]; // orden de carga — mismo criterio que el servidor
+      previews.push({
+        id: `auto-roja-${jugadorId}`,
+        tipo: "Tarjeta Roja",
+        equipoId: segunda.equipoId,
+        jugadorId,
+        jugadorIdEntra: null,
+        minuto: Number(segunda.minuto) || 0,
+        esAuto: true,
+      });
+    }
+    return previews;
+  }, [otrosEventos]);
+
   const eventosTimeline: EventoTimelineResuelto[] = useMemo(() => {
     const deSlots: EventoTimelineResuelto[] = slots
       .filter((s) => s.jugadorId !== null && s.minuto !== "")
       .map((s) => {
         const resuelto = resolverTipoYEquipoDeSlot(s, partido.equipos_id_local, partido.equipos_id_visitante, equipoIdDelJugador);
-        return { id: s.id, tipo: resuelto!.tipo, equipoId: resuelto!.equipoId, jugadorId: s.jugadorId as number, minuto: Number(s.minuto) };
+        return {
+          id: s.id,
+          tipo: resuelto!.tipo,
+          equipoId: resuelto!.equipoId,
+          jugadorId: s.jugadorId as number,
+          jugadorIdEntra: null,
+          minuto: Number(s.minuto),
+        };
       });
     const deOtros: EventoTimelineResuelto[] = otrosEventos.map((e) => ({
       id: e.id,
       tipo: e.tipo,
       equipoId: e.equipoId,
       jugadorId: e.jugadorId,
+      jugadorIdEntra: e.jugadorIdEntra,
       minuto: Number(e.minuto),
     }));
-    return [...deSlots, ...deOtros].sort((a, b) => a.minuto - b.minuto);
-  }, [slots, otrosEventos, partido.equipos_id_local, partido.equipos_id_visitante, equipoIdDelJugador]);
+    return [...deSlots, ...deOtros, ...previewsRojaAuto].sort((a, b) => a.minuto - b.minuto);
+  }, [slots, otrosEventos, previewsRojaAuto, partido.equipos_id_local, partido.equipos_id_visitante, equipoIdDelJugador]);
+
+  // Fase 1/2: nombre de jugador en el timeline — antes solo mostraba
+  // ícono+equipo+minuto, nunca el jugador (gap de verificación real, no
+  // cosmético: es el último punto de chequeo antes de un guardado que
+  // cierra el partido).
+  const jugadorPorId = useMemo(() => new Map(plantillaCombinada.map((j) => [j.jugador_id, j])), [plantillaCombinada]);
+  function nombreJugadorConDorsal(jugadorId: number): string {
+    const j = jugadorPorId.get(jugadorId);
+    if (!j) return `#${jugadorId}`;
+    return `${j.dorsal != null ? `#${j.dorsal} ` : ""}${j.jugador}`;
+  }
 
   const [ganadorCorridoId, setGanadorCorridoId] = useState<number | null>(null);
 
@@ -536,7 +634,7 @@ export function ModalResultadoDirecto(props: {
               </label>
               {qbEquipoId != null && (
                 <label>
-                  {accionQuickBar === "Cambio" ? "Sale (solo titulares)" : "Jugador"}
+                  {accionQuickBar === "Cambio" ? "Sale (en cancha)" : "Jugador"}
                   <select value={qbJugadorId ?? ""} onChange={(e) => setQbJugadorId(e.target.value ? Number(e.target.value) : null)}>
                     <option value="">Elegir...</option>
                     {qbCandidatosSale.map((j) => (
@@ -547,6 +645,9 @@ export function ModalResultadoDirecto(props: {
                       </option>
                     ))}
                   </select>
+                  {accionQuickBar === "Cambio" && !sinConvocatoria && qbCandidatosSale.length === 0 && (
+                    <p className="muted">No hay nadie en cancha disponible para salir en este equipo.</p>
+                  )}
                 </label>
               )}
               {accionQuickBar === "Cambio" && qbJugadorId != null && (
@@ -562,6 +663,12 @@ export function ModalResultadoDirecto(props: {
                       </option>
                     ))}
                   </select>
+                  {!sinConvocatoria && qbCandidatosEntra.length === 0 && (
+                    <p className="muted">
+                      No hay suplentes disponibles para entrar (todos ya entraron o fueron expulsados). Sumá un
+                      suplente desde la convocatoria del partido si llegó alguien tarde.
+                    </p>
+                  )}
                 </label>
               )}
               <label>
@@ -595,22 +702,53 @@ export function ModalResultadoDirecto(props: {
           {eventosTimeline.length === 0 && <p className="muted">Sin eventos cargados todavía — 0-0 también es un resultado válido.</p>}
           {eventosTimeline.length > 0 && (
             <ul className="eventos-timeline">
-              {eventosTimeline.map((e) => (
-                <li key={e.id}>
-                  <span className="eventos-timeline__minuto">{e.minuto}'</span>
-                  <span>{TIPO_ICONO[e.tipo]}</span>
-                  <span>{nombreEquipo.get(e.equipoId) ?? `#${e.equipoId}`}</span>
-                  {e.tipo === "Tarjeta Amarilla" || e.tipo === "Tarjeta Roja" || e.tipo === "Cambio" ? (
-                    <button
-                      type="button"
-                      className="link-button"
-                      onClick={() => setOtrosEventos((prev) => prev.filter((o) => o.id !== e.id))}
-                    >
-                      Quitar
-                    </button>
-                  ) : null}
-                </li>
-              ))}
+              {eventosTimeline.map((e) => {
+                const nombreEq = nombreEquipo.get(e.equipoId) ?? `#${e.equipoId}`;
+                const nombreJ = nombreJugadorConDorsal(e.jugadorId);
+                const nombreEntra = e.jugadorIdEntra != null ? nombreJugadorConDorsal(e.jugadorIdEntra) : null;
+                // Fase 1/2: aria-label agrupado en el <li> (no spans
+                // sueltos) — un screen reader lee "minuto X, tipo, equipo,
+                // jugador" de una vez, en vez de fragmentos desconectados.
+                const ariaLabel =
+                  e.tipo === "Cambio"
+                    ? `Minuto ${e.minuto}, cambio, ${nombreEq}, sale ${nombreJ}, entra ${nombreEntra ?? ""}`
+                    : `Minuto ${e.minuto}, ${e.tipo.toLowerCase()}, ${nombreEq}, ${nombreJ}${e.esAuto ? ", automática por doble amarilla" : ""}`;
+                return (
+                  <li key={e.id} aria-label={ariaLabel} className={e.esAuto ? "eventos-timeline__fila--auto" : undefined}>
+                    <span className="eventos-timeline__minuto" aria-hidden="true">
+                      {e.minuto}'
+                    </span>
+                    <span aria-hidden="true">{TIPO_ICONO[e.tipo]}</span>
+                    <div className="eventos-timeline__detalle" aria-hidden="true">
+                      {/* Formato pedido para Cambio: "[Equipo] | Sale: A ➔
+                          Entra: B", en 2 líneas (Design Fase 2 — un string
+                          único de 45-60+ caracteres se parte feo en
+                          celular a 360-400px). */}
+                      <span>{nombreEq}</span>
+                      {e.tipo === "Cambio" ? (
+                        <span className="muted">
+                          Sale: {nombreJ} <span aria-hidden="true">➔</span> Entra: {nombreEntra}
+                        </span>
+                      ) : (
+                        <span className="muted">
+                          {nombreJ}
+                          {e.esAuto && <span className="eventos-timeline__badge-auto"> · auto</span>}
+                        </span>
+                      )}
+                    </div>
+                    {(e.tipo === "Tarjeta Amarilla" || e.tipo === "Tarjeta Roja" || e.tipo === "Cambio") && !e.esAuto ? (
+                      <button
+                        type="button"
+                        className="link-button"
+                        aria-label={`Quitar ${e.tipo.toLowerCase()} de ${nombreJ}`}
+                        onClick={() => setOtrosEventos((prev) => prev.filter((o) => o.id !== e.id))}
+                      >
+                        Quitar
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>

@@ -177,6 +177,17 @@ export function PartidoEnVivoPage() {
   const resultado = resultadosQuery.data?.find((r) => r.partido_id === id);
   const jugadorNombre = new Map((jugadoresQuery.data ?? []).map((j) => [j.id, j.nombre]));
   const eventoNombre = new Map((eventosCatalogoQuery.data ?? []).map((e) => [e.id, e.nombre]));
+  // Fase 1/2 (Timeline visual): nombre de equipo por hito — antes esta
+  // timeline pública mostraba jugador pero nunca el equipo. Un partido de
+  // bracket sin equipos definidos todavía (shell "Ganador Partido N") no
+  // tiene eventos que mostrar, así que null acá nunca se busca de verdad —
+  // se filtra igual para que el tipo del Map sea `number`, no `number | null`.
+  const equipoNombrePorId = new Map<number, string>(
+    [
+      [partidoQuery.data.equipos_id_local, resultado?.equipo_local ?? "Local"],
+      [partidoQuery.data.equipos_id_visitante, resultado?.equipo_visitante ?? "Visitante"],
+    ].filter((par): par is [number, string] => par[0] != null),
+  );
 
   const eventos = [...(eventosQuery.data ?? [])]
     .filter((e) => e.estado === "Registrado")
@@ -207,16 +218,37 @@ export function PartidoEnVivoPage() {
         {eventos.length === 0 && <p>Todavía no hay eventos cargados.</p>}
         {eventos.length > 0 && (
           <ul className="eventos-timeline">
-            {eventos.map((e) => (
-              <li key={e.id}>
-                <span className="eventos-timeline__minuto">{e.minuto}'</span>
-                <span>{EVENTO_LABEL[eventoNombre.get(e.eventos_id) ?? ""] ?? eventoNombre.get(e.eventos_id)}</span>
-                <span>{jugadorNombre.get(e.jugador_id) ?? `Jugador #${e.jugador_id}`}</span>
-                {e.jugador_id_entra !== null && e.jugador_id_entra !== undefined && (
-                  <span className="muted">→ entra {jugadorNombre.get(e.jugador_id_entra) ?? `#${e.jugador_id_entra}`}</span>
-                )}
-              </li>
-            ))}
+            {eventos.map((e) => {
+              const tipo = eventoNombre.get(e.eventos_id) ?? "";
+              const nombreEq = equipoNombrePorId.get(e.equipo_id) ?? `Equipo #${e.equipo_id}`;
+              const nombreJ = jugadorNombre.get(e.jugador_id) ?? `Jugador #${e.jugador_id}`;
+              const esCambio = tipo === "Cambio";
+              const nombreEntra =
+                e.jugador_id_entra !== null && e.jugador_id_entra !== undefined
+                  ? (jugadorNombre.get(e.jugador_id_entra) ?? `#${e.jugador_id_entra}`)
+                  : null;
+              const ariaLabel = esCambio
+                ? `Minuto ${e.minuto}, cambio, ${nombreEq}, sale ${nombreJ}, entra ${nombreEntra ?? ""}`
+                : `Minuto ${e.minuto}, ${tipo}, ${nombreEq}, ${nombreJ}`;
+              return (
+                <li key={e.id} aria-label={ariaLabel}>
+                  <span className="eventos-timeline__minuto" aria-hidden="true">
+                    {e.minuto}'
+                  </span>
+                  <span aria-hidden="true">{EVENTO_LABEL[tipo] ?? tipo}</span>
+                  <div className="eventos-timeline__detalle" aria-hidden="true">
+                    <span>{nombreEq}</span>
+                    {esCambio ? (
+                      <span className="muted">
+                        Sale: {nombreJ} <span aria-hidden="true">➔</span> Entra: {nombreEntra}
+                      </span>
+                    ) : (
+                      <span className="muted">{nombreJ}</span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

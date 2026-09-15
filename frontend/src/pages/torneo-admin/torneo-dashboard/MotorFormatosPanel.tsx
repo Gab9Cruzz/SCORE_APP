@@ -1,21 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
-import type { Equipo as EquipoRow } from "../../../api/types";
+import { useEffect, useState } from "react";
 import { api, apiErrorMessage } from "../../../api/client";
-import { useResourceCrud } from "../../../hooks/useResourceCrud";
-import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
+import { BracketView } from "./BracketView";
 
-interface PartidoBracket {
-  id: number;
-  equipos_id_local: number | null;
-  equipos_id_visitante: number | null;
-  ronda_nombre: string | null;
-  partido_siguiente_id: number | null;
-  slot_siguiente: "Local" | "Visitante" | null;
-  partido_perdedor_siguiente_id: number | null;
-  slot_perdedor_siguiente: "Local" | "Visitante" | null;
-  estado: string;
-}
 interface PartidoRow {
   fase_id: number | null;
   grupo_id: number | null;
@@ -41,6 +28,11 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
   function invalidar() {
     queryClient.invalidateQueries({ queryKey: ["partidos"] });
     queryClient.invalidateQueries({ queryKey: ["bracket", torneoId] });
+    // T10 (control-mesa-reactividad-playoffs-plan.md, Fase 3 §6): el
+    // override persiste en Torneo.clasificados_por_grupo — invalidar la
+    // query del torneo para que la próxima apertura del modal muestre el
+    // valor recién guardado, no el viejo en cache.
+    queryClient.invalidateQueries({ queryKey: ["torneo", torneoId] });
   }
 
   const fixture = useMutation({
@@ -65,14 +57,36 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
     onSuccess: invalidar,
   });
   const playoffs = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (clasificadosPorGrupo: number | null) => {
       const { data, error } = await api.POST("/api/v1/torneos/{torneo_id}/playoffs", {
         params: { path: { torneo_id: torneoId } },
+        body: clasificadosPorGrupo != null ? { clasificados_por_grupo: clasificadosPorGrupo } : {},
       } as never);
       if (error) throw error;
       return data;
     },
-    onSuccess: invalidar,
+    onSuccess: () => {
+      invalidar();
+      setModalPlayoffsAbierto(false);
+    },
+  });
+
+  // T10: modal propio (no window.prompt(), Fase 2 — AI Slop Risk) para
+  // preguntar cuántos equipos clasifican por grupo al momento de generar
+  // playoffs. Solo se consulta el torneo (para pre-cargar el valor
+  // actual) cuando el modal está por mostrarse — Grupos_Playoffs con
+  // grupos terminados es la única rama que lo necesita.
+  const [modalPlayoffsAbierto, setModalPlayoffsAbierto] = useState(false);
+  const torneoQuery = useQuery({
+    queryKey: ["torneo", torneoId],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}", {
+        params: { path: { torneo_id: torneoId } },
+      } as never);
+      if (error) throw error;
+      return data as { clasificados_por_grupo: number | null };
+    },
+    enabled: modalPlayoffsAbierto,
   });
 
   if (formato === "Liga") {
@@ -133,10 +147,19 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
           <>
             <p className="muted">Fase Eliminatoria: pendiente de generar.</p>
             {playoffs.isError && <p className="error-text">{apiErrorMessage(playoffs.error)}</p>}
-            <button type="button" disabled={playoffs.isPending} onClick={() => playoffs.mutate()}>
+            <button type="button" disabled={playoffs.isPending} onClick={() => setModalPlayoffsAbierto(true)}>
               {playoffs.isPending ? "Generando..." : "Generar Playoffs"}
             </button>
           </>
+        )}
+        {modalPlayoffsAbierto && (
+          <ModalClasificadosPorGrupo
+            valorActual={torneoQuery.data?.clasificados_por_grupo ?? null}
+            cargando={torneoQuery.isLoading}
+            guardando={playoffs.isPending}
+            onCancelar={() => setModalPlayoffsAbierto(false)}
+            onConfirmar={(n) => playoffs.mutate(n)}
+          />
         )}
       </div>
     );
@@ -145,94 +168,66 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
   return <BracketView torneoId={torneoId} />;
 }
 
-/** Vista de bracket, solo lectura — Design sección E. Agrupa por columnas
- * (una por ronda, orden inferido por cantidad de partidos: la ronda con
- * más partidos es la más temprana) en vez de dibujar las líneas de
- * conexión del árbol — "Ganador Partido N" nunca queda como un espacio
- * en blanco sin explicación, que es el requisito real del mockup. */
-function BracketView({ torneoId }: { torneoId: number }) {
-  const query = useQuery({
-    queryKey: ["bracket", torneoId],
-    queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}/bracket", {
-        params: { path: { torneo_id: torneoId } },
-      } as never);
-      if (error) throw error;
-      return data as PartidoBracket[];
-    },
-  });
-  const equipos = useResourceCrud<EquipoRow>({ resourceKey: "equipos", basePath: "/api/v1/equipos" });
-  const nombreEquipoBase = useMemo(
-    () => new Map((equipos.listQuery.data ?? []).map((e) => [e.id, e.nombre])),
-    [equipos.listQuery.data],
-  );
-  // Bug 2 (D2, parte B): resolución dirigida — un equipo fuera de la
-  // ventana de LIMITE_LISTA se pedía individual antes de caer al fallback
-  // "Equipo #ID" en el bracket (P3 del plan).
-  const idsEquiposBracket = useMemo(
-    () => (query.data ?? []).flatMap((p) => [p.equipos_id_local, p.equipos_id_visitante]),
-    [query.data],
-  );
-  const nombreEquipo = useNombrePorIdConFaltantes("/api/v1/equipos", nombreEquipoBase, idsEquiposBracket);
+/** T10 (control-mesa-reactividad-playoffs-plan.md, Fase 3 §6) — "¿cuántos
+ * equipos clasifican por grupo?" al momento de generar los playoffs.
+ * Modal propio, mismo patrón `.modal-panel` que el resto de la app (ej.
+ * el modal de reconciliación de ModalResultadoDirecto.tsx) — nunca un
+ * `window.prompt()` nativo (Fase 2 del plan, AI Slop Risk): no puede
+ * mostrar el valor actual como referencia, no valida antes de mandar, y
+ * es fácil de cerrar por accidente en mobile. Pre-cargado con
+ * `Torneo.clasificados_por_grupo` — confirmar sin tocarlo repite el
+ * comportamiento de siempre; el valor elegido queda PERSISTIDO ahí
+ * mismo (Gate Final T2 del plan). */
+function ModalClasificadosPorGrupo(props: {
+  valorActual: number | null;
+  cargando: boolean;
+  guardando: boolean;
+  onCancelar: () => void;
+  onConfirmar: (clasificadosPorGrupo: number) => void;
+}) {
+  const { valorActual, cargando, guardando, onCancelar, onConfirmar } = props;
+  const [valor, setValor] = useState(() => String(valorActual ?? 2));
 
-  if (query.isLoading) return <p>Cargando bracket...</p>;
-  if (query.isError) return <p className="error-text">{apiErrorMessage(query.error)}</p>;
-  const partidos = query.data ?? [];
-  if (partidos.length === 0) return null;
+  // El valor real llega recién cuando `torneoQuery` resuelve (el modal se
+  // abre antes de que la respuesta vuelva) — sin este efecto, el input se
+  // quedaba en el default "2" aunque el torneo tuviera otro valor guardado.
+  useEffect(() => {
+    if (valorActual != null) setValor(String(valorActual));
+  }, [valorActual]);
 
-  const tercerLugar = partidos.find((p) => p.ronda_nombre === "Tercer Lugar");
-  const rondas = partidos.filter((p) => p.ronda_nombre !== "Tercer Lugar");
-
-  const porRonda = new Map<string, PartidoBracket[]>();
-  for (const p of rondas) {
-    const nombre = p.ronda_nombre ?? "?";
-    const arr = porRonda.get(nombre);
-    if (arr) arr.push(p);
-    else porRonda.set(nombre, [p]);
-  }
-  // Más partidos = ronda más temprana (Octavos > Cuartos > Semifinal > Final).
-  const ordenRondas = [...porRonda.entries()].sort((a, b) => b[1].length - a[1].length).map(([nombre]) => nombre);
-
-  function etiqueta(equipoId: number | null, partido: PartidoBracket, slot: "Local" | "Visitante"): string {
-    if (equipoId != null) return nombreEquipo.get(equipoId) ?? `Equipo #${equipoId}`;
-    // Busca el feeder que apunta ESPECÍFICAMENTE a este slot (Local o
-    // Visitante) — un partido puede tener 2 feeders distintos, uno por
-    // lado, y mostrar el mismo para los dos sería un dato incorrecto, no
-    // solo impreciso. El Tercer Lugar se alimenta del PERDEDOR de cada
-    // semifinal (Partido_Perdedor_Siguiente_ID), no del ganador.
-    const ganadorDe = partidos.find((p) => p.partido_siguiente_id === partido.id && p.slot_siguiente === slot);
-    if (ganadorDe) return `Ganador Partido ${ganadorDe.id}`;
-    const perdedorDe = partidos.find(
-      (p) => p.partido_perdedor_siguiente_id === partido.id && p.slot_perdedor_siguiente === slot,
-    );
-    if (perdedorDe) return `Perdedor Semifinal ${perdedorDe.id}`;
-    return "Por definir";
-  }
+  const n = Number(valor);
+  const esValido = valor !== "" && Number.isInteger(n) && n >= 1;
 
   return (
-    <div className="card motor-formatos-panel">
-      <div className="bracket">
-        {ordenRondas.map((nombreRonda) => (
-          <div key={nombreRonda} className="bracket__columna">
-            <h4>{nombreRonda}</h4>
-            {porRonda.get(nombreRonda)!.map((p) => (
-              <div key={p.id} className="bracket__partido">
-                <div className="bracket__equipo">{etiqueta(p.equipos_id_local, p, "Local")}</div>
-                <div className="bracket__equipo">{etiqueta(p.equipos_id_visitante, p, "Visitante")}</div>
-              </div>
-            ))}
-          </div>
-        ))}
-        {tercerLugar && (
-          <div className="bracket__columna bracket__columna--tercer-lugar">
-            <h4>Tercer Lugar</h4>
-            <div className="bracket__partido">
-              <div className="bracket__equipo">{etiqueta(tercerLugar.equipos_id_local, tercerLugar, "Local")}</div>
-              <div className="bracket__equipo">{etiqueta(tercerLugar.equipos_id_visitante, tercerLugar, "Visitante")}</div>
-            </div>
-          </div>
-        )}
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-clasificados-titulo">
+      <div className="modal-panel">
+        <h2 id="modal-clasificados-titulo">¿Cuántos equipos clasifican por grupo?</h2>
+        <p className="muted">
+          Se usan para armar los cruces de la Fase Eliminatoria (1° vs 2° del grupo siguiente, etc.). El valor queda
+          guardado para la próxima vez.
+        </p>
+        <label>
+          Clasificados por grupo
+          <input
+            type="number"
+            min={1}
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            disabled={cargando}
+            autoFocus
+          />
+        </label>
+        {!esValido && valor !== "" && <p className="error-text">Tiene que ser al menos 1.</p>}
+        <div className="resource-form__actions">
+          <button type="button" className="link-button" onClick={onCancelar} disabled={guardando}>
+            Cancelar
+          </button>
+          <button type="button" disabled={!esValido || guardando || cargando} onClick={() => onConfirmar(n)}>
+            {guardando ? "Generando..." : "Generar Playoffs"}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
+

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../../api/client";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
+import { BracketView } from "./BracketView";
 import type { TorneoDashboardContext } from "./TorneoDashboard";
 
 interface EdicionRow {
@@ -198,6 +199,18 @@ export function EstadisticasDelTorneoPage() {
             </div>
           ))
         : !!posicionesQuery.data?.length && <TablaPosiciones filas={posicionesQuery.data} />}
+
+      {/* control-mesa-reactividad-playoffs-plan.md, Fase 3 §6: el bracket
+          de Playoffs, debajo de la tabla de posiciones — donde el pedido
+          lo espera, en vez de solo en la pestaña Partidos. Mismo
+          componente que esa pestaña (BracketView, extraído de
+          MotorFormatosPanel.tsx) — nunca una copia forkeada. Se scopea a
+          `edicionId` (la edición elegida en el selector de arriba, no
+          necesariamente `torneoId` del contexto) para no mostrar el
+          bracket de otra edición. El propio componente devuelve `null`
+          si todavía no hay partidos de bracket generados — no hace falta
+          un chequeo de "¿ya se generaron los playoffs?" acá. */}
+      {(formato === "Eliminacion" || formato === "Grupos_Playoffs") && <BracketView torneoId={edicionId} />}
 
       <h3>Goleadores</h3>
       {goleadoresQuery.data?.length === 0 && <p className="muted">Sin goles registrados todavía en esta edición.</p>}

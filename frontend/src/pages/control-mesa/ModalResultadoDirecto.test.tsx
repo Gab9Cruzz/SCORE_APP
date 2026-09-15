@@ -18,13 +18,19 @@ const NOMBRE_EQUIPO = new Map([[1, "Tiburones FC"], [2, "Águilas del Sur"]]);
 const JUGADOR_LOCAL = { jugador_id: 5, jugador: "Andrés Vera", equipo_id: 1, equipo: "Tiburones FC", dorsal: 9, jugador_perfil_id: 50 };
 const JUGADOR_LOCAL_TITULAR2 = { jugador_id: 7, jugador: "Diego Paz", equipo_id: 1, equipo: "Tiburones FC", dorsal: 3, jugador_perfil_id: 52 };
 const JUGADOR_LOCAL_SUPLENTE = { jugador_id: 6, jugador: "Bruno Salas", equipo_id: 1, equipo: "Tiburones FC", dorsal: 12, jugador_perfil_id: 51 };
+// En el plantel del club pero NUNCA convocado a este partido — regresión
+// del bug de "filtrado estricto de suplentes" (control-mesa-reactividad-
+// playoffs-plan.md, Fase 3 §2): antes de la corrección aparecía igual en
+// "Entra" porque deriveTitularSuplente solo miraba "no es titular", no
+// "está convocado".
+const JUGADOR_LOCAL_NO_CONVOCADO = { jugador_id: 8, jugador: "Nico Roldán", equipo_id: 1, equipo: "Tiburones FC", dorsal: 21, jugador_perfil_id: 53 };
 const JUGADOR_VISITANTE = { jugador_id: 1, jugador: "Carlos Ruiz", equipo_id: 2, equipo: "Águilas del Sur", dorsal: 4, jugador_perfil_id: 10 };
 
 function sembrarBackend(opts: { conConvocatoria?: boolean } = {}) {
   server.use(
     http.get(`${BASE}/partidos/3/cronometro`, () => HttpResponse.json({ tipo_cronometro: "Periodos", partido_iniciado: false })),
     http.get(`${BASE}/estadisticas/equipos/1/plantilla`, () =>
-      HttpResponse.json([JUGADOR_LOCAL, JUGADOR_LOCAL_TITULAR2, JUGADOR_LOCAL_SUPLENTE]),
+      HttpResponse.json([JUGADOR_LOCAL, JUGADOR_LOCAL_TITULAR2, JUGADOR_LOCAL_SUPLENTE, JUGADOR_LOCAL_NO_CONVOCADO]),
     ),
     http.get(`${BASE}/estadisticas/equipos/2/plantilla`, () => HttpResponse.json([JUGADOR_VISITANTE])),
     http.get(`${BASE}/eventos`, () =>
@@ -165,7 +171,7 @@ describe("ModalResultadoDirecto — Quick Action Bar y filtrado de Cambio", () =
     await user.click(await screen.findByRole("button", { name: /Cambio/ }));
     await user.selectOptions(screen.getByLabelText("Equipo"), "1");
 
-    const sale = screen.getByLabelText(/Sale \(solo titulares\)/);
+    const sale = screen.getByLabelText(/Sale \(en cancha\)/);
     expect(within(sale).getByText(/Andrés Vera/)).toBeInTheDocument();
     expect(within(sale).queryByText(/Bruno Salas/)).not.toBeInTheDocument();
 
@@ -184,7 +190,7 @@ describe("ModalResultadoDirecto — Quick Action Bar y filtrado de Cambio", () =
 
     await user.click(screen.getByRole("button", { name: /Cambio/ }));
     await user.selectOptions(screen.getByLabelText("Equipo"), "1");
-    const sale = screen.getByLabelText(/Sale \(solo titulares\)/);
+    const sale = screen.getByLabelText(/Sale \(en cancha\)/);
     // Sin convocatoria, ambos jugadores del equipo son candidatos (D4).
     expect(within(sale).getByText(/Andrés Vera/)).toBeInTheDocument();
     expect(within(sale).getByText(/Bruno Salas/)).toBeInTheDocument();
@@ -211,6 +217,45 @@ describe("ModalResultadoDirecto — Quick Action Bar y filtrado de Cambio", () =
     const entra = screen.getByLabelText(/Entra \(solo suplentes\)/);
     expect(within(entra).queryByText(/Bruno Salas/)).not.toBeInTheDocument();
   });
+
+  it("regresión — un jugador del club NUNCA convocado a este partido no aparece en Entra ni en Sale", async () => {
+    sembrarBackend({ conConvocatoria: true });
+    const user = userEvent.setup();
+    montar();
+
+    await user.click(await screen.findByRole("button", { name: /Cambio/ }));
+    await user.selectOptions(screen.getByLabelText("Equipo"), "1");
+
+    const sale = screen.getByLabelText(/Sale \(en cancha\)/);
+    expect(within(sale).queryByText(/Nico Roldán/)).not.toBeInTheDocument();
+
+    await user.selectOptions(sale, String(JUGADOR_LOCAL.jugador_id));
+    const entra = screen.getByLabelText(/Entra \(solo suplentes\)/);
+    expect(within(entra).queryByText(/Nico Roldán/)).not.toBeInTheDocument();
+  });
+
+  it("estado mutante: un suplente que ya entró por un Cambio aparece en 'Sale' de un Cambio posterior del mismo batch", async () => {
+    sembrarBackend({ conConvocatoria: true });
+    const user = userEvent.setup();
+    montar();
+
+    // Primer Cambio: sale Andrés Vera (titular), entra Bruno Salas (suplente).
+    await user.click(await screen.findByRole("button", { name: /Cambio/ }));
+    await user.selectOptions(screen.getByLabelText("Equipo"), "1");
+    await user.selectOptions(screen.getByLabelText(/Sale/), String(JUGADOR_LOCAL.jugador_id));
+    await user.selectOptions(screen.getByLabelText(/Entra/), String(JUGADOR_LOCAL_SUPLENTE.jugador_id));
+    await user.type(screen.getByLabelText("Minuto"), "30");
+    await user.click(screen.getByRole("button", { name: "+ Agregar" }));
+
+    // Segundo Cambio: Bruno Salas (recién ingresado) debe estar disponible
+    // en "Sale" — control-mesa-reactividad-playoffs-plan.md, Fase 3 §1.
+    await user.click(await screen.findByRole("button", { name: /Cambio/ }));
+    await user.selectOptions(screen.getByLabelText("Equipo"), "1");
+    const sale2 = screen.getByLabelText(/Sale \(en cancha\)/);
+    expect(within(sale2).getByText(/Bruno Salas/)).toBeInTheDocument();
+    // Andrés Vera ya salió — no puede volver a aparecer en "Sale".
+    expect(within(sale2).queryByText(/Andrés Vera/)).not.toBeInTheDocument();
+  });
 });
 
 describe("ModalResultadoDirecto — timeline ascendente y reactivo", () => {
@@ -234,5 +279,90 @@ describe("ModalResultadoDirecto — timeline ascendente y reactivo", () => {
     const filas = screen.getAllByText(/'$/); // "2'" y "40'"
     expect(filas[0]).toHaveTextContent("2'");
     expect(filas[1]).toHaveTextContent("40'");
+  });
+
+  it("muestra nombre de jugador + equipo en cada hito, y formato Sale/Entra en Cambio (Fase 1/2 del plan)", async () => {
+    sembrarBackend({ conConvocatoria: true });
+    const user = userEvent.setup();
+    montar();
+
+    await user.click(await screen.findByRole("button", { name: /Cambio/ }));
+    await user.selectOptions(screen.getByLabelText("Equipo"), "1");
+    await user.selectOptions(screen.getByLabelText(/Sale/), String(JUGADOR_LOCAL.jugador_id));
+    await user.selectOptions(screen.getByLabelText(/Entra/), String(JUGADOR_LOCAL_SUPLENTE.jugador_id));
+    await user.type(screen.getByLabelText("Minuto"), "62");
+    await user.click(screen.getByRole("button", { name: "+ Agregar" }));
+
+    const fila = (await screen.findByText("62'")).closest("li")!;
+    expect(within(fila).getByText("Tiburones FC")).toBeInTheDocument();
+    expect(within(fila).getByText(/Sale:.*Andrés Vera/)).toBeInTheDocument();
+    expect(within(fila).getByText(/Entra:.*Bruno Salas/)).toBeInTheDocument();
+    expect(fila).toHaveAttribute(
+      "aria-label",
+      expect.stringContaining("cambio, Tiburones FC, sale #9 Andrés Vera, entra #12 Bruno Salas"),
+    );
+  });
+
+  it("doble amarilla: previsualiza una roja automática (con badge, sin botón Quitar propio) sin duplicarla al guardar", async () => {
+    sembrarBackend({ conConvocatoria: true });
+    let cuerpoEnviado: { eventos: { eventos_id: number; jugador_id: number }[] } | undefined;
+    server.use(
+      http.post(`${BASE}/partidos/3/resultado-directo`, async ({ request }) => {
+        cuerpoEnviado = (await request.json()) as never;
+        return HttpResponse.json({ id: 3, estado: "Finalizado" });
+      }),
+    );
+    const user = userEvent.setup();
+    montar();
+
+    for (const minuto of ["10", "50"]) {
+      await user.click(await screen.findByRole("button", { name: /Tarjeta Amarilla/ }));
+      await user.selectOptions(screen.getByLabelText("Equipo"), "1");
+      await user.selectOptions(screen.getByLabelText("Jugador"), String(JUGADOR_LOCAL.jugador_id));
+      await user.type(screen.getByLabelText("Minuto"), minuto);
+      await user.click(screen.getByRole("button", { name: "+ Agregar" }));
+    }
+
+    // Previsualización: 1 sola fila "auto" al minuto de la 2da amarilla,
+    // sin botón "Quitar" propio (no hay evento que remover directamente).
+    const filaAuto = (await screen.findByText(/· auto/)).closest("li")!;
+    expect(filaAuto).toHaveTextContent("50'");
+    expect(within(filaAuto).queryByRole("button", { name: /Quitar/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Guardar resultado" }));
+    await waitFor(() => expect(cuerpoEnviado).toBeDefined());
+    // Solo 2 amarillas van al servidor — la roja "auto" NUNCA se manda
+    // (el servidor es el único que la inserta, control-mesa-reactividad-
+    // playoffs-plan.md Fase 3 §3).
+    expect(cuerpoEnviado!.eventos).toHaveLength(2);
+    expect(cuerpoEnviado!.eventos.every((e) => e.eventos_id === 3)).toBe(true);
+  });
+
+  it("doble amarilla: no previsualiza roja automática si el operador ya cargó una roja manual", async () => {
+    sembrarBackend({ conConvocatoria: true });
+    const user = userEvent.setup();
+    montar();
+
+    // 2 amarillas primero — todavía no está expulsado (la roja "auto" es
+    // solo previsualización, no toca salidosOExpulsados) — así que el
+    // operador puede seguir agregándole eventos manualmente después.
+    for (const minuto of ["10", "50"]) {
+      await user.click(await screen.findByRole("button", { name: /Tarjeta Amarilla/ }));
+      await user.selectOptions(screen.getByLabelText("Equipo"), "1");
+      await user.selectOptions(screen.getByLabelText("Jugador"), String(JUGADOR_LOCAL.jugador_id));
+      await user.type(screen.getByLabelText("Minuto"), minuto);
+      await user.click(screen.getByRole("button", { name: "+ Agregar" }));
+    }
+    expect(await screen.findByText(/· auto/)).toBeInTheDocument();
+
+    // El operador carga la roja a mano — la previsualización "auto" debe
+    // desaparecer (dedup: ya hay una roja real para este jugador).
+    await user.click(screen.getByRole("button", { name: /Tarjeta Roja/ }));
+    await user.selectOptions(screen.getByLabelText("Equipo"), "1");
+    await user.selectOptions(screen.getByLabelText("Jugador"), String(JUGADOR_LOCAL.jugador_id));
+    await user.type(screen.getByLabelText("Minuto"), "55");
+    await user.click(screen.getByRole("button", { name: "+ Agregar" }));
+
+    expect(screen.queryByText(/· auto/)).not.toBeInTheDocument();
   });
 });
