@@ -1,4 +1,13 @@
 <!-- /autoplan restore point: "C:\\Users\\Gabo\\.gstack\\projects\\Score-App\\main-autoplan-restore-20260915-230156.md" -->
+> **Superado en parte por `docs/plans/desempate-tiempo-extra-penales-plan.md`
+> (2026-09-17).** Este plan cerró el desempate de eliminatoria registrando
+> solo QUIÉN ganó (`PARTIDOS.Ganador_Desempate_ID`), deliberadamente sin el
+> CÓMO — ese plan revierte esa decisión: suma `Metodo_Desempate`, `Penales_
+> Local/Visitante`, `Hubo_Tiempo_Extra` y `Metodo_Desempate_Aplicable` al
+> lado de `Ganador_Desempate_ID` (que se MANTIENE, no se reemplaza). Los dos
+> diagramas ASCII de bracket/llave más abajo (§941, §1001-1043) muestran
+> `Ganador_Desempate` como la resolución TERMINAL del desempate — desde la
+> Fase 2 de ese plan, dejaron de estar completos.
 # Cierre de Fase Regular, Motor de Llaves y Flexibilidad de Grupos
 
 Pedido del 2026-09-16. Tres requerimientos encadenados sobre el Motor de
@@ -1022,6 +1031,10 @@ F4, F12 all shipped silent or unfixable).
   └───────────────────────────────────────────────────────────┘
 ```
 
+> **Diagrama superado (2026-09-17):** `fn_validar_..._desempate` volvió a
+> extenderse (`desempate-tiempo-extra-penales-plan.md` Fase 2, más 5
+> columnas en PARTIDOS y 1 en TORNEO) — ver ese plan para el estado real.
+
 **State machine — a two-legged tie**
 
 ```
@@ -1044,6 +1057,11 @@ F4, F12 all shipped silent or unfixable).
                                     └──────────────┘ │ (F1: ahora hay UI) │
                                                      └────────────────────┘
 ```
+
+> **Diagrama superado (2026-09-17):** "EXIGE Ganador_Desempate" ya no es el
+> final del camino — `desempate-tiempo-extra-penales-plan.md` Fase 2 le
+> suma el CÓMO (`Metodo_Desempate`/`Penales_*`/`Hubo_Tiempo_Extra`) a esa
+> misma resolución.
 
 **Data flow — cerrar_torneo, all four paths**
 

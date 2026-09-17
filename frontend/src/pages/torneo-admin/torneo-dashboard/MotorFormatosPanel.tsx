@@ -203,6 +203,8 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
           formatoTorneo={formato}
           accionesDisponibles={estado.acciones_disponibles}
           formatoEliminatoriaActual={torneoQuery.data?.formato_eliminatoria ?? "Unico"}
+          metodoDesempateEliminatoriaActual={torneoQuery.data?.metodo_desempate_eliminatoria ?? "Manual"}
+          tipoCronometro={torneoQuery.data?.config_tiempo?.tipo_cronometro ?? "Periodos"}
           clasificadosPorGrupoActual={torneoQuery.data?.clasificados_por_grupo ?? null}
           fechaInicioTorneo={torneoQuery.data?.fecha_inicio ?? null}
           onClose={() => setModalAbierto(false)}

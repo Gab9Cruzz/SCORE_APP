@@ -1,13 +1,21 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 EstadoPartido = Literal["Programado", "En curso", "Finalizado", "Cancelado"]
 FasePartido = Literal[
     "Regular", "Grupos", "Octavos", "Cuartos", "Semifinal", "Final", "Tercer puesto"
 ]
 SlotBracket = Literal["Local", "Visitante"]
+# Desempate de eliminatoria: tiempo extra y penales (docs/plans/desempate-
+# tiempo-extra-penales-plan.md, D3/§5) — QUÉ terminó resolviendo un empate
+# de tiempo regular.
+MetodoDesempate = Literal["Tiempo_Extra", "Penales", "Manual"]
+# F7/§8: dominio más angosto que MetodoDesempateEliminatoria (de torneo.py)
+# — 'Penales_Salvo_Final' ya se resolvió a uno de estos tres concretos al
+# snapshotear.
+MetodoDesempateAplicable = Literal["Manual", "Penales_Directo", "Tiempo_Extra_Penales"]
 
 
 class PartidoBase(BaseModel):
@@ -66,6 +74,20 @@ class PartidoUpdate(BaseModel):
     # estado="Finalizado"; fn_validar_partido_eliminacion_desempate
     # rechaza el cierre si hace falta y no vino.
     ganador_desempate_id: int | None = None
+    # Desempate de eliminatoria: tiempo extra y penales (D3/§5, SPEC-REVIEW
+    # F1): CÓMO se resolvió el empate. Si viene `ganador_desempate_id` sin
+    # `metodo_desempate`, PartidoService lo completa a 'Manual' — los
+    # caminos de hoy (radio "¿quién avanza?") no saben mandar este campo, y
+    # sin ese default `fn_validar_partido_eliminacion_desempate` rechazaría
+    # con `desempate_sin_metodo` todo cierre Manual apenas la migración 33
+    # esté aplicada.
+    metodo_desempate: MetodoDesempate | None = None
+    # Marcador de la tanda de penales — PATCH de corrección sobre un
+    # partido ya Finalizado (fn_validar_partido_eliminacion_desempate
+    # corre las reglas de forma/rango/coherencia también en ese caso, D3/§5).
+    penales_local: int | None = None
+    penales_visitante: int | None = None
+    hubo_tiempo_extra: bool | None = None
     # Motor de Tiempos (gestion-avanzada-equipos-control-mesa-plan.md):
     # ganador de un partido "Corrido" (sin marcador de goles). Normalmente
     # se setea desde HitoPartidoService.registrar (Fin_Partido con
@@ -100,6 +122,31 @@ class PartidoOut(PartidoBase):
     partido_ida_id: int | None = None
     ganador_desempate_id: int | None = None
     ganador_corrido_id: int | None = None
+    # Desempate de eliminatoria: tiempo extra y penales (D3/§5) — el CÓMO
+    # al lado del QUIÉN. Ver la matriz de render de 8 celdas del plan (§11)
+    # para cómo combinarlas al mostrar un resultado.
+    metodo_desempate: MetodoDesempate | None = None
+    penales_local: int | None = None
+    penales_visitante: int | None = None
+    hubo_tiempo_extra: bool = False
+    metodo_desempate_aplicable: MetodoDesempateAplicable | None = None
+    # Fase 1 (sin migración) — SPEC-REVIEW S12/D-Q2: reemplaza las dos
+    # derivaciones divergentes que tenía el cliente (MesaPanel.tsx
+    # ignoraba ida/vuelta y Corrido; ModalResultadoDirecto.tsx sí excluía
+    # Corrido) con un solo cálculo en el servidor. `elegible_desempate` es
+    # la parte ESTRUCTURAL (¿esta ronda puede terminar en desempate?) —
+    # Eliminación, no Corrido, no walkover, y NUNCA una ida (D4/§6: el
+    # desempate es de la VUELTA/GLOBAL o de un partido único). No es el
+    # booleano final: el cliente sigue siendo quien sabe el marcador que
+    # está construyendo (en vivo, o el draft de un resultado directo
+    # todavía sin guardar) — por eso además vienen `goles_previos_global_*`:
+    # en una VUELTA, los goles YA JUGADOS de la ida, cruzados a la
+    # orientación local/visitante de ESTE partido (fn_resolver_llave
+    # invierte la ida), para que el cliente arme el global sumando su
+    # propio marcador. NULL/0 en un partido único (nada que sumar).
+    elegible_desempate: bool = False
+    goles_previos_global_local: int | None = None
+    goles_previos_global_visitante: int | None = None
     # 3B-13 (docs/plans/cierre-backlog-todos-plan.md).
     es_walkover: bool = False
     walkover_equipo_ausente_id: int | None = None
@@ -162,6 +209,39 @@ class ResultadoDirectoCreate(BaseModel):
     # eliminacion_desempate lo exige al pasar a 'Finalizado'. Mismo patrón
     # que ganador_corrido_id: se setea ANTES del Hito Fin_Partido.
     ganador_desempate_id: int | None = None
+    # Desempate de eliminatoria: tiempo extra y penales (D3/§5, D-D12/E4,
+    # SPEC-REVIEW F9) — divulgación progresiva en el modal: estos tres
+    # solo aparecen cuando `requiere_desempate`/`elegible_desempate` (Fase
+    # 1) es true. `penales_local/visitante`: marcador de la tanda — si
+    # vienen los dos, PartidoService deriva `metodo_desempate='Penales'` y
+    # el ganador de la tanda (rechazado por el trigger si no coincide con
+    # `ganador_desempate_id`, cuando también vino). `hubo_tiempo_extra`:
+    # checkbox "se jugó prórroga" — si viene TRUE y el marcador final NO
+    # está empatado, PartidoService deriva `metodo_desempate='Tiempo_Extra'`
+    # (F9: sin esta regla, un "2-1 a.e.t." cargado a mano quedaría con
+    # Hubo_Tiempo_Extra=TRUE y Metodo_Desempate=NULL — una celda indefinida
+    # en la matriz de render). "No tengo el marcador de la tanda" (E4) es
+    # no mandar ninguno de los tres: PartidoService cae a
+    # `metodo_desempate='Manual'` con `ganador_desempate_id`, igual que
+    # hoy — el escape hatch que mantiene honesta la carga en papel.
+    penales_local: int | None = None
+    penales_visitante: int | None = None
+    hubo_tiempo_extra: bool = False
+
+    @model_validator(mode="after")
+    def coherencia_penales(self):
+        # D-S1: "un entero del cliente no entra sin techo al acta" —
+        # chequeo en Python para un 400 legible antes del 409 genérico del
+        # CHECK de Postgres (mismo criterio que el resto del módulo). El
+        # trigger (fn_validar_forma_desempate) es la defensa de fondo.
+        if (self.penales_local is None) != (self.penales_visitante is None):
+            raise ValueError("penales_local y penales_visitante van juntos: los dos o ninguno.")
+        if self.penales_local is not None:
+            if not (0 <= self.penales_local <= 99) or not (0 <= self.penales_visitante <= 99):
+                raise ValueError("El marcador de la tanda de penales debe estar entre 0 y 99.")
+            if self.penales_local == self.penales_visitante:
+                raise ValueError("Una tanda de penales no puede terminar empatada.")
+        return self
 
 
 # ------------------------------------------------------------

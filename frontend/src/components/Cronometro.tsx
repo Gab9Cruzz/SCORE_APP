@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, apiErrorMessage } from "../api/client";
+import {
+  consecuenciaCortaDesempate,
+  etiquetaReglaDesempate,
+  type MetodoDesempateEliminatoriaOTorneo,
+} from "../lib/desempate";
 
 const TICK_MS = 1000;
 const POLL_MS = 5000;
@@ -138,6 +143,34 @@ export function Cronometro(props: {
    * goles. Ignorado en un torneo 'Corrido' (ya tiene su propio flujo
    * "¿Quién ganó?" arriba). */
   requiereDesempate?: boolean;
+  /** Desempate de eliminatoria: tiempo extra y penales (docs/plans/
+   * desempate-tiempo-extra-penales-plan.md, D6/§8, D-D1) — la regla
+   * CONCRETA que rige a ESTE partido (`PARTIDOS.Metodo_Desempate_Aplicable`,
+   * snapshoteada al arrancar). `'Penales_Directo'` promueve el paso de
+   * tanda de penales en vez del radio manual de siempre; cualquier otro
+   * valor (incluido `undefined`/`null`, torneos de siempre) mantiene el
+   * radio "¿quién avanza?" sin cambios visibles. */
+  metodoDesempateAplicable?: "Manual" | "Penales_Directo" | "Tiempo_Extra_Penales" | null;
+  /** D-D8: chip de regla vigente — `true` cuando este partido es de fase
+   * Eliminación (`ronda_nombre != null`), para saber si hay algo que
+   * mostrar. Sin esto el chip no podría distinguir "Manual porque el
+   * torneo no es de eliminación" de "Manual porque el operador lo
+   * eligió" — los dos leerían igual desde `metodoDesempateAplicable`. */
+  esEliminacion?: boolean;
+  /** D-D8/D6: antes de que el partido arranque, `metodoDesempateAplicable`
+   * todavía es `null` (recién se snapshotea en Inicio_Partido) — el chip
+   * usa la regla ACTUAL del torneo como preview mientras tanto (§11-bis:
+   * "siempre hay regla"). Incluye `'Penales_Salvo_Final'`, que
+   * `metodoDesempateAplicable` nunca puede tener (ya se resuelve a un
+   * método concreto al snapshotear). */
+  metodoDesempateEliminatoriaTorneo?: MetodoDesempateEliminatoriaOTorneo;
+  /** D-D8: `true` cuando este partido es la VUELTA de una llave — el chip
+   * suma el GLOBAL (`globalLocal`/`globalVisitante`, ya calculados por el
+   * padre igual que `requiereDesempate`), porque eso es lo que está
+   * realmente en juego, no el marcador suelto de esta pierna. */
+  esVuelta?: boolean;
+  globalLocal?: number;
+  globalVisitante?: number;
 }) {
   const {
     partidoId,
@@ -149,6 +182,12 @@ export function Cronometro(props: {
     mostrarInicio = true,
     onMinutoActual,
     requiereDesempate = false,
+    metodoDesempateAplicable,
+    esEliminacion = false,
+    metodoDesempateEliminatoriaTorneo,
+    esVuelta = false,
+    globalLocal,
+    globalVisitante,
   } = props;
   const queryClient = useQueryClient();
   const [now, setNow] = useState(() => Date.now());
@@ -160,6 +199,21 @@ export function Cronometro(props: {
   // confirmación distinto (aplica a 'Periodos', no a 'Corrido').
   const [eligiendoDesempate, setEligiendoDesempate] = useState(false);
   const [desempateElegido, setDesempateElegido] = useState<number | null>(null);
+  // Desempate de eliminatoria: tiempo extra y penales (D-D1/§9, fase 2) —
+  // paso de tanda de penales, promovido en el cronómetro EN VIVO cuando
+  // `metodoDesempateAplicable === 'Penales_Directo'`. Steppers, no un
+  // radio (D-D4/D-D7): arrancan en 0, el ganador SIEMPRE lo deriva el
+  // servidor de la tanda (nunca lo manda este componente) — ver
+  // `derivar_ganador_desde_penales` (backend/app/services/desempate.py).
+  const [eligiendoPenales, setEligiendoPenales] = useState(false);
+  const [penalesLocal, setPenalesLocal] = useState(0);
+  const [penalesVisitante, setPenalesVisitante] = useState(0);
+  // D-A1/D-D5: escape hatch a Manual desde un torneo configurado con
+  // Penales_Directo — permitido a propósito (logueado del lado del
+  // servidor, métrica 3), pero con fricción: una hoja de confirmación
+  // antes de saltar al radio manual de siempre, para que no sea el
+  // camino de menor resistencia.
+  const [escapandoAManual, setEscapandoAManual] = useState(false);
   // Área 4 (T6): confirmación del cierre forzado — separado de
   // `eligiendoGanador` (son dos flujos de confirmación distintos, aunque
   // ambos terminan en Fin_Partido).
@@ -190,6 +244,9 @@ export function Cronometro(props: {
       numero_periodo?: number;
       ganador_corrido_id?: number;
       ganador_desempate_id?: number;
+      metodo_desempate?: "Tiempo_Extra" | "Penales" | "Manual";
+      penales_local?: number;
+      penales_visitante?: number;
       forzado?: boolean;
       motivo_cierre?: MotivoCierre;
       motivo_cierre_detalle?: string;
@@ -321,6 +378,20 @@ export function Cronometro(props: {
     await registrar.mutateAsync({ tipo_hito: "Fin_Partido", ganador_desempate_id: ganadorId } as never);
   }
 
+  // Desempate de eliminatoria: tiempo extra y penales (D-D1/§9, fase 2) —
+  // mismo espejo, con la tanda viajando en el propio Hito Fin_Partido. El
+  // ganador NO viaja acá: fn_validar_forma_desempate lo deriva de la
+  // tanda del lado del servidor (D-D4).
+  async function finalizarUltimoPeriodoYPartidoConPenales(local: number, visitante: number) {
+    await registrar.mutateAsync({ tipo_hito: "Fin_Periodo", numero_periodo: estado.periodo_abierto ?? undefined } as never);
+    await registrar.mutateAsync({
+      tipo_hito: "Fin_Partido",
+      metodo_desempate: "Penales",
+      penales_local: local,
+      penales_visitante: visitante,
+    } as never);
+  }
+
   const esUltimoPeriodo = estado.cantidad_periodos != null && estado.periodo_abierto === estado.cantidad_periodos;
 
   let contenido: ReactNode;
@@ -429,6 +500,90 @@ export function Cronometro(props: {
         </div>
       </div>
     );
+  } else if (escapandoAManual) {
+    // D-A1/D-D5: hoja de confirmación antes de saltar del flujo de
+    // penales al radio manual — nombra lo que implica cerrar así, con un
+    // confirmar de estilo destructivo (mismo criterio visual que el
+    // cierre forzado, más abajo).
+    contenido = (
+      <div className="cierre-forzado-confirmar">
+        <p className="cierre-forzado-confirmar__titulo">Cerrar sin la tanda de penales</p>
+        <p className="muted">
+          Este torneo define por penales. Si cerrás acá, elegís vos quién avanza y queda registrado así.
+        </p>
+        <div className="resource-form__actions">
+          <button type="button" className="link-button" onClick={() => setEscapandoAManual(false)}>
+            Volver a la tanda
+          </button>
+          <button
+            type="button"
+            className="boton-cierre-forzado"
+            onClick={() => {
+              setEscapandoAManual(false);
+              setEligiendoDesempate(true);
+            }}
+          >
+            Elegir manualmente
+          </button>
+        </div>
+      </div>
+    );
+  } else if (eligiendoPenales) {
+    // Desempate de eliminatoria: tiempo extra y penales (D-D1/§9, D-D4,
+    // D-D7, fase 2) — steppers con NOMBRE DE EQUIPO (nunca "Local"/
+    // "Visitante": D-D4 — en una vuelta el encabezado muestra el GLOBAL,
+    // que cruza localía). Confirmar deshabilitado mientras estén iguales
+    // (una tanda no puede terminar empatada) — mensaje inline al empatar.
+    const empatados = penalesLocal === penalesVisitante;
+    const ganadorNombre = penalesLocal > penalesVisitante ? nombreLocal : nombreVisitante;
+    contenido = (
+      <div>
+        <p className="cronometro__label">Tanda de penales</p>
+        <div className="cronometro__penales-steppers">
+          <label>
+            {nombreLocal}
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={30}
+              value={penalesLocal}
+              onChange={(e) => setPenalesLocal(Math.max(0, Math.min(30, Number(e.target.value) || 0)))}
+            />
+          </label>
+          <label>
+            {nombreVisitante}
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={30}
+              value={penalesVisitante}
+              onChange={(e) => setPenalesVisitante(Math.max(0, Math.min(30, Number(e.target.value) || 0)))}
+            />
+          </label>
+        </div>
+        {empatados && <p className="muted">Una tanda de penales no puede terminar empatada.</p>}
+        {!empatados && (
+          <p className="muted">
+            Penales {penalesLocal}-{penalesVisitante} — avanza {ganadorNombre}.
+          </p>
+        )}
+        {registrar.isError && <p className="error-text">{apiErrorMessage(registrar.error)}</p>}
+        <div className="resource-form__actions">
+          <button type="button" className="link-button" onClick={() => setEligiendoPenales(false)}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={empatados || registrar.isPending}
+            onClick={() => void finalizarUltimoPeriodoYPartidoConPenales(penalesLocal, penalesVisitante)}
+          >
+            {registrar.isPending ? "Cerrando..." : "Confirmar y finalizar"}
+          </button>
+        </div>
+      </div>
+    );
   } else {
     // Corriendo o pausado — período abierto (Periodos) o partido en
     // marcha (Corrido).
@@ -461,6 +616,10 @@ export function Cronometro(props: {
               onClick={() => {
                 if (!esUltimoPeriodo) {
                   accion("Fin_Periodo", { numero_periodo: estado.periodo_abierto ?? undefined });
+                } else if (requiereDesempate && metodoDesempateAplicable === "Penales_Directo") {
+                  // D-D1 (fase 2): este torneo define por penales directos
+                  // — el botón promueve la tanda en vez del radio manual.
+                  setEligiendoPenales(true);
                 } else if (requiereDesempate) {
                   // Fase 0 (Finding 1): el marcador está empatado y este
                   // partido es de fase Eliminación — el botón deshabilita
@@ -472,7 +631,19 @@ export function Cronometro(props: {
                 }
               }}
             >
-              {esUltimoPeriodo ? "Fin del Partido" : `Fin ${label}`}
+              {esUltimoPeriodo
+                ? requiereDesempate && metodoDesempateAplicable === "Penales_Directo"
+                  ? "Ir a penales"
+                  : "Fin del Partido"
+                : `Fin ${label}`}
+            </button>
+          )}
+          {/* D-A1/F8: las dos acciones quedan permitidas a propósito — "Ir
+              a penales" es la primaria, esto es el escape secundario (con
+              fricción, ver escapandoAManual más arriba), nunca escondido. */}
+          {puedeFinalizarPeriodos && esUltimoPeriodo && requiereDesempate && metodoDesempateAplicable === "Penales_Directo" && (
+            <button type="button" className="link-button" disabled={registrar.isPending} onClick={() => setEscapandoAManual(true)}>
+              Finalizar por decisión (sin penales)
             </button>
           )}
           {estado.tipo_cronometro === "Corrido" && puedeFinalizarPartido && (
@@ -483,6 +654,24 @@ export function Cronometro(props: {
         </div>
       </div>
     );
+  }
+
+  // D-D8: chip de regla vigente. `metodoDesempateAplicable` (ya
+  // snapshoteado al arrancar) manda; antes de Inicio_Partido se
+  // previsualiza con la regla ACTUAL del torneo. Oculto si esto no es un
+  // partido de Eliminación, o si ninguna de las dos fuentes resolvió nada.
+  const reglaEfectiva = metodoDesempateAplicable ?? metodoDesempateEliminatoriaTorneo ?? null;
+  const etiquetaRegla = esEliminacion ? etiquetaReglaDesempate(reglaEfectiva) : null;
+  let chipRegla: string | null = null;
+  if (etiquetaRegla) {
+    chipRegla = etiquetaRegla;
+    if (esVuelta && globalLocal != null && globalVisitante != null) {
+      const consecuencia = consecuenciaCortaDesempate(reglaEfectiva);
+      const empatadoEnGlobal = globalLocal === globalVisitante;
+      chipRegla = `Global ${globalLocal}-${globalVisitante}${
+        empatadoEnGlobal && consecuencia ? ` — si termina así, ${consecuencia}` : ""
+      } · ${etiquetaRegla}`;
+    }
   }
 
   return (
@@ -508,6 +697,20 @@ export function Cronometro(props: {
             {deshacer.isPending ? "Deshaciendo..." : "DESHACER"}
           </button>
         </div>
+      )}
+
+      {/* D-D8: chip de regla vigente — persistente, para que el operador
+          sepa qué pasa al final del partido sin esperar a que un botón le
+          cambie de texto en el minuto 90. `metodoDesempateAplicable` (ya
+          snapshoteado) manda; antes de Inicio_Partido se previsualiza con
+          la regla ACTUAL del torneo (§11-bis: "siempre hay regla", puede
+          seguir cambiando hasta que arranque, D6/§8). Oculto entero si no
+          es un partido de Eliminación o si no hay ninguna regla que leer
+          — nunca un valor inventado. */}
+      {chipRegla && (
+        <p className="cronometro__chip-regla">
+          {chipRegla}
+        </p>
       )}
 
       {registrar.isError && !eligiendoGanador && !confirmandoForzado && <p className="error-text">{apiErrorMessage(registrar.error)}</p>}

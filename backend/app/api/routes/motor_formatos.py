@@ -69,6 +69,7 @@ async def generar_playoffs(
         usuario_actual.id,
         clasificados_por_grupo=data.clasificados_por_grupo,
         formato_eliminatoria=data.formato_eliminatoria,
+        metodo_desempate_eliminatoria=data.metodo_desempate_eliminatoria,
     )
     return FaseOut.model_validate(fase)
 

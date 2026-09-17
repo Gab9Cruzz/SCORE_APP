@@ -81,7 +81,15 @@ ALTER TABLE TORNEO
     ADD CONSTRAINT fk_torneo_campeon FOREIGN KEY (Campeon_Equipo_ID) REFERENCES EQUIPOS(ID) ON DELETE SET NULL,
     ADD CONSTRAINT fk_torneo_subcampeon FOREIGN KEY (Subcampeon_Equipo_ID) REFERENCES EQUIPOS(ID) ON DELETE SET NULL,
     ADD CONSTRAINT fk_torneo_tercer_puesto FOREIGN KEY (Tercer_Puesto_Equipo_ID) REFERENCES EQUIPOS(ID) ON DELETE SET NULL,
-    ADD CONSTRAINT chk_torneo_formato_eliminatoria CHECK (Formato_Eliminatoria IN ('Unico', 'Ida_Vuelta', 'Mixto'));
+    ADD CONSTRAINT chk_torneo_formato_eliminatoria CHECK (Formato_Eliminatoria IN ('Unico', 'Ida_Vuelta', 'Mixto')),
+    -- Desempate de eliminatoria: tiempo extra y penales (D1/§3, F6): el
+    -- dominio crece con las fases, no de una — fase 2 (esta migración,
+    -- 33) solo habilita 'Manual'/'Penales_Directo'; 'Tiempo_Extra_Penales'
+    -- y 'Penales_Salvo_Final' (que necesitan las columnas de período extra
+    -- de la migración 34) recién se agregan ahí, DROPeando y re-creando
+    -- este CHECK — nunca antes, o la API aceptaría un método que el
+    -- selector todavía no ofrece y que el producto no puede honrar.
+    ADD CONSTRAINT chk_torneo_metodo_desempate_eliminatoria CHECK (Metodo_Desempate_Eliminatoria IN ('Manual', 'Penales_Directo'));
 
 -- EQUIPOS
 -- Disciplina_ID/Modalidad_ID: sin ON DELETE CASCADE a proposito — el
@@ -280,7 +288,24 @@ ALTER TABLE PARTIDOS
     ADD CONSTRAINT chk_partidos_walkover CHECK (
         (NOT Es_Walkover AND Walkover_Equipo_Ausente_ID IS NULL)
      OR (Es_Walkover AND Walkover_Equipo_Ausente_ID IS NOT NULL)
-    );
+    ),
+    -- Desempate de eliminatoria: tiempo extra y penales (D3/§5, D-S1). El
+    -- dominio de valores lo valida el CHECK; la COHERENCIA entre columnas
+    -- (Penales_* NOT NULL juntos, distintos, ganador consistente con la
+    -- tanda, Tiempo_Extra => Hubo_Tiempo_Extra, Ganador_Desempate_ID =>
+    -- Metodo_Desempate NOT NULL) la valida fn_validar_partido_eliminacion_
+    -- desempate (06_triggers.sql) — no se puede expresar como CHECK de
+    -- tabla porque cruza con Ganador_Desempate_ID/EQUIPOS_ID_LOCAL de forma
+    -- condicional, y una parte (¿es esto una ida?) cruza filas.
+    ADD CONSTRAINT chk_partidos_metodo_desempate CHECK (Metodo_Desempate IS NULL OR Metodo_Desempate IN ('Tiempo_Extra', 'Penales', 'Manual')),
+    -- F7/§8: dominio más angosto que el de TORNEO.Metodo_Desempate_Eliminatoria
+    -- — 'Penales_Salvo_Final' es una regla de CUADRO, ya resuelta a uno de
+    -- estos tres concretos en el momento de snapshotear.
+    ADD CONSTRAINT chk_partidos_metodo_desempate_aplicable CHECK (Metodo_Desempate_Aplicable IS NULL OR Metodo_Desempate_Aplicable IN ('Manual', 'Penales_Directo', 'Tiempo_Extra_Penales')),
+    -- D-S1: un entero del cliente no entra sin techo al acta — 0..99
+    -- alcanza con margen para cualquier tanda real.
+    ADD CONSTRAINT chk_partidos_penales_rango CHECK (Penales_Local IS NULL OR Penales_Local BETWEEN 0 AND 99),
+    ADD CONSTRAINT chk_partidos_penales_visitante_rango CHECK (Penales_Visitante IS NULL OR Penales_Visitante BETWEEN 0 AND 99);
 
 -- EVENTOS
 ALTER TABLE EVENTOS

@@ -16,6 +16,7 @@ from app.repositories.torneo import TorneoRepository
 from app.repositories.torneo_grupo import TorneoGrupoRepository
 from app.schemas.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoCreate, ConfiguracionTiempoTorneoOut
 from app.schemas.torneo import TorneoCreate, TorneoOut, TorneoUpdate
+from app.services.desempate import validar_metodo_desempate_eliminatoria
 
 # Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md,
 # requerimiento #4) — Decisión G1: Liga/Eliminación son 1 sola FASE;
@@ -173,6 +174,15 @@ class TorneoService:
         # qué tamano_equipo hay que validar el mínimo.
         await self._validar_minimo_para_iniciar(datos.get("minimo_jugadores_para_iniciar"), datos["modalidad_id"])
         await self._validar_maximo_titulares(datos.get("maximo_titulares_permitido"), datos["modalidad_id"])
+        # Desempate de eliminatoria: tiempo extra y penales (D5/§7) — guarda
+        # 1 de 2 (S7/F2): el INSERT es estructuralmente inguardable desde el
+        # trigger (CONFIGURACION_TIEMPO_TORNEO todavía no existe en un
+        # BEFORE INSERT ON TORNEO), así que este camino es el único lugar
+        # que puede rechazarlo ANTES de crear nada. Corre antes de
+        # `_crear_fase_inicial` (que ya commitea) para no dejar un torneo a
+        # medio crear si esto rechaza.
+        tipo_cronometro_efectivo = await self._tipo_cronometro_efectivo(data.config_tiempo, datos["modalidad_id"])
+        validar_metodo_desempate_eliminatoria(data.metodo_desempate_eliminatoria, tipo_cronometro_efectivo)
 
         torneo = await self.repo.create(**datos)
         await self._crear_fase_inicial(torneo)
@@ -246,6 +256,20 @@ class TorneoService:
                 "(clasificados por grupo) o Liga (clasificados a la liguilla de playoffs)."
             )
 
+    async def _tipo_cronometro_efectivo(
+        self, config_tiempo: ConfiguracionTiempoTorneoCreate | None, modalidad_id: int
+    ) -> str:
+        """Qué `Tipo_Cronometro` va a terminar teniendo este torneo — el
+        que mande el cliente, o si no manda nada, el default derivado de
+        `Modalidad.tamano_equipo` (mismo criterio EXACTO que
+        `_crear_config_tiempo_inicial`, ver `_DEFAULT_CORRIDO`/`_DEFAULT_PERIODOS`
+        arriba). Se necesita ANTES de crear el torneo, para poder
+        rechazar `metodo_desempate_eliminatoria` sin dejar nada a medias."""
+        if config_tiempo is not None:
+            return config_tiempo.tipo_cronometro
+        modalidad = await self.modalidad_repo.get_or_404(modalidad_id)
+        return "Corrido" if modalidad.tamano_equipo == 1 else "Periodos"
+
     async def _validar_maximo_titulares(self, maximo: int | None, modalidad_id: int) -> None:
         """Tope SUPERIOR de Torneo.maximo_titulares_permitido
         (modo-vivo-sustituciones-cierre-plan.md, Área 1, T18) — mismo
@@ -316,6 +340,26 @@ class TorneoService:
                 payload["maximo_titulares_permitido"], torneo_actual.modalidad_id
             )
 
+        # Desempate de eliminatoria: tiempo extra y penales (D5/§7) — C7/D-D3
+        # vuelven editable este campo acá, así que las dos direcciones de la
+        # regla "Corrido <=> Manual" tienen que valer también en el UPDATE,
+        # no solo en el create. `fn_validar_torneo_modalidad` (06_triggers.sql)
+        # es la red de seguridad de fondo para un UPDATE crudo; este chequeo
+        # da el 400 legible de siempre.
+        config_actual = await self.config_tiempo_repo.get_by_torneo(id_)
+        tipo_cronometro_actual = config_actual.tipo_cronometro if config_actual is not None else "Periodos"
+        tipo_cronometro_nuevo = (
+            data.config_tiempo.tipo_cronometro if data.config_tiempo is not None else tipo_cronometro_actual
+        )
+        if "metodo_desempate_eliminatoria" in payload:
+            validar_metodo_desempate_eliminatoria(payload["metodo_desempate_eliminatoria"], tipo_cronometro_nuevo)
+        elif tipo_cronometro_nuevo == "Corrido" and torneo_actual.metodo_desempate_eliminatoria != "Manual":
+            # Dirección inversa (S7/F2): pasar Tipo_Cronometro a 'Corrido' en
+            # un torneo que ya estaba en 'Penales_Directo' — se resuelve acá,
+            # en Python, no con un segundo trigger cruzando en la dirección
+            # opuesta (misma regla de la casa que 06_triggers.sql:360-366).
+            payload["metodo_desempate_eliminatoria"] = "Manual"
+
         # C3 del plan: `BaseRepository.save_changes` hace `if valor is not None`
         # (base.py:62-64), así que un `null` explícito se descartaría y el campo
         # sería imposible de limpiar una vez seteado. Acá `None` es un valor con
@@ -330,7 +374,7 @@ class TorneoService:
 
         torneo = await self.repo.save_changes(torneo_actual, **payload)
 
-        config = await self.config_tiempo_repo.get_by_torneo(id_)
+        config = config_actual
         if data.config_tiempo is not None:
             # EC-13 del plan: se permite el PATCH en cualquier momento, no
             # hay trigger que lo impida — los hitos ya guardados no se

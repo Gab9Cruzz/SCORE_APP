@@ -188,6 +188,19 @@ CREATE TABLE TORNEO (
     -- actual EXACTO de todo torneo existente — sin este default, una base
     -- vieja cambiaría de comportamiento al aplicar la migración.
     Formato_Eliminatoria VARCHAR(20) NOT NULL DEFAULT 'Unico',
+    -- Desempate de eliminatoria: tiempo extra y penales
+    -- (docs/plans/desempate-tiempo-extra-penales-plan.md, D1, §3) — CÓMO
+    -- se resuelve un empate en tiempo regular. Vive al lado de
+    -- Formato_Eliminatoria (misma tabla, mismo paso de UI, misma
+    -- semántica: "regla del cuadro"). DEFAULT 'Manual' reproduce el
+    -- comportamiento actual EXACTO de todo torneo existente (el radio
+    -- "¿quién avanza?" de siempre) y es el único valor válido para
+    -- disciplinas 'Corrido' (fn_validar_torneo_modalidad, 06_triggers.sql).
+    -- 'Tiempo_Extra_Penales'/'Penales_Salvo_Final' quedan en el dominio del
+    -- CHECK recién desde la migración 34 (Fase 3) — la 33 (Fase 2) solo
+    -- habilita 'Manual'/'Penales_Directo' (chk_torneo_metodo_desempate_eliminatoria,
+    -- 02_constraints.sql).
+    Metodo_Desempate_Eliminatoria VARCHAR(20) NOT NULL DEFAULT 'Manual',
     -- Orden explícito que el admin eligió para desempatar el podio cuando
     -- 2+ equipos llegan empatados en pts/dg/gf a un mismo puesto (Finding 2
     -- / Taste Decision T1 del review) — JSON con la lista de Equipo_ID en
@@ -507,6 +520,28 @@ CREATE TABLE PARTIDOS (
     -- paralelo e independiente del de arriba.
     Partido_Perdedor_Siguiente_ID INT,
     Slot_Perdedor_Siguiente VARCHAR(10),
+    -- ------------------------------------------------------------
+    -- "¿Cómo terminó este partido?" — siete columnas, cada una responde
+    -- UNA pregunta distinta (D-T2, docs/plans/desempate-tiempo-extra-
+    -- penales-plan.md). Ninguna es redundante con otra:
+    --   Ganador_Desempate_ID         -> ¿quién avanzó cuando el tiempo
+    --                                   regular terminó empatado?
+    --   Ganador_Corrido_ID           -> ¿quién ganó un partido 'Corrido'
+    --                                   (sin marcador de goles)?
+    --   Metodo_Desempate             -> ¿QUÉ terminó resolviendo ese
+    --                                   empate — tiempo extra, penales,
+    --                                   o decisión manual?
+    --   Metodo_Desempate_Aplicable   -> ¿qué regla regía cuando ESTE
+    --                                   partido arrancó (snapshot, puede
+    --                                   diferir de la regla actual del
+    --                                   torneo)?
+    --   Hubo_Tiempo_Extra            -> ¿se jugó prórroga, sin importar
+    --                                   qué terminó decidiendo?
+    --   Penales_Local/Penales_Visitante -> ¿cuál fue el marcador de la
+    --                                   tanda, si la hubo?
+    --   Es_Walkover                  -> ¿el partido se jugó, o se dio por
+    --                                   ausencia de un equipo?
+    -- ------------------------------------------------------------
     -- Desempate manual para un partido de Eliminación empatado en goles
     -- (penales/tiempo extra/decisión arbitral) — el sistema registra
     -- QUIÉN ganó, no CÓMO, mismo nivel de detalle que TRASPASOS.Motivo.
@@ -519,6 +554,47 @@ CREATE TABLE PARTIDOS (
     -- (fn_validar_ganador_corrido, 06_triggers.sql) — significan cosas
     -- distintas, reusar la misma columna sería más corto pero engañoso.
     Ganador_Corrido_ID INT,
+    -- Desempate de eliminatoria: tiempo extra y penales (docs/plans/
+    -- desempate-tiempo-extra-penales-plan.md, D3/§5) — el CÓMO al lado del
+    -- QUIÉN que ya vive en Ganador_Desempate_ID (no lo reemplaza).
+    -- 'Tiempo_Extra' -> el marcador ya decidió (goles de la prórroga
+    -- cuentan), Ganador_Desempate_ID y Penales_* quedan NULL.
+    -- 'Penales' -> Penales_Local/Visitante NOT NULL, Ganador_Desempate_ID
+    -- es el equipo con más penales. 'Manual' -> el radio "¿quién avanza?"
+    -- de siempre (Corrido, cierre forzado, decisión arbitral):
+    -- Ganador_Desempate_ID NOT NULL, Penales_* NULL. NULL = el tiempo
+    -- regular ya tenía ganador (no hubo empate que resolver). Coherencia
+    -- completa en fn_validar_partido_eliminacion_desempate
+    -- (06_triggers.sql). En una llave Ida_Vuelta/Mixto solo se escribe en
+    -- la VUELTA, nunca en la ida (mismo criterio que Ganador_Desempate_ID).
+    Metodo_Desempate VARCHAR(20),
+    -- Marcador de la tanda de penales de ESTE partido (el LOCAL/VISITANTE
+    -- de esta fila, no el global de la llave) — 0..99
+    -- (chk_partidos_penales_rango, 02_constraints.sql). Ambas NULL o
+    -- ambas NOT NULL y distintas entre sí (no se acepta una tanda
+    -- empatada). No entran al global de la llave (fn_resolver_llave no
+    -- se toca): son el marcador de la TANDA, no un gol.
+    Penales_Local INT,
+    Penales_Visitante INT,
+    -- Si se jugó prórroga, INDEPENDIENTEMENTE de qué terminó decidiendo
+    -- (D3/E2) — sin esta columna, una final 2-2 resuelta directo por
+    -- penales y la misma final que fue a prórroga y TAMBIÉN terminó en
+    -- penales grabarían exactamente lo mismo. No es derivable de
+    -- HITOS_PARTIDO: el camino de carga directa (partido.py) escribe
+    -- Inicio_Partido/Fin_Partido pero ningún hito de período.
+    Hubo_Tiempo_Extra BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Snapshot de TORNEO.Metodo_Desempate_Eliminatoria resuelto a un
+    -- método CONCRETO (ronda + regla del cuadro) en el momento en que
+    -- ESTE partido arranca (D6/§8) — no la regla actual del torneo, que
+    -- puede cambiar después sin afectar partidos ya arrancados. Dominio
+    -- más angosto que el de la columna del torneo:
+    -- 'Penales_Salvo_Final' ya se resolvió a 'Manual'/'Penales_Directo'/
+    -- 'Tiempo_Extra_Penales' al snapshotear, así que no es un valor
+    -- posible acá (chk_partidos_metodo_desempate_aplicable,
+    -- 02_constraints.sql). Solo se snapshotea en partidos de fase
+    -- Eliminación — NULL en cualquier otro (Liga/Grupos), y ese NULL es
+    -- justamente la señal de "esto no es un partido de eliminación".
+    Metodo_Desempate_Aplicable VARCHAR(20),
     -- Árbitro asignado a este partido. Nullable: un partido puede no tener
     -- árbitro asignado todavía. Sin esto, "el árbitro solo ve/carga SUS
     -- partidos asignados" (roles-3-modulos-plan.md, Fase 1) no es

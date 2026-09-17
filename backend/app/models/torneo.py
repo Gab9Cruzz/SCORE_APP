@@ -94,6 +94,14 @@ class Torneo(TimestampMixin, Base):
     # Default 'Unico' reproduce el comportamiento actual exacto para todo
     # torneo existente (chk_torneo_formato_eliminatoria, 02_constraints.sql).
     formato_eliminatoria: Mapped[str] = mapped_column(String(20), default="Unico")
+    # Desempate de eliminatoria: tiempo extra y penales (docs/plans/
+    # desempate-tiempo-extra-penales-plan.md, D1/§3). Valores válidos:
+    # Manual, Penales_Directo (chk_torneo_metodo_desempate_eliminatoria,
+    # 02_constraints.sql — el dominio crece recién en la migración 34).
+    # DEFAULT 'Manual' reproduce el comportamiento actual EXACTO de todo
+    # torneo existente y es el único valor permitido para disciplinas
+    # 'Corrido' (fn_validar_torneo_modalidad, 06_triggers.sql).
+    metodo_desempate_eliminatoria: Mapped[str] = mapped_column(String(20), default="Manual")
     # Orden explícito que el admin eligió para desempatar el podio cuando
     # 2+ equipos llegan empatados en pts/dg/gf a un mismo puesto (Finding 2 /
     # Taste Decision T1, CEO review) — lista de Equipo_ID en el orden

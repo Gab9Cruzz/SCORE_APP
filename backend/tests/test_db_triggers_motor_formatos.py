@@ -257,6 +257,7 @@ async def test_trigger_acepta_final_empatada_con_desempate_registrado(db_session
     await _registrar_goles(db_session, final.id, j2, final.equipos_id_visitante, 1)
     final.estado = "Finalizado"
     final.ganador_desempate_id = final.equipos_id_local
+    final.metodo_desempate = "Manual"
     await db_session.commit()  # no debe lanzar
     assert final.estado == "Finalizado"
 
@@ -376,6 +377,7 @@ async def test_trigger_vuelta_acepta_agregado_empatado_con_desempate(db_session:
     await _registrar_goles(db_session, vuelta.id, jugadores[visit_ida], visit_ida, 1)
     vuelta.estado = "Finalizado"
     vuelta.ganador_desempate_id = visit_ida
+    vuelta.metodo_desempate = "Manual"
     await db_session.commit()  # no debe lanzar
     await db_session.rollback()
 

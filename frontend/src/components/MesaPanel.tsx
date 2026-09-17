@@ -282,12 +282,20 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
     return { local, visitante };
   }, [eventosRegistrados, eventoNombrePorId, equipoLocalId]);
 
-  // Fase 0 (cierre-fase-regular-llaves-playoffs-plan.md, Finding 1):
-  // Ronda_Nombre solo se setea para un partido de bracket (Motor de
-  // Formatos, Eliminación) — ver motor_formatos.py — nunca para Liga/
-  // Grupos. No hace falta un endpoint nuevo para saber "¿esto es
-  // Eliminación?": el dato ya viaja en el propio partido.
-  const requiereDesempate = partidoQuery.data?.ronda_nombre != null && marcador.local === marcador.visitante;
+  // Desempate de eliminatoria: tiempo extra y penales (docs/plans/
+  // desempate-tiempo-extra-penales-plan.md, Fase 1, SPEC-REVIEW S12/D-Q2)
+  // — reemplaza la derivación de cliente que había acá
+  // (`ronda_nombre != null && marcador.local === marcador.visitante`),
+  // que no distinguía ida de vuelta (bug: una IDA empatada pedía
+  // desempate igual) ni sabía cuándo el torneo es 'Corrido'.
+  // `elegible_desempate` (calculado en el servidor) ya resuelve las dos:
+  // Eliminación no-Corrido, y NUNCA una ida. `goles_previos_global_*` son
+  // los goles YA JUGADOS de la ida (si este partido es la vuelta), cruzados
+  // a la orientación local/visitante de este partido — sumados al marcador
+  // en vivo arman el GLOBAL real de la llave.
+  const globalLocal = marcador.local + (partidoQuery.data?.goles_previos_global_local ?? 0);
+  const globalVisitante = marcador.visitante + (partidoQuery.data?.goles_previos_global_visitante ?? 0);
+  const requiereDesempate = !!partidoQuery.data?.elegible_desempate && globalLocal === globalVisitante;
 
   const mutation = useMutation({
     mutationFn: async (body: EventoBody) => {
@@ -465,6 +473,7 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
         mostrarInicio={false}
         onMinutoActual={setMinutoActual}
         requiereDesempate={requiereDesempate}
+        metodoDesempateAplicable={partidoQuery.data?.metodo_desempate_aplicable}
       />
 
       {/* 3A-8 (docs/plans/cierre-backlog-todos-plan.md, EC-C): antes, la

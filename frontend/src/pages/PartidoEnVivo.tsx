@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { formatearResultadoDesempate, fraseResultadoDesempate } from "../lib/desempate";
 
 // Intervalo de refresco para lo "en vivo" — arranca en 5s, ver Recommended
 // Approach del design doc. Fácil de ajustar acá si en la práctica se siente
@@ -246,7 +247,16 @@ export function PartidoEnVivoPage() {
           <span>{resultado?.equipo_local ?? "Local"}</span>
         </div>
         <div className="marcador__score">
-          {resultado ? `${resultado.goles_local} - ${resultado.goles_visitante}` : "- : -"}
+          {resultado
+            ? formatearResultadoDesempate({
+                golesLocal: resultado.goles_local,
+                golesVisitante: resultado.goles_visitante,
+                metodoDesempate: partidoQuery.data.metodo_desempate,
+                huboTiempoExtra: partidoQuery.data.hubo_tiempo_extra,
+                penalesLocal: partidoQuery.data.penales_local,
+                penalesVisitante: partidoQuery.data.penales_visitante,
+              })
+            : "- : -"}
         </div>
         <div className="marcador__equipo">
           <span>{resultado?.equipo_visitante ?? "Visitante"}</span>
@@ -258,6 +268,20 @@ export function PartidoEnVivoPage() {
         </span>
         {resultadosQuery.data && <span className="muted">actualizado en vivo</span>}
       </div>
+      {/* Desempate de eliminatoria: tiempo extra y penales (D-D9) — línea
+          en prosa, "Definido en penales 4-2 tras 2-2 en el tiempo extra". */}
+      {resultado &&
+        (() => {
+          const frase = fraseResultadoDesempate({
+            golesLocal: resultado.goles_local,
+            golesVisitante: resultado.goles_visitante,
+            metodoDesempate: partidoQuery.data.metodo_desempate,
+            huboTiempoExtra: partidoQuery.data.hubo_tiempo_extra,
+            penalesLocal: partidoQuery.data.penales_local,
+            penalesVisitante: partidoQuery.data.penales_visitante,
+          });
+          return frase && <p className="muted en-vivo__desempate">{frase}</p>;
+        })()}
       {/* D7/C17(b): el torneo sigue existiendo y estando despublicado NO
           rompe la página (la superficie de partido queda pública pase lo
           que pase) — pero el marcador de arriba (placeholders "Local"/

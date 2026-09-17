@@ -328,10 +328,23 @@ FOR EACH ROW EXECUTE FUNCTION fn_validar_equipos_inscritos();
 -- cruza tablas (mismo motivo que fn_validar_equipos_inscritos no es una
 -- FK: la regla vive en la combinación de dos tablas).
 -- ------------------------------------------------------------
+-- Desempate de eliminatoria: tiempo extra y penales (D5/§7, SPEC-REVIEW
+-- S7/F2) suma acá el chequeo "Corrido => Manual" — reusa esta función
+-- porque YA cruza TORNEO contra otra tabla, en vez de un trigger nuevo. El
+-- trigger es column-scoped (`UPDATE OF ...`), así que Metodo_Desempate_
+-- Eliminatoria se agrega a esa lista más abajo o el guard nunca corre.
+-- El INSERT queda estructuralmente inguardable acá (CONFIGURACION_TIEMPO_
+-- TORNEO tiene FK a TORNEO — en BEFORE INSERT esa fila todavía no existe,
+-- Tipo_Cronometro lee NULL): lo cubre TorneoService.create en Python. La
+-- dirección inversa (pasar Tipo_Cronometro a 'Corrido' en un torneo ya en
+-- 'Penales_Directo') también es Python (TorneoService.update baja el
+-- método a 'Manual'), no un segundo trigger cruzando en la dirección
+-- opuesta — misma regla de la casa que el comentario de :360-366 de abajo.
 CREATE OR REPLACE FUNCTION fn_validar_torneo_modalidad()
 RETURNS TRIGGER AS $$
 DECLARE
     v_modalidad_disciplina INT;
+    v_tipo_cronometro VARCHAR(20);
 BEGIN
     SELECT Disciplina_ID INTO v_modalidad_disciplina FROM MODALIDAD WHERE ID = NEW.Modalidad_ID;
     IF v_modalidad_disciplina IS NULL THEN
@@ -341,12 +354,20 @@ BEGIN
         RAISE EXCEPTION 'La modalidad indicada no pertenece a esta disciplina.';
     END IF;
 
+    IF NEW.Metodo_Desempate_Eliminatoria <> 'Manual' THEN
+        SELECT Tipo_Cronometro INTO v_tipo_cronometro
+          FROM CONFIGURACION_TIEMPO_TORNEO WHERE Torneo_ID = NEW.ID;
+        IF v_tipo_cronometro = 'Corrido' THEN
+            RAISE EXCEPTION 'penales_no_aplican_a_corrido';
+        END IF;
+    END IF;
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_torneo_validar_modalidad
-BEFORE INSERT OR UPDATE OF Disciplina_ID, Modalidad_ID ON TORNEO
+BEFORE INSERT OR UPDATE OF Disciplina_ID, Modalidad_ID, Metodo_Desempate_Eliminatoria ON TORNEO
 FOR EACH ROW EXECUTE FUNCTION fn_validar_torneo_modalidad();
 
 -- ------------------------------------------------------------
@@ -739,6 +760,77 @@ $$ LANGUAGE plpgsql;
 --   - Un 0-0 en la IDA es legal (se sale temprano, sin validar nada) — el
 --     empate se valida sobre el GLOBAL de la llave, solo al finalizar la
 --     VUELTA.
+-- Desempate de eliminatoria: tiempo extra y penales (D3/§5, SPEC-REVIEW
+-- S4/F3): reglas de FORMA/RANGO/COHERENCIA de las cinco columnas nuevas —
+-- intrínsecas a la FILA, no dependen de ida/vuelta/agregado. Extraídas a
+-- su propia función (D-A2 sigue valiendo: no es un trigger nuevo, la
+-- llama la única función que ya vale como BEFORE UPDATE de PARTIDOS)
+-- porque se necesitan desde DOS lugares del cuerpo de abajo: el camino
+-- normal de cierre y el carve-out de un PATCH sobre un partido ya
+-- Finalizado.
+CREATE OR REPLACE FUNCTION fn_validar_forma_desempate(
+    p_metodo_desempate VARCHAR(20),
+    p_penales_local INT,
+    p_penales_visitante INT,
+    p_hubo_tiempo_extra BOOLEAN,
+    p_ganador_desempate_id INT,
+    p_equipo_local INT,
+    p_equipo_visitante INT
+) RETURNS VOID AS $$
+DECLARE
+    v_ganador_tanda INT;
+BEGIN
+    -- Penales_Local/Visitante viajan juntos: los dos o ninguno.
+    IF (p_penales_local IS NULL) <> (p_penales_visitante IS NULL) THEN
+        RAISE EXCEPTION 'tanda_penales_fuera_de_rango';
+    END IF;
+
+    IF p_penales_local IS NOT NULL THEN
+        IF p_penales_local NOT BETWEEN 0 AND 99 OR p_penales_visitante NOT BETWEEN 0 AND 99 THEN
+            RAISE EXCEPTION 'tanda_penales_fuera_de_rango';
+        END IF;
+        IF p_penales_local = p_penales_visitante THEN
+            RAISE EXCEPTION 'tanda_penales_empatada';
+        END IF;
+        IF p_metodo_desempate IS DISTINCT FROM 'Penales' THEN
+            RAISE EXCEPTION 'metodo_desempate_incoherente';
+        END IF;
+        v_ganador_tanda := CASE WHEN p_penales_local > p_penales_visitante THEN p_equipo_local ELSE p_equipo_visitante END;
+        IF p_ganador_desempate_id IS DISTINCT FROM v_ganador_tanda THEN
+            RAISE EXCEPTION 'ganador_desempate_contradice_tanda';
+        END IF;
+    ELSIF p_metodo_desempate = 'Penales' THEN
+        RAISE EXCEPTION 'metodo_desempate_incoherente';
+    END IF;
+
+    IF p_metodo_desempate = 'Tiempo_Extra' THEN
+        -- El alargue desempató con goles: el marcador ya decide
+        -- (fn_marcador_partido nunca llega al ELSE v_ganador_desempate),
+        -- así que Ganador_Desempate_ID tiene que seguir NULL acá.
+        IF p_ganador_desempate_id IS NOT NULL THEN
+            RAISE EXCEPTION 'metodo_desempate_incoherente';
+        END IF;
+        -- Séptima regla de coherencia (SPEC-REVIEW S3): sin esto,
+        -- ('Tiempo_Extra', FALSE) es representable — la misma segunda
+        -- fuente de verdad que §0 invoca contra Fase/Fase_ID.
+        IF NOT p_hubo_tiempo_extra THEN
+            RAISE EXCEPTION 'metodo_desempate_incoherente';
+        END IF;
+    ELSIF p_metodo_desempate = 'Manual' AND p_ganador_desempate_id IS NULL THEN
+        -- 'Manual' sin ganador es un método declarado sin resolver quién
+        -- avanza — incoherente, no "falta el método" (ese código es para
+        -- el caso inverso, más abajo).
+        RAISE EXCEPTION 'metodo_desempate_incoherente';
+    END IF;
+
+    -- F1/S3: Ganador_Desempate_ID NOT NULL exige que se sepa CÓMO — cierra
+    -- la puerta a seguir grabando desempates ciegos.
+    IF p_ganador_desempate_id IS NOT NULL AND p_metodo_desempate IS NULL THEN
+        RAISE EXCEPTION 'desempate_sin_metodo';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION fn_validar_partido_eliminacion_desempate()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -748,10 +840,48 @@ DECLARE
     v_ganador_agregado INT;
     v_goles_local INT;
     v_goles_visitante INT;
+    v_toco_columnas_desempate BOOLEAN;
 BEGIN
-    IF NEW.Estado <> 'Finalizado' OR OLD.Estado = 'Finalizado' THEN
+    v_toco_columnas_desempate := (
+        NEW.Metodo_Desempate IS DISTINCT FROM OLD.Metodo_Desempate
+        OR NEW.Penales_Local IS DISTINCT FROM OLD.Penales_Local
+        OR NEW.Penales_Visitante IS DISTINCT FROM OLD.Penales_Visitante
+        OR NEW.Hubo_Tiempo_Extra IS DISTINCT FROM OLD.Hubo_Tiempo_Extra
+        OR NEW.Ganador_Desempate_ID IS DISTINCT FROM OLD.Ganador_Desempate_ID
+    );
+
+    -- Carve-out (SPEC-REVIEW F1/F3): hoy esta función es inerte para un
+    -- UPDATE sobre una fila ya Finalizada, así que un PATCH directo
+    -- escribiendo Penales_* sobre un partido cerrado esquivaría todas las
+    -- reglas nuevas. Deja entrar los UPDATEs que tocan cualquiera de las
+    -- cinco columnas nuevas — pero ese camino corre SOLO las reglas de
+    -- forma/rango/coherencia y termina: nunca vuelve a tomar el lock de
+    -- la ida ni llama fn_resolver_llave sobre una llave ya resuelta.
+    IF OLD.Estado = 'Finalizado' THEN
+        IF v_toco_columnas_desempate THEN
+            PERFORM fn_validar_forma_desempate(
+                NEW.Metodo_Desempate, NEW.Penales_Local, NEW.Penales_Visitante,
+                NEW.Hubo_Tiempo_Extra, NEW.Ganador_Desempate_ID,
+                NEW.EQUIPOS_ID_LOCAL, NEW.EQUIPOS_ID_VISITANTE
+            );
+        END IF;
         RETURN NEW;
     END IF;
+
+    IF NEW.Estado <> 'Finalizado' THEN
+        RETURN NEW;
+    END IF;
+
+    -- Reglas de forma/rango/coherencia (D-S1, S3, F1/F3/S4): inmediatamente
+    -- después del gate de estado y ANTES del lock de la ida — para que
+    -- también alcancen a un walkover con un Penales_* colgado, plausible y
+    -- absurdo (una posición posterior a la salida por Fase_ID IS NULL OR
+    -- Es_Walkover, más abajo, las dejaría fuera justo ahí).
+    PERFORM fn_validar_forma_desempate(
+        NEW.Metodo_Desempate, NEW.Penales_Local, NEW.Penales_Visitante,
+        NEW.Hubo_Tiempo_Extra, NEW.Ganador_Desempate_ID,
+        NEW.EQUIPOS_ID_LOCAL, NEW.EQUIPOS_ID_VISITANTE
+    );
 
     IF NEW.Partido_Ida_ID IS NOT NULL THEN
         -- FOR UPDATE (accepted obligation del review): dos operadores de
@@ -778,6 +908,12 @@ BEGIN
 
     SELECT EXISTS(SELECT 1 FROM PARTIDOS WHERE Partido_Ida_ID = NEW.ID) INTO v_es_ida;
     IF v_es_ida THEN
+        -- D4/§6: el desempate solo corresponde a la VUELTA (el GLOBAL) o a
+        -- un partido único — una IDA nunca lo escribe.
+        IF NEW.Metodo_Desempate IS NOT NULL OR NEW.Penales_Local IS NOT NULL
+           OR NEW.Penales_Visitante IS NOT NULL OR NEW.Hubo_Tiempo_Extra THEN
+            RAISE EXCEPTION 'desempate_en_ida_no_permitido';
+        END IF;
         RETURN NEW;   -- B4: un 0-0 (o cualquier resultado) en la IDA es legal.
     END IF;
 

@@ -49,6 +49,26 @@ class Partido(TimestampMixin, Base):
     # Distinta de ganador_desempate_id: ver el comentario grande en
     # 01_schema.sql sobre por qué no se reusa esa columna.
     ganador_corrido_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id"))
+    # Desempate de eliminatoria: tiempo extra y penales (docs/plans/
+    # desempate-tiempo-extra-penales-plan.md, D3/§5) — el CÓMO al lado del
+    # QUIÉN (ganador_desempate_id). Ver el comentario grande de las siete
+    # columnas "¿cómo terminó?" en 01_schema.sql. Valores válidos:
+    # Tiempo_Extra, Penales, Manual (chk_partidos_metodo_desempate).
+    metodo_desempate: Mapped[str | None] = mapped_column(String(20))
+    # Marcador de la tanda de penales de ESTE partido (LOCAL/VISITANTE de
+    # esta fila, no el global de la llave) — 0..99 (chk_partidos_penales_
+    # rango/chk_partidos_penales_visitante_rango).
+    penales_local: Mapped[int | None]
+    penales_visitante: Mapped[int | None]
+    # Si se jugó prórroga, independientemente de qué terminó decidiendo —
+    # ver el comentario grande en 01_schema.sql.
+    hubo_tiempo_extra: Mapped[bool] = mapped_column(default=False)
+    # Snapshot de Torneo.metodo_desempate_eliminatoria resuelto a un método
+    # CONCRETO en el momento en que ESTE partido arranca (D6/§8). Solo en
+    # partidos de fase Eliminación — NULL en cualquier otro. Valores
+    # válidos: Manual, Penales_Directo, Tiempo_Extra_Penales
+    # (chk_partidos_metodo_desempate_aplicable).
+    metodo_desempate_aplicable: Mapped[str | None] = mapped_column(String(20))
     # Árbitro asignado a este partido (nullable — puede no tener uno
     # todavía). Un solo árbitro por partido a propósito, ver D6 en
     # roles-3-modulos-plan.md. Usado por el ownership-check de

@@ -212,7 +212,9 @@ describe("MotorFormatosPanel — Grupos + Playoffs", () => {
       fase_completa: true,
       acciones_disponibles: ["generar_playoffs"],
     });
-    let cuerpoEnviado: { clasificados_por_grupo?: number } | undefined;
+    let cuerpoEnviado:
+      | { clasificados_por_grupo?: number; formato_eliminatoria?: string; metodo_desempate_eliminatoria?: string }
+      | undefined;
     server.use(
       http.get(TORNEO_URL, () =>
         HttpResponse.json({ id: TORNEO_ID, clasificados_por_grupo: 2, formato_eliminatoria: "Unico" }),
@@ -235,8 +237,15 @@ describe("MotorFormatosPanel — Grupos + Playoffs", () => {
     const modal = input.closest(".modal-panel") as HTMLElement;
     await user.click(within(modal).getByRole("button", { name: "Generar Playoffs" }));
 
+    // Desempate de eliminatoria: tiempo extra y penales (D1/§3) — el
+    // torneo mockeado no manda config_tiempo/metodo_desempate_eliminatoria,
+    // así que el panel usa los defaults de siempre ('Periodos'/'Manual').
     await waitFor(() =>
-      expect(cuerpoEnviado).toEqual({ clasificados_por_grupo: 1, formato_eliminatoria: "Unico" }),
+      expect(cuerpoEnviado).toEqual({
+        clasificados_por_grupo: 1,
+        formato_eliminatoria: "Unico",
+        metodo_desempate_eliminatoria: "Manual",
+      }),
     );
     // El modal se cierra al confirmar con éxito.
     expect(screen.queryByLabelText("Clasificados por grupo")).not.toBeInTheDocument();

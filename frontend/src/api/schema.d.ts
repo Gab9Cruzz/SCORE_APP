@@ -2539,6 +2539,12 @@ export interface components {
             ganador_corrido_id?: number | null;
             /** Ganador Desempate Id */
             ganador_desempate_id?: number | null;
+            /** Metodo Desempate */
+            metodo_desempate?: ("Tiempo_Extra" | "Penales" | "Manual") | null;
+            /** Penales Local */
+            penales_local?: number | null;
+            /** Penales Visitante */
+            penales_visitante?: number | null;
             /**
              * Forzado
              * @default false
@@ -2945,6 +2951,28 @@ export interface components {
             ganador_desempate_id?: number | null;
             /** Ganador Corrido Id */
             ganador_corrido_id?: number | null;
+            /** Metodo Desempate */
+            metodo_desempate?: ("Tiempo_Extra" | "Penales" | "Manual") | null;
+            /** Penales Local */
+            penales_local?: number | null;
+            /** Penales Visitante */
+            penales_visitante?: number | null;
+            /**
+             * Hubo Tiempo Extra
+             * @default false
+             */
+            hubo_tiempo_extra: boolean;
+            /** Metodo Desempate Aplicable */
+            metodo_desempate_aplicable?: ("Manual" | "Penales_Directo" | "Tiempo_Extra_Penales") | null;
+            /**
+             * Elegible Desempate
+             * @default false
+             */
+            elegible_desempate: boolean;
+            /** Goles Previos Global Local */
+            goles_previos_global_local?: number | null;
+            /** Goles Previos Global Visitante */
+            goles_previos_global_visitante?: number | null;
             /**
              * Es Walkover
              * @default false
@@ -2977,6 +3005,14 @@ export interface components {
             arbitro_id?: number | null;
             /** Ganador Desempate Id */
             ganador_desempate_id?: number | null;
+            /** Metodo Desempate */
+            metodo_desempate?: ("Tiempo_Extra" | "Penales" | "Manual") | null;
+            /** Penales Local */
+            penales_local?: number | null;
+            /** Penales Visitante */
+            penales_visitante?: number | null;
+            /** Hubo Tiempo Extra */
+            hubo_tiempo_extra?: boolean | null;
             /** Ganador Corrido Id */
             ganador_corrido_id?: number | null;
         };
@@ -3089,6 +3125,8 @@ export interface components {
             clasificados_por_grupo?: number | null;
             /** Formato Eliminatoria */
             formato_eliminatoria?: ("Unico" | "Ida_Vuelta" | "Mixto") | null;
+            /** Metodo Desempate Eliminatoria */
+            metodo_desempate_eliminatoria?: ("Manual" | "Penales_Directo") | null;
         };
         /** PodioOut */
         PodioOut: {
@@ -3245,6 +3283,15 @@ export interface components {
             ganador_corrido_id?: number | null;
             /** Ganador Desempate Id */
             ganador_desempate_id?: number | null;
+            /** Penales Local */
+            penales_local?: number | null;
+            /** Penales Visitante */
+            penales_visitante?: number | null;
+            /**
+             * Hubo Tiempo Extra
+             * @default false
+             */
+            hubo_tiempo_extra: boolean;
         };
         /**
          * ResultadoDirectoEvento
@@ -3300,6 +3347,17 @@ export interface components {
             grupo_id?: number | null;
             /** Estado */
             estado: string;
+            /** Metodo Desempate */
+            metodo_desempate?: string | null;
+            /**
+             * Hubo Tiempo Extra
+             * @default false
+             */
+            hubo_tiempo_extra: boolean;
+            /** Penales Local */
+            penales_local?: number | null;
+            /** Penales Visitante */
+            penales_visitante?: number | null;
         };
         /**
          * SorteoRequest
@@ -3393,6 +3451,12 @@ export interface components {
              * @enum {string}
              */
             formato_eliminatoria: "Unico" | "Ida_Vuelta" | "Mixto";
+            /**
+             * Metodo Desempate Eliminatoria
+             * @default Manual
+             * @enum {string}
+             */
+            metodo_desempate_eliminatoria: "Manual" | "Penales_Directo";
             config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoCreate"] | null;
             /** Cupo Maximo Inscripciones */
             cupo_maximo_inscripciones?: number | null;
@@ -3542,6 +3606,12 @@ export interface components {
              * @enum {string}
              */
             formato_eliminatoria: "Unico" | "Ida_Vuelta" | "Mixto";
+            /**
+             * Metodo Desempate Eliminatoria
+             * @default Manual
+             * @enum {string}
+             */
+            metodo_desempate_eliminatoria: "Manual" | "Penales_Directo";
             config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoOut"] | null;
             /** Cupo Maximo Inscripciones */
             cupo_maximo_inscripciones?: number | null;
@@ -3619,6 +3689,10 @@ export interface components {
             clasificados_por_grupo?: number | null;
             /** Incluye Tercer Lugar */
             incluye_tercer_lugar?: boolean | null;
+            /** Formato Eliminatoria */
+            formato_eliminatoria?: ("Unico" | "Ida_Vuelta" | "Mixto") | null;
+            /** Metodo Desempate Eliminatoria */
+            metodo_desempate_eliminatoria?: ("Manual" | "Penales_Directo") | null;
             config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoCreate"] | null;
             /** Cupo Maximo Inscripciones */
             cupo_maximo_inscripciones?: number | null;

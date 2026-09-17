@@ -13,6 +13,11 @@ FormatoTorneo = Literal["Liga", "Eliminacion", "Grupos_Playoffs"]
 # regular-llaves-playoffs-plan.md, requerimiento #2) — selector de
 # formato de eliminatoria.
 FormatoEliminatoria = Literal["Unico", "Ida_Vuelta", "Mixto"]
+# Desempate de eliminatoria: tiempo extra y penales (docs/plans/desempate-
+# tiempo-extra-penales-plan.md, D1/§3, SPEC-REVIEW S6/F6) — Fase 2 solo
+# habilita estos dos; 'Tiempo_Extra_Penales'/'Penales_Salvo_Final' llegan
+# en la Fase 3, junto con las columnas de período extra que los sostienen.
+MetodoDesempateEliminatoria = Literal["Manual", "Penales_Directo"]
 
 
 class TorneoBase(BaseModel):
@@ -50,6 +55,13 @@ class TorneoBase(BaseModel):
     # flujo "Configurar Siguiente Fase" es solo post-fase-regular y nunca
     # lo alcanzaría. Default 'Unico' reproduce el comportamiento actual.
     formato_eliminatoria: FormatoEliminatoria = "Unico"
+    # Desempate de eliminatoria: tiempo extra y penales (D1/§3) — CÓMO se
+    # resuelve un empate en tiempo regular. Mismo criterio que
+    # formato_eliminatoria: expuesto en el alta para que un torneo
+    # Eliminación puro también pueda elegirlo. DEFAULT 'Manual' reproduce
+    # el comportamiento actual. TorneoService rechaza cualquier valor
+    # distinto de 'Manual' si la disciplina es 'Corrido' (D5/§7).
+    metodo_desempate_eliminatoria: MetodoDesempateEliminatoria = "Manual"
     # Motor de Tiempos (gestion-avanzada-equipos-control-mesa-plan.md) — si
     # no se manda, TorneoService la crea con un default derivado de
     # Modalidad.tamano_equipo (Corrido si es individual, Periodos 2x45' si
@@ -144,6 +156,17 @@ class TorneoUpdate(BaseModel):
     equipos_por_grupo: int | None = None
     clasificados_por_grupo: int | None = None
     incluye_tercer_lugar: bool | None = None
+    # D-D3/C7 (desempate-tiempo-extra-penales-plan.md, §8/§11): editables
+    # los DOS juntos — formato_eliminatoria era create-only y §8 prometía
+    # una ventana de edición para metodo_desempate_eliminatoria que, sin
+    # esto, no tenía ninguna pantalla donde vivir (PasoGenerarPlayoffs
+    # corre antes de que exista ningún partido de eliminación en un
+    # torneo Eliminación puro). Ambos se pueden cambiar hasta que el
+    # primer partido de eliminación de este torneo ARRANCA — después, el
+    # cambio no afecta a los partidos que ya tomaron su regla (snapshot en
+    # Metodo_Desempate_Aplicable, D6/§8).
+    formato_eliminatoria: FormatoEliminatoria | None = None
+    metodo_desempate_eliminatoria: MetodoDesempateEliminatoria | None = None
     # Si viene, TorneoService.update la crea (si no existía) o la
     # actualiza (si ya existía) — se puede corregir en cualquier momento
     # (EC-13 del plan: no hay trigger que lo impida, es responsabilidad

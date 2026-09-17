@@ -27,6 +27,17 @@ class HitoPartidoCreate(BaseModel):
     # que termina empatado en goles — fn_validar_partido_eliminacion_
     # desempate lo exige antes de que este Hito dispare Estado='Finalizado'.
     ganador_desempate_id: int | None = None
+    # Desempate de eliminatoria: tiempo extra y penales (docs/plans/
+    # desempate-tiempo-extra-penales-plan.md, D-D1 — el paso de tanda de
+    # penales entra en FASE 2 también en el cronómetro EN VIVO, no solo en
+    # carga directa). Mismo motivo que ganador_desempate_id de arriba: se
+    # setean ANTES del Hito Fin_Partido para que fn_validar_partido_
+    # eliminacion_desempate ya los vea. Si viene `ganador_desempate_id`
+    # sin `metodo_desempate` (el radio manual de siempre), HitoPartidoService
+    # lo completa a 'Manual' (SPEC-REVIEW F1).
+    metodo_desempate: Literal["Tiempo_Extra", "Penales", "Manual"] | None = None
+    penales_local: int | None = None
+    penales_visitante: int | None = None
     # Cierre forzado (Área 4, T6): reusa este mismo endpoint
     # (POST /partidos/{id}/hitos) con tipo_hito='Fin_Partido' — evita un
     # segundo camino de escritura para el mismo Hito terminal (ver Sección 1
@@ -54,6 +65,20 @@ class HitoPartidoCreate(BaseModel):
                 raise ValueError("Especificá el motivo del cierre forzado (motivo_cierre_detalle).")
         elif self.motivo_cierre is not None:
             raise ValueError("motivo_cierre solo aplica a un cierre forzado (forzado=true).")
+        return self
+
+    @model_validator(mode="after")
+    def coherencia_penales(self):
+        # D-S1/D-D7: mismo chequeo que ResultadoDirectoCreate.coherencia_penales
+        # (schemas/partido.py) — un 400 legible en el paso de tanda del
+        # cronómetro en vivo, antes del 409 genérico del trigger.
+        if (self.penales_local is None) != (self.penales_visitante is None):
+            raise ValueError("penales_local y penales_visitante van juntos: los dos o ninguno.")
+        if self.penales_local is not None:
+            if not (0 <= self.penales_local <= 99) or not (0 <= self.penales_visitante <= 99):
+                raise ValueError("El marcador de la tanda de penales debe estar entre 0 y 99.")
+            if self.penales_local == self.penales_visitante:
+                raise ValueError("Una tanda de penales no puede terminar empatada.")
         return self
 
 

@@ -5,6 +5,11 @@ import { useModalFocusTrap } from "../../../hooks/useModalFocusTrap";
 
 type AccionDisponible = "cerrar_directo" | "generar_playoffs";
 type FormatoEliminatoria = "Unico" | "Ida_Vuelta" | "Mixto";
+// Desempate de eliminatoria: tiempo extra y penales (docs/plans/desempate-
+// tiempo-extra-penales-plan.md, D1/§3, SPEC-REVIEW S6) — fase 2 solo
+// ofrece estos dos; 'Tiempo_Extra_Penales'/'Penales_Salvo_Final' llegan en
+// fase 3 con las columnas que los sostienen.
+type MetodoDesempateEliminatoria = "Manual" | "Penales_Directo";
 
 interface PosicionRow {
   equipo_id: number;
@@ -26,6 +31,13 @@ const FORMATO_OPCIONES: { value: FormatoEliminatoria; titulo: string; subtitulo:
   { value: "Mixto", titulo: "Mixto", subtitulo: "Ida y vuelta salvo la final, a un partido." },
 ];
 
+// D-D10: 'Manual' se relabela en vocabulario de operador, no de
+// desarrollador (§11).
+const METODO_DESEMPATE_OPCIONES: { value: MetodoDesempateEliminatoria; titulo: string; subtitulo: string }[] = [
+  { value: "Manual", titulo: "Lo decido yo al cerrar el partido", subtitulo: "El radio de siempre — sin marcador de tanda." },
+  { value: "Penales_Directo", titulo: "Penales, sin prórroga", subtitulo: "Empate en tiempo regular ⇒ directo a la tanda." },
+];
+
 /** Cierre de Fase Regular + Llaves + Playoffs
  * (docs/plans/cierre-fase-regular-llaves-playoffs-plan.md, E2): reemplaza
  * y absorbe `ModalClasificadosPorGrupo` — antes era el único paso previo
@@ -39,6 +51,11 @@ export function ModalSiguienteFase(props: {
   formatoTorneo: "Liga" | "Eliminacion" | "Grupos_Playoffs";
   accionesDisponibles: AccionDisponible[];
   formatoEliminatoriaActual: FormatoEliminatoria;
+  metodoDesempateEliminatoriaActual: MetodoDesempateEliminatoria;
+  /** D5/§7: el torneo es 'Corrido' (Tenis/Pádel/Ajedrez/LoL) — el
+   * selector de método de desempate se OMITE, no se deshabilita (un
+   * control que nunca se puede usar es ruido). */
+  tipoCronometro: "Periodos" | "Corrido";
   clasificadosPorGrupoActual: number | null;
   fechaInicioTorneo: string | null;
   onClose: () => void;
@@ -50,6 +67,8 @@ export function ModalSiguienteFase(props: {
     formatoTorneo,
     accionesDisponibles,
     formatoEliminatoriaActual,
+    metodoDesempateEliminatoriaActual,
+    tipoCronometro,
     clasificadosPorGrupoActual,
     fechaInicioTorneo,
     onClose,
@@ -132,6 +151,8 @@ export function ModalSiguienteFase(props: {
             torneoId={torneoId}
             formatoTorneo={formatoTorneo}
             formatoEliminatoriaActual={formatoEliminatoriaActual}
+            metodoDesempateEliminatoriaActual={metodoDesempateEliminatoriaActual}
+            tipoCronometro={tipoCronometro}
             clasificadosPorGrupoActual={clasificadosPorGrupoActual}
             fechaInicioTorneo={fechaInicioTorneo}
             mostrarVolver={mostrarPaso1}
@@ -367,6 +388,8 @@ function PasoGenerarPlayoffs(props: {
   torneoId: number;
   formatoTorneo: "Liga" | "Eliminacion" | "Grupos_Playoffs";
   formatoEliminatoriaActual: FormatoEliminatoria;
+  metodoDesempateEliminatoriaActual: MetodoDesempateEliminatoria;
+  tipoCronometro: "Periodos" | "Corrido";
   clasificadosPorGrupoActual: number | null;
   fechaInicioTorneo: string | null;
   mostrarVolver: boolean;
@@ -378,6 +401,8 @@ function PasoGenerarPlayoffs(props: {
     torneoId,
     formatoTorneo,
     formatoEliminatoriaActual,
+    metodoDesempateEliminatoriaActual,
+    tipoCronometro,
     clasificadosPorGrupoActual,
     fechaInicioTorneo,
     mostrarVolver,
@@ -387,6 +412,7 @@ function PasoGenerarPlayoffs(props: {
   } = props;
   const [clasificados, setClasificados] = useState(String(clasificadosPorGrupoActual ?? 2));
   const [formato, setFormato] = useState<FormatoEliminatoria>(formatoEliminatoriaActual);
+  const [metodoDesempate, setMetodoDesempate] = useState<MetodoDesempateEliminatoria>(metodoDesempateEliminatoriaActual);
 
   const n = Number(clasificados);
   const esValido = clasificados !== "" && Number.isInteger(n) && n >= 1;
@@ -415,7 +441,11 @@ function PasoGenerarPlayoffs(props: {
     mutationFn: async () => {
       const { data, error } = await api.POST("/api/v1/torneos/{torneo_id}/playoffs", {
         params: { path: { torneo_id: torneoId } },
-        body: { clasificados_por_grupo: n, formato_eliminatoria: formato },
+        body: {
+          clasificados_por_grupo: n,
+          formato_eliminatoria: formato,
+          ...(tipoCronometro === "Corrido" ? {} : { metodo_desempate_eliminatoria: metodoDesempate }),
+        },
       } as never);
       if (error) throw error;
       return data;
@@ -437,7 +467,7 @@ function PasoGenerarPlayoffs(props: {
         </label>
         {!esValido && clasificados !== "" && <p className="error-text">Tiene que ser al menos 1.</p>}
 
-        <p className="muted--cuerpo">Formato de eliminatoria</p>
+        <p className="modal-panel__grupo-titulo">Formato de los cruces</p>
         {FORMATO_OPCIONES.map((op) => (
           <label key={op.value} className="modal-panel__equipo-fila">
             <input type="radio" name="formato-eliminatoria" checked={formato === op.value} onChange={() => setFormato(op.value)} />
@@ -456,6 +486,33 @@ function PasoGenerarPlayoffs(props: {
         )}
         {formato !== "Unico" && (
           <p className="muted--cuerpo">La vuelta se agenda 7 días después de la ida. Podés mover las fechas después desde cada partido.</p>
+        )}
+
+        {/* Desempate de eliminatoria: tiempo extra y penales (D1/§3,
+            D-D10) — omitido (no deshabilitado) si el torneo es 'Corrido':
+            un control que nunca se puede usar es ruido (D5/§7). Encabezado
+            y separación propios — sin esto son 6 radios en una sola
+            columna sin decir a qué pregunta responde cada grupo. */}
+        {tipoCronometro !== "Corrido" && (
+          <>
+            <p className="modal-panel__grupo-titulo modal-panel__grupo-titulo--separado">Si un cruce termina empatado</p>
+            {METODO_DESEMPATE_OPCIONES.map((op) => (
+              <label key={op.value} className="modal-panel__equipo-fila">
+                <input
+                  type="radio"
+                  name="metodo-desempate-eliminatoria"
+                  checked={metodoDesempate === op.value}
+                  onChange={() => setMetodoDesempate(op.value)}
+                />
+                <span>
+                  {op.titulo}
+                  <br />
+                  <span className="muted--cuerpo">{op.subtitulo}</span>
+                </span>
+              </label>
+            ))}
+            <p className="muted--cuerpo">Las llaves ya cerradas conservan cómo se resolvieron.</p>
+          </>
         )}
       </div>
       {generar.isError && <p className="error-text">{apiErrorMessage(generar.error)}</p>}

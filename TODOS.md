@@ -68,9 +68,16 @@ Deferido desde ese mismo plan:
   15s, para wifi de cancha intermitente que no siempre dispara ese
   evento) y "Reintentar ahora"/"Descartar" manuales (3B-1,
   `docs/plans/cierre-backlog-todos-plan.md`, hecho el 2026-09-01).
-- **Tiempo extra / prórroga / penales** como estructura de cronómetro
-  propia — no pedido; un torneo que los usa hoy los resuelve como ya lo
-  hace (`Ganador_Desempate_ID`), sin cronómetro dedicado.
+- ~~Tiempo extra / prórroga / penales como estructura de cronómetro
+  propia~~ — **premisa revertida (2026-09-17).** Este ítem asumía que
+  `Ganador_Desempate_ID` alcanzaba porque nadie pedía el CÓMO; sí se pidió,
+  y `docs/plans/desempate-tiempo-extra-penales-plan.md` lo construyó:
+  Fase 2 (implementada) suma `Metodo_Desempate`/`Penales_Local`/
+  `Penales_Visitante`/`Hubo_Tiempo_Extra`/`Metodo_Desempate_Aplicable` al
+  lado de `Ganador_Desempate_ID` (que se mantiene). Fase 3 (tiempo extra
+  como PERÍODOS reales del cronómetro, no solo una etiqueta) sigue sin
+  construirse — gateada por evidencia, ver la sección dedicada más abajo
+  ("Deferido desde el plan de Desempate de Eliminatoria").
 
 ## Equipo con roster autoritativo permanente — aparcado
 
@@ -565,6 +572,13 @@ proteger (dispositivo del operador cae durante la ventana de 5s).
   Effort: L, excede 1 día CC — se revisita si aparece un tercer campo de
   reglamento además de `minimo_jugadores_para_iniciar`/`maximo_titulares_permitido`/
   `permite_cambios_ilimitados`.
+  **Este disparador YA SE CUMPLIÓ (D-T1, docs/plans/desempate-tiempo-extra-penales-
+  plan.md):** `TORNEO.Metodo_Desempate_Eliminatoria` es un cuarto campo de
+  reglamento del mismo tipo (una regla del torneo que gobierna cómo se cierra un
+  partido). El refactor sigue sin hacerse acá a propósito (Effort L, fuera del
+  blast radius de ese plan) — pero el PRÓXIMO campo de reglamento que se agregue
+  tiene que aterrizar sobre una decisión YA TOMADA de si este refactor se hace o
+  se sigue posponiendo, no repetir la pregunta.
 - **Mecanismo genérico de "operación reversible con ventana de gracia"** — el
   patrón construido para `deshacer-cierre-forzado` (insertar de inmediato + endpoint
   compensatorio con ventana server-side) es candidato a generalizarse si aparece una
@@ -730,3 +744,31 @@ implementado 2026-09-15 (R1+R2+R3 completos)
   primero exista la página pública de campeón (UC2 de ese plan, sin resolver).
   **Esfuerzo:** M → con CC, S. **Prioridad:** P3. **Bloqueado por:** las
   columnas de podio de ese plan, y UC2.
+
+## Deferido desde el plan de Desempate de Eliminatoria: Tiempo Extra y Penales (`docs/plans/desempate-tiempo-extra-penales-plan.md`)
+
+- **Fase 3 (tiempo extra como reloj real, `Tiempo_Extra_Penales`/`Penales_Salvo_Final`)**
+  — NO se construye todavía. Gate explícito (C10): antes de agendarla hay que
+  correr la métrica 4 (split cronómetro en vivo vs carga directa en cierres de
+  Eliminación, 90 días — `docs/queries/metricas-desempate-tiempo-extra-penales.sql`)
+  contra la base de producción/desarrollo real. Si domina la carga directa, la
+  forma de §4 de ese plan se reconsidera antes de construirla — no es un simple
+  "cuándo hay tiempo", es una decisión de producto pendiente de evidencia.
+- **Desempate por llave individual** (override de `Metodo_Desempate_Eliminatoria`
+  para UN cruce puntual, distinto del resto del cuadro) — el hook ya existe
+  (`PARTIDOS.Metodo_Desempate_Aplicable` se snapshotea por partido), la UI no se
+  construyó. `Penales_Salvo_Final` (Fase 3) cubre el caso real más común (todo el
+  cuadro a penales salvo la Final) sin necesitar esto.
+- **Tanda de penales gol a gol** (quién pateó, quién atajó, en qué orden) — hoy
+  solo se guarda el marcador final de la tanda (`Penales_Local`/`Penales_Visitante`).
+  Un registro tirador-por-tirador es un modelo de datos aparte (tabla propia,
+  UI de carga secuencial) — nadie lo pidió, se nombra para que no se confunda
+  con un olvido.
+- **Hacer editable `formato_eliminatoria` y `metodo_desempate_eliminatoria` desde
+  un lugar más visible que "Reglas de desempate" en `TorneosAdmin.tsx`** — hoy es
+  un botón por edición, separado del formulario principal de "Editar". Fusionarlos
+  es cosmético (mismo endpoint `PATCH /torneos/{id}`), se separó así para no
+  reabrir el formulario de creación completo (`camposTorneoNuevo`) por dos campos.
+- **Muerte súbita / gol de oro dentro del alargue** — fuera de scope a propósito
+  (ninguna competencia real de este mercado lo usa hoy); si aparece, es una
+  variante de `_periodos_totales_permitidos` (Fase 3), no una feature nueva.

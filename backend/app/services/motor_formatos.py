@@ -35,12 +35,14 @@ from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.partido import Partido
 from app.models.sorteo import Sorteo
 from app.models.torneo import Torneo
+from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoRepository
 from app.repositories.estadisticas import EstadisticasRepository
 from app.repositories.fase import FaseRepository
 from app.repositories.grupo import GrupoRepository
 from app.repositories.grupo_equipo import GrupoEquipoRepository
 from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.repositories.torneo import TorneoRepository
+from app.services.desempate import validar_metodo_desempate_eliminatoria
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +119,10 @@ class MotorFormatosService:
         self.grupo_equipo_repo = GrupoEquipoRepository(session)
         self.inscripcion_repo = InscripcionTorneoRepository(session)
         self.estadisticas_repo = EstadisticasRepository(session)
+        # Desempate de eliminatoria: tiempo extra y penales (D5/§7) — para
+        # validar `metodo_desempate_eliminatoria` contra Tipo_Cronometro en
+        # `generar_playoffs`, mismo criterio que TorneoService.
+        self.config_tiempo_repo = ConfiguracionTiempoTorneoRepository(session)
 
     # ---------- helpers compartidos ----------
 
@@ -588,6 +594,7 @@ class MotorFormatosService:
         usuario_id: int,
         clasificados_por_grupo: int | None = None,
         formato_eliminatoria: str | None = None,
+        metodo_desempate_eliminatoria: str | None = None,
     ) -> Fase:
         """`clasificados_por_grupo` (control-mesa-reactividad-playoffs-
         plan.md, Fase 3 §6): override puntual pedido al momento de generar
@@ -597,7 +604,10 @@ class MotorFormatosService:
         nuevo. Si no se manda (None), usa el config existente del torneo
         sin tocarlo — mismo comportamiento que antes de este cambio.
         `formato_eliminatoria` (Fase D del plan) sigue el mismo criterio
-        exacto.
+        exacto. `metodo_desempate_eliminatoria` (desempate-tiempo-extra-
+        penales-plan.md, D1/§3) también: si se manda, se PERSISTE en
+        `Torneo.metodo_desempate_eliminatoria`; rechazado si el torneo es
+        'Corrido' (D5/§7) — mismo chequeo que `TorneoService`.
 
         C2 (cierre-fase-regular-llaves-playoffs-plan.md): generalizado a
         Liga → liguilla, reusando `clasificados_por_grupo` con el
@@ -627,6 +637,11 @@ class MotorFormatosService:
             torneo.clasificados_por_grupo = clasificados_por_grupo
         if formato_eliminatoria is not None:
             torneo.formato_eliminatoria = formato_eliminatoria
+        if metodo_desempate_eliminatoria is not None:
+            config = await self.config_tiempo_repo.get_by_torneo(torneo_id)
+            tipo_cronometro = config.tipo_cronometro if config is not None else "Periodos"
+            validar_metodo_desempate_eliminatoria(metodo_desempate_eliminatoria, tipo_cronometro)
+            torneo.metodo_desempate_eliminatoria = metodo_desempate_eliminatoria
 
         if torneo.formato == "Grupos_Playoffs":
             grupos = await self.grupo_repo.listar_por_fase(fase_regular.id)

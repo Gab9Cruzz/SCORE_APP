@@ -12,6 +12,7 @@ from app.models.usuario import Usuario
 from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoRepository
 from app.repositories.convocado_a_partido import ConvocadoAPartidoRepository
 from app.repositories.equipo import EquipoRepository
+from app.repositories.fase import FaseRepository
 from app.repositories.hito_partido import HitoPartidoRepository
 from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.repositories.jugador_equipo import JugadorEquipoRepository
@@ -27,6 +28,13 @@ from app.schemas.hito_partido import (
     HitoPartidoUpdate,
     PreflightInicioOut,
     TitularesEquipoOut,
+)
+from app.core.metricas import registrar_evento
+from app.services.desempate import (
+    completar_metodo_manual,
+    derivar_ganador_desde_penales,
+    es_escape_manual_sobre_metodo_configurado,
+    resolver_metodo_desempate_aplicable,
 )
 from app.services.permisos import verificar_arbitro_asignado
 
@@ -55,6 +63,10 @@ class HitoPartidoService:
         # B.2 (fixes-datos-traspasos-control-mesa-plan.md, D4): validación
         # de titulares antes de Inicio_Partido — ver _validar_titulares.
         self.torneo_repo = TorneoRepository(session)
+        # Desempate de eliminatoria: tiempo extra y penales (D6/§8) — para
+        # saber si ESTE partido es de fase Eliminación al snapshotear
+        # Metodo_Desempate_Aplicable en Inicio_Partido.
+        self.fase_repo = FaseRepository(session)
         # Cascada de archivado (cascada-archivado-alineaciones-traspasos-
         # plan.md, P7): defensa en profundidad contra Inicio_Partido en un
         # torneo archivado — ver _validar_torneo_no_archivado.
@@ -265,6 +277,28 @@ class HitoPartidoService:
             if fila["titulares"] < requeridos:
                 raise DomainRuleError(self._motivo_faltan_titulares(torneo, requeridos, fila))
 
+    async def _snapshotear_metodo_desempate_aplicable(self, partido: Partido, torneo: Torneo) -> Partido:
+        """D6/§8: graba en `Metodo_Desempate_Aplicable` la regla CONCRETA
+        que rige a ESTE partido, tomada de `Torneo.metodo_desempate_eliminatoria`
+        en el instante en que el partido arranca — no la regla actual del
+        torneo, que puede cambiar después sin afectar partidos ya
+        arrancados (la edición en `TorneoUpdate` queda libre de romper
+        nada retroactivamente).
+
+        Solo para partidos de fase Eliminación — en cualquier otro caso
+        (Liga/Grupos) queda NULL, que es la señal que usa
+        `_periodos_totales_permitidos` (Fase 3) para saber que esto no es
+        un partido de eliminación sin que se le pase la fase aparte."""
+        if partido.fase_id is None:
+            return partido
+        fase = await self.fase_repo.get(partido.fase_id)
+        if fase is None or fase.tipo != "Eliminacion":
+            return partido
+        metodo_aplicable = resolver_metodo_desempate_aplicable(
+            torneo.metodo_desempate_eliminatoria, partido.ronda_nombre
+        )
+        return await self.partido_repo.save_changes(partido, metodo_desempate_aplicable=metodo_aplicable)
+
     async def preflight_inicio(self, partido_id: int) -> PreflightInicioOut:
         """¿Se puede tocar "Empezar Partido"? — el veredicto que consume el
         frontend (gestionar-partido-alineaciones-plan.md, H1-eng).
@@ -361,6 +395,7 @@ class HitoPartidoService:
             torneo = await self.torneo_repo.get_or_404(partido.torneo_id)
             await self._validar_torneo_no_archivado(torneo)
             await self._validar_titulares(partido, torneo)
+            partido = await self._snapshotear_metodo_desempate_aplicable(partido, torneo)
 
         numero_periodo = data.numero_periodo
         if data.tipo_hito == "Inicio_Periodo" and numero_periodo is None:
@@ -381,14 +416,55 @@ class HitoPartidoService:
             # validación lo rechaza.
             partido = await self.partido_repo.save_changes(partido, ganador_corrido_id=data.ganador_corrido_id)
 
-        if data.tipo_hito == "Fin_Partido" and data.ganador_desempate_id is not None:
+        if data.tipo_hito == "Fin_Partido" and (
+            data.ganador_desempate_id is not None or data.penales_local is not None
+        ):
             # Mismo motivo que el ganador_corrido_id de arriba: se setea
             # ANTES del Hito, para que fn_validar_partido_eliminacion_
             # desempate ya lo vea no-NULL si el partido terminó empatado en
             # goles. No se exige acá (a diferencia de Corrido) — el
             # trigger es quien sabe si hacía falta, mismo criterio que
             # PartidoUpdate.ganador_desempate_id.
-            partido = await self.partido_repo.save_changes(partido, ganador_desempate_id=data.ganador_desempate_id)
+            #
+            # Desempate de eliminatoria: tiempo extra y penales (D-D1 — el
+            # paso de tanda entra en fase 2 también acá, en el cronómetro
+            # EN VIVO). Si vino la tanda, el ganador se DERIVA de ella
+            # siempre (D-D4: nunca del cliente — una tanda cargada al
+            # revés en una vuelta, cuyo encabezado muestra el GLOBAL con
+            # localía cruzada, avanzaría al equipo equivocado si se
+            # confiara en el `ganador_desempate_id` que mandó el cliente).
+            # Si no vino tanda, es el radio manual de siempre — se completa
+            # `metodo_desempate='Manual'` (SPEC-REVIEW F1): ese camino no
+            # sabe mandarlo, y sin este default la migración 33 lo rechaza
+            # con `desempate_sin_metodo`.
+            ganador_desempate_id = data.ganador_desempate_id
+            metodo_desempate = data.metodo_desempate
+            if data.penales_local is not None:
+                ganador_desempate_id = derivar_ganador_desde_penales(
+                    data.penales_local, data.penales_visitante,
+                    partido.equipos_id_local, partido.equipos_id_visitante,
+                )
+                metodo_desempate = "Penales"
+            else:
+                metodo_desempate = completar_metodo_manual(ganador_desempate_id, metodo_desempate)
+            if es_escape_manual_sobre_metodo_configurado(metodo_desempate, partido.metodo_desempate_aplicable):
+                # D-A1/métrica 3 (§12-bis): cierre Manual sobre un torneo
+                # configurado de otra forma — permitido a propósito, pero
+                # logueado.
+                registrar_evento(
+                    "desempate_manual_sobre_metodo_configurado",
+                    partido_id=partido.id,
+                    torneo_id=partido.torneo_id,
+                    metodo_aplicable=partido.metodo_desempate_aplicable,
+                    camino="vivo",
+                )
+            partido = await self.partido_repo.save_changes(
+                partido,
+                ganador_desempate_id=ganador_desempate_id,
+                metodo_desempate=metodo_desempate,
+                penales_local=data.penales_local,
+                penales_visitante=data.penales_visitante,
+            )
 
         hito = await self.repo.create(
             partido_id=partido_id,
@@ -451,8 +527,35 @@ class HitoPartidoService:
                 raise DomainRuleError("El ganador debe ser uno de los dos equipos que disputan el partido.")
             partido = await self.partido_repo.save_changes(partido, ganador_corrido_id=data.ganador_corrido_id)
 
-        if data.ganador_desempate_id is not None:
-            partido = await self.partido_repo.save_changes(partido, ganador_desempate_id=data.ganador_desempate_id)
+        if data.ganador_desempate_id is not None or data.penales_local is not None:
+            # Mismo criterio exacto que el Fin_Partido normal (SPEC-REVIEW
+            # F1/D-D4) — un cierre forzado con empate puede venir con tanda
+            # de penales igual que uno normal.
+            ganador_desempate_id = data.ganador_desempate_id
+            metodo_desempate = data.metodo_desempate
+            if data.penales_local is not None:
+                ganador_desempate_id = derivar_ganador_desde_penales(
+                    data.penales_local, data.penales_visitante,
+                    partido.equipos_id_local, partido.equipos_id_visitante,
+                )
+                metodo_desempate = "Penales"
+            else:
+                metodo_desempate = completar_metodo_manual(ganador_desempate_id, metodo_desempate)
+            if es_escape_manual_sobre_metodo_configurado(metodo_desempate, partido.metodo_desempate_aplicable):
+                registrar_evento(
+                    "desempate_manual_sobre_metodo_configurado",
+                    partido_id=partido.id,
+                    torneo_id=partido.torneo_id,
+                    metodo_aplicable=partido.metodo_desempate_aplicable,
+                    camino="forzado",
+                )
+            partido = await self.partido_repo.save_changes(
+                partido,
+                ganador_desempate_id=ganador_desempate_id,
+                metodo_desempate=metodo_desempate,
+                penales_local=data.penales_local,
+                penales_visitante=data.penales_visitante,
+            )
 
         hito = await self.repo.create(
             partido_id=partido.id,
@@ -539,6 +642,16 @@ class HitoPartidoService:
         config = await self.config_repo.get_by_torneo(partido.torneo_id)
         estado = self._calcular_estado(hitos_restantes, config)
         partido.estado = "Finalizado" if estado["partido_finalizado"] else "En curso"
+        # SPEC-REVIEW S2: deshacer_fin_forzado ya limpiaba Ganador_Corrido_ID
+        # implícitamente (nunca lo tocó, se recalcula solo al re-cerrar) pero
+        # NO limpiaba Ganador_Desempate_ID — un partido deshecho volvía a
+        # 'En curso' arrastrando una tanda de penales que ya no decidió
+        # nada. Las cinco columnas de desempate se limpian acá.
+        partido.metodo_desempate = None
+        partido.penales_local = None
+        partido.penales_visitante = None
+        partido.ganador_desempate_id = None
+        partido.hubo_tiempo_extra = False
         await self.session.commit()
         await self.session.refresh(partido)
 

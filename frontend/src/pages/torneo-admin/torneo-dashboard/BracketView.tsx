@@ -4,6 +4,7 @@ import type { Equipo as EquipoRow } from "../../../api/types";
 import { api, apiErrorMessage } from "../../../api/client";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
 import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
+import { badgePenales } from "../../../lib/desempate";
 
 interface PartidoBracket {
   id: number;
@@ -22,6 +23,12 @@ interface PartidoBracket {
   fecha_partido: string;
   ganador_corrido_id: number | null;
   es_walkover: boolean;
+  // Desempate de eliminatoria: tiempo extra y penales (D-D9) — viven en
+  // el partido de VUELTA (o único); una IDA nunca los tiene.
+  metodo_desempate?: "Tiempo_Extra" | "Penales" | "Manual" | null;
+  hubo_tiempo_extra?: boolean;
+  penales_local?: number | null;
+  penales_visitante?: number | null;
 }
 
 interface ResultadoRow {
@@ -199,6 +206,31 @@ export function BracketView({ torneoId }: { torneoId: number }) {
     );
   }
 
+  // Desempate de eliminatoria: tiempo extra y penales (D-D9) — badge
+  // compacto y NO envolvente ("pen. 4-2"), separado del marcador/global
+  // que ya se muestra aparte. `aria-label` completo (D-D15): el badge
+  // visual abrevia, el lector de pantalla no.
+  function badgeDesempate(p: PartidoBracket) {
+    const texto = badgePenales({
+      golesLocal: 0,
+      golesVisitante: 0,
+      metodoDesempate: p.metodo_desempate,
+      huboTiempoExtra: p.hubo_tiempo_extra,
+      penalesLocal: p.penales_local,
+      penalesVisitante: p.penales_visitante,
+    });
+    if (!texto) return null;
+    return (
+      <span
+        className="badge badge--desempate"
+        aria-label={`Penales ${p.penales_local} a ${p.penales_visitante}`}
+      >
+        {" "}
+        {texto}
+      </span>
+    );
+  }
+
   function renderPartido(p: PartidoBracket) {
     const marcador = marcadorDePierna(p);
     if (p.partido_ida_id == null) {
@@ -210,6 +242,8 @@ export function BracketView({ torneoId }: { torneoId: number }) {
           {marcador && (
             <p className="muted--cuerpo">
               {marcador}
+              {p.hubo_tiempo_extra && " a.e.t."}
+              {badgeDesempate(p)}
               {badgeWalkover(p)}
             </p>
           )}
@@ -241,7 +275,13 @@ export function BracketView({ torneoId }: { torneoId: number }) {
             <span className="muted"> ({ETIQUETA_ESTADO_PIERNA[p.estado] ?? p.estado})</span>
           </span>
         </div>
-        {agregado && <p className="bracket__agregado">{agregado}</p>}
+        {agregado && (
+          <p className="bracket__agregado">
+            {agregado}
+            {p.hubo_tiempo_extra && " a.e.t."}
+            {badgeDesempate(p)}
+          </p>
+        )}
         {ida && ida.estado !== "Programado" && ida.estado !== "En curso" && p.estado === "Programado" && (
           <p className="bracket__agregado">Ida jugada · Vuelta pendiente</p>
         )}

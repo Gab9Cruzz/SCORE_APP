@@ -627,6 +627,9 @@ export function GestionarPartidoPage() {
             equipos_id_local: partido.equipos_id_local,
             equipos_id_visitante: partido.equipos_id_visitante,
             ronda_nombre: partido.ronda_nombre ?? null,
+            elegible_desempate: partido.elegible_desempate,
+            goles_previos_global_local: partido.goles_previos_global_local,
+            goles_previos_global_visitante: partido.goles_previos_global_visitante,
           }}
           nombreEquipo={nombreEquipo}
           onClose={() => setResultadoDirectoAbierto(false)}

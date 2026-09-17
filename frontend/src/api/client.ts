@@ -63,11 +63,24 @@ api.use({
 // triggers nuevos (RAISE EXCEPTION 'codigo', sin traducir a español ahí —
 // exceptions/handlers.py los pasa tal cual) — copy table de la Design
 // review, "cada rechazo mapeado a texto + acción de recuperación".
+// Desempate de eliminatoria: tiempo extra y penales (docs/plans/desempate-
+// tiempo-extra-penales-plan.md, §11 "Copy de errores") — 9 códigos nuevos
+// de fn_validar_forma_desempate/fn_validar_partido_eliminacion_desempate/
+// fn_validar_torneo_modalidad (06_triggers.sql). El operador ya comía
+// `llave_empatada_en_global_sin_desempate` como fallo crudo antes de este
+// plan; estos ocho se agregan con el mismo criterio.
 const CODIGOS_ERROR_TRADUCIDOS: Record<string, string> = {
   partido_vuelta_ida_sin_resolver: "Falta cerrar (o cancelar) el partido de ida antes de cerrar la vuelta.",
   llave_empatada_en_global_sin_desempate: "La llave está empatada en el marcador global — cargá el desempate en el partido de vuelta.",
   partido_eliminacion_empatado_sin_desempate: "El partido terminó empatado — cargá el desempate antes de finalizarlo.",
   torneo_cerrado_resultados_bloqueados: "Este torneo está cerrado — los resultados están bloqueados. Reabrilo para poder editarlos.",
+  tanda_penales_empatada: "Una tanda de penales no puede terminar empatada.",
+  tanda_penales_fuera_de_rango: "Marcador de tanda inválido.",
+  ganador_desempate_contradice_tanda: "El ganador no coincide con el marcador de la tanda.",
+  metodo_desempate_incoherente: "El método y el marcador de la tanda no coinciden.",
+  desempate_sin_metodo: "Falta indicar cómo se resolvió el empate.",
+  desempate_en_ida_no_permitido: "El desempate se registra en la vuelta, no en la ida.",
+  penales_no_aplican_a_corrido: "Este torneo no usa penales.",
 };
 
 /** Extrae un mensaje legible del error de FastAPI ({"detail": "..."} o

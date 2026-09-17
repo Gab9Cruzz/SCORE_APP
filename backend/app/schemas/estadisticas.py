@@ -41,6 +41,13 @@ class ResultadoPartidoOut(BaseModel):
     fase_id: int | None = None
     grupo_id: int | None = None
     estado: str
+    # Desempate de eliminatoria: tiempo extra y penales (docs/plans/
+    # desempate-tiempo-extra-penales-plan.md, D-D9) — el CÓMO al lado del
+    # QUIÉN, para DetalleTorneoPublico.tsx/PartidoEnVivo.tsx.
+    metodo_desempate: str | None = None
+    hubo_tiempo_extra: bool = False
+    penales_local: int | None = None
+    penales_visitante: int | None = None
 
 
 class GoleadorOut(BaseModel):

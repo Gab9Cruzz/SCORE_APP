@@ -197,14 +197,24 @@ SELECT
     p.Grupo_ID,
     p.Estado,
     p.Es_Walkover,
-    p.Walkover_Equipo_Ausente_ID
+    p.Walkover_Equipo_Ausente_ID,
+    -- Desempate de eliminatoria: tiempo extra y penales (docs/plans/
+    -- desempate-tiempo-extra-penales-plan.md, D-D9) — el CÓMO al lado del
+    -- QUIÉN, para que el portal público (DetalleTorneoPublico.tsx) y
+    -- PartidoEnVivo.tsx puedan renderizar "2-2 a.e.t. (4-2 pen.)" sin una
+    -- segunda consulta por partido.
+    p.Metodo_Desempate,
+    p.Hubo_Tiempo_Extra,
+    p.Penales_Local,
+    p.Penales_Visitante
 FROM PARTIDOS p
 JOIN EQUIPOS el    ON el.ID    = p.EQUIPOS_ID_LOCAL
 JOIN EQUIPOS ev_eq ON ev_eq.ID = p.EQUIPOS_ID_VISITANTE
 LEFT JOIN vw_goles_acreditados ga ON ga.PARTIDOS_ID = p.ID
 GROUP BY p.ID, p.TORNEO_ID, el.ID, el.Nombre, ev_eq.ID, ev_eq.Nombre,
          p.Fecha_Partido, p.Jornada, p.Fase, p.Grupo, p.Fase_ID, p.Grupo_ID, p.Estado,
-         p.Es_Walkover, p.Walkover_Equipo_Ausente_ID;
+         p.Es_Walkover, p.Walkover_Equipo_Ausente_ID,
+         p.Metodo_Desempate, p.Hubo_Tiempo_Extra, p.Penales_Local, p.Penales_Visitante;
 
 -- ------------------------------------------------------------
 -- Feed de Partidos del Día — Portal Público

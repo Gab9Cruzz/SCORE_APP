@@ -353,6 +353,16 @@ td:first-child {
   margin-left: 0.4rem;
 }
 
+/* Desempate de eliminatoria: tiempo extra y penales (docs/plans/desempate-
+ * tiempo-extra-penales-plan.md, D-D9) — badge de peso secundario que NUNCA
+ * envuelve: el nodo del bracket está dimensionado para "2-2", y
+ * "2-2 a.e.t. (4-2 pen.)" son ~20 caracteres más. */
+.badge--desempate {
+  background: rgba(147, 160, 189, 0.15);
+  margin-left: 0.3rem;
+  white-space: nowrap;
+}
+
 .ver-archivados-toggle {
   display: inline-flex;
   align-items: center;
@@ -725,6 +735,20 @@ td:first-child {
   font-weight: 600;
   color: var(--text-muted);
   margin: 0 0 0.25rem;
+}
+
+/* Desempate de eliminatoria: tiempo extra y penales (D-D8) — chip de
+   regla vigente, persistente en la cabecera. Peso visual bajo a
+   propósito (informativo, no una acción) pero siempre visible. */
+.cronometro__chip-regla {
+  display: inline-block;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  margin: 0 0 0.5rem;
 }
 
 .cronometro__tiempo {
@@ -1112,6 +1136,22 @@ td:first-child {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   margin: 0 0 0.5rem;
+}
+
+/* Desempate de eliminatoria: tiempo extra y penales (docs/plans/
+   desempate-tiempo-extra-penales-plan.md, D-D10) — dos grupos de radios en
+   PasoGenerarPlayoffs ("Formato de los cruces" / "Si un cruce termina
+   empatado") con encabezado propio y separación visual, para que no se
+   lean como 6 radios sueltos en una sola columna. */
+.modal-panel__grupo-titulo {
+  font-weight: 600;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.modal-panel__grupo-titulo--separado {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
 }
 
 .modal-panel__equipo-fila {

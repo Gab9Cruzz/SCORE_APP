@@ -92,7 +92,15 @@ type Modo =
   // existía ningún formulario de edición de torneo — TorneosAdmin.tsx
   // solo tenía "crear-grupo"/"nueva-edicion". País/logo son del GRUPO
   // (aplican a todas sus ediciones, D-Eng-1), no de una edición puntual.
-  | { tipo: "editar-grupo"; grupo: TorneoGrupo };
+  | { tipo: "editar-grupo"; grupo: TorneoGrupo }
+  // Desempate de eliminatoria: tiempo extra y penales (docs/plans/
+  // desempate-tiempo-extra-penales-plan.md, C7/D-D3) — C7 tenía razón en
+  // que el campo nuevo no debía tener una superficie de edición que su
+  // hermano (formato_eliminatoria) no tuviera; la salida correcta es
+  // darles la superficie A LOS DOS, no quitársela al nuevo. Editable por
+  // EDICIÓN (torneoId), no por grupo — son reglas del cuadro de ESA
+  // edición puntual.
+  | { tipo: "editar-desempate"; torneoId: number };
 
 /** La edición que abre "Ver Torneo": la Activa más reciente si hay una, o
  * la de numero_edicion más alto si no (las ediciones ya vienen ordenadas
@@ -314,6 +322,35 @@ export function TorneosAdminPage() {
       return data;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["torneo-grupos"] }),
+  });
+
+  // Desempate de eliminatoria: tiempo extra y penales (C7/D-D3) — mismo
+  // PATCH /torneos/{id} que `publicarEdicion`, con los dos campos que
+  // hasta este plan solo se podían fijar al crear el torneo.
+  const editarDesempate = useMutation({
+    mutationFn: async ({
+      torneoId,
+      formatoEliminatoria,
+      metodoDesempateEliminatoria,
+    }: {
+      torneoId: number;
+      formatoEliminatoria: "Unico" | "Ida_Vuelta" | "Mixto";
+      metodoDesempateEliminatoria: "Manual" | "Penales_Directo";
+    }) => {
+      const { data, error } = await api.PATCH("/api/v1/torneos/{torneo_id}", {
+        params: { path: { torneo_id: torneoId } },
+        body: {
+          formato_eliminatoria: formatoEliminatoria,
+          metodo_desempate_eliminatoria: metodoDesempateEliminatoria,
+        },
+      } as never);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["torneo-grupos"] });
+      queryClient.invalidateQueries({ queryKey: ["torneo-editar-desempate"] });
+    },
   });
 
   // Portal Público (C3/C19): país/logo/nombre del grupo — antes solo
@@ -679,6 +716,23 @@ export function TorneosAdminPage() {
     );
   }
 
+  if (modo.tipo === "editar-desempate") {
+    return (
+      <PanelEditarDesempate
+        torneoId={modo.torneoId}
+        onGuardar={(formatoEliminatoria, metodoDesempateEliminatoria) =>
+          editarDesempate.mutate(
+            { torneoId: modo.torneoId, formatoEliminatoria, metodoDesempateEliminatoria },
+            { onSuccess: volver },
+          )
+        }
+        submitting={editarDesempate.isPending}
+        submitError={editarDesempate.isError ? apiErrorMessage(editarDesempate.error) : null}
+        onCancel={volver}
+      />
+    );
+  }
+
   return (
     <div className="page">
       <div className="page__header">
@@ -784,6 +838,19 @@ export function TorneosAdminPage() {
                 <button type="button" className="link-button" onClick={() => setModo({ tipo: "editar-grupo", grupo })}>
                   Editar
                 </button>
+                {/* C7/D-D3: editable hasta que el primer partido de
+                    eliminación de esta edición arranca — después, el
+                    cambio no afecta a los que ya tomaron su regla
+                    (Metodo_Desempate_Aplicable, D6/§8). */}
+                {edicion && (
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={() => setModo({ tipo: "editar-desempate", torneoId: edicion.id })}
+                  >
+                    Reglas de desempate
+                  </button>
+                )}
                 {/* T5.2c: sin esto la vista pública de torneo (T5.2) no
                     tiene ninguna puerta de entrada — el botón Compartir
                     vive DENTRO de ella. El label avisa cuando el link que
@@ -833,6 +900,88 @@ export function TorneosAdminPage() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** Desempate de eliminatoria: tiempo extra y penales (C7/D-D3) — panel de
+ * edición para UNA edición puntual (`formato_eliminatoria`/
+ * `metodo_desempate_eliminatoria` no vienen en `EdicionResumen`, así que
+ * este panel pide el torneo completo al abrirse en vez de ensanchar esa
+ * lista para un caso de uso puntual). El selector de método se OMITE
+ * (D5/§7) cuando el torneo es 'Corrido' — mismo criterio que
+ * `PasoGenerarPlayoffs`. */
+function PanelEditarDesempate(props: {
+  torneoId: number;
+  onGuardar: (formatoEliminatoria: "Unico" | "Ida_Vuelta" | "Mixto", metodoDesempateEliminatoria: "Manual" | "Penales_Directo") => void;
+  submitting: boolean;
+  submitError: string | null;
+  onCancel: () => void;
+}) {
+  const { torneoId, onGuardar, submitting, submitError, onCancel } = props;
+  const torneoQuery = useQuery({
+    queryKey: ["torneo-editar-desempate", torneoId],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}", { params: { path: { torneo_id: torneoId } } });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  if (torneoQuery.isLoading) return <div className="page"><p>Cargando...</p></div>;
+  if (torneoQuery.isError || !torneoQuery.data) {
+    return <div className="page"><p className="error-text">No se pudo cargar el torneo.</p></div>;
+  }
+  const torneo = torneoQuery.data;
+  const tipoCronometro = torneo.config_tiempo?.tipo_cronometro ?? "Periodos";
+
+  const campos: ResourceFormField[] = [
+    {
+      name: "formato_eliminatoria",
+      label: "Formato de los cruces",
+      type: "select",
+      required: true,
+      choices: ["Unico", "Ida_Vuelta", "Mixto"],
+    },
+    // D5/§7: un torneo 'Corrido' no tiene tiempo extra ni penales — el
+    // control se omite, no se deshabilita.
+    ...(tipoCronometro !== "Corrido"
+      ? ([
+          {
+            name: "metodo_desempate_eliminatoria",
+            label: "Si un cruce termina empatado",
+            type: "select",
+            required: true,
+            choices: ["Manual", "Penales_Directo"],
+          },
+        ] as ResourceFormField[])
+      : []),
+  ];
+
+  return (
+    <div className="page">
+      <h1>Reglas de desempate — {torneo.nombre}</h1>
+      <p className="muted">Las llaves ya cerradas conservan cómo se resolvieron.</p>
+      <ResourceForm
+        fields={campos}
+        initialValues={{
+          formato_eliminatoria: torneo.formato_eliminatoria,
+          metodo_desempate_eliminatoria: torneo.metodo_desempate_eliminatoria,
+        }}
+        onSubmit={(values) =>
+          onGuardar(
+            (values.formato_eliminatoria as "Unico" | "Ida_Vuelta" | "Mixto" | null) ?? torneo.formato_eliminatoria,
+            tipoCronometro === "Corrido"
+              ? "Manual"
+              : ((values.metodo_desempate_eliminatoria as "Manual" | "Penales_Directo" | null) ??
+                  torneo.metodo_desempate_eliminatoria),
+          )
+        }
+        submitting={submitting}
+        submitError={submitError}
+        submitLabel="Guardar cambios"
+        onCancel={onCancel}
+      />
     </div>
   );
 }

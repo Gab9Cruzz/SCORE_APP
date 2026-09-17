@@ -112,14 +112,25 @@ SELECT
     p.Grupo_ID,
     p.Estado,
     p.Es_Walkover,
-    p.Walkover_Equipo_Ausente_ID
+    p.Walkover_Equipo_Ausente_ID,
+    -- Desempate de eliminatoria: tiempo extra y penales (docs/plans/
+    -- desempate-tiempo-extra-penales-plan.md) — agregadas acá también:
+    -- este archivo re-crea la vista completa y test_scripts_sql.py lo
+    -- replaya contra la base actual, así que su texto tiene que seguir
+    -- siendo "la versión final en 04_views.sql" o `CREATE OR REPLACE VIEW`
+    -- falla al querer angostar una vista que ya tiene estas columnas.
+    p.Metodo_Desempate,
+    p.Hubo_Tiempo_Extra,
+    p.Penales_Local,
+    p.Penales_Visitante
 FROM PARTIDOS p
 JOIN EQUIPOS el    ON el.ID    = p.EQUIPOS_ID_LOCAL
 JOIN EQUIPOS ev_eq ON ev_eq.ID = p.EQUIPOS_ID_VISITANTE
 LEFT JOIN vw_goles_acreditados ga ON ga.PARTIDOS_ID = p.ID
 GROUP BY p.ID, p.TORNEO_ID, el.ID, el.Nombre, ev_eq.ID, ev_eq.Nombre,
          p.Fecha_Partido, p.Jornada, p.Fase, p.Grupo, p.Fase_ID, p.Grupo_ID, p.Estado,
-         p.Es_Walkover, p.Walkover_Equipo_Ausente_ID;
+         p.Es_Walkover, p.Walkover_Equipo_Ausente_ID,
+         p.Metodo_Desempate, p.Hubo_Tiempo_Extra, p.Penales_Local, p.Penales_Visitante;
 
 -- Mismo texto que la versión final en 06_triggers.sql.
 CREATE OR REPLACE FUNCTION fn_validar_partido_eliminacion_desempate()

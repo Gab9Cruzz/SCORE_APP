@@ -66,7 +66,18 @@ interface EventoTimelineResuelto {
  * sigue sirviendo partidos sin convocatoria guardada) — ver
  * `sinConvocatoria` abajo. */
 export function ModalResultadoDirecto(props: {
-  partido: { id: number; equipos_id_local: number; equipos_id_visitante: number; ronda_nombre?: string | null };
+  partido: {
+    id: number;
+    equipos_id_local: number;
+    equipos_id_visitante: number;
+    ronda_nombre?: string | null;
+    // Fase 1 (sin migración) del plan de desempate de eliminatoria — ver
+    // el comentario grande en `MesaPanel.tsx` sobre `elegible_desempate`/
+    // `goles_previos_global_*` (mismos campos, misma semántica).
+    elegible_desempate?: boolean;
+    goles_previos_global_local?: number | null;
+    goles_previos_global_visitante?: number | null;
+  };
   nombreEquipo: Map<number, string>;
   onClose: () => void;
   onGuardado: () => void;
@@ -417,8 +428,29 @@ export function ModalResultadoDirecto(props: {
   // flujo en vivo, sin pedir un endpoint nuevo.
   const esEliminacion = partido.ronda_nombre != null;
   const marcadorEmpatado = marcadorLocal === marcadorVisitante;
-  const requiereDesempate = esEliminacion && !esCorrido && marcadorEmpatado;
+  // Desempate de eliminatoria: tiempo extra y penales (docs/plans/
+  // desempate-tiempo-extra-penales-plan.md, Fase 1, SPEC-REVIEW S12/D-Q2)
+  // — reemplaza `esEliminacion && !esCorrido && marcadorEmpatado` (que ya
+  // excluía Corrido, a diferencia del bug de MesaPanel.tsx) por el campo
+  // del servidor + el GLOBAL real (marcador del draft + goles ya jugados
+  // de la ida, si este partido es la vuelta).
+  const globalLocal = marcadorLocal + (partido.goles_previos_global_local ?? 0);
+  const globalVisitante = marcadorVisitante + (partido.goles_previos_global_visitante ?? 0);
+  const requiereDesempate = !!partido.elegible_desempate && globalLocal === globalVisitante;
   const [ganadorDesempateId, setGanadorDesempateId] = useState<number | null>(null);
+  // D-D12/E4 (fase 2): steppers de tanda como primera opción — "no tengo
+  // el marcador de la tanda" cae al radio manual de siempre (E4: el
+  // schema responde a un dato faltante con NULL, nunca con una
+  // adivinanza). D-D7: arrancan en 0, confirmar deshabilitado mientras
+  // estén iguales.
+  const [penalesLocal, setPenalesLocal] = useState(0);
+  const [penalesVisitante, setPenalesVisitante] = useState(0);
+  const [sinMarcadorTanda, setSinMarcadorTanda] = useState(false);
+  const tandaValida = penalesLocal !== penalesVisitante;
+  // Checkbox "se jugó prórroga" (S10/F9) — solo en partidos de Eliminación,
+  // independiente de si el marcador FINAL quedó empatado (un "2-1 a.e.t."
+  // también lo marca).
+  const [huboTiempoExtra, setHuboTiempoExtra] = useState(false);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -442,7 +474,10 @@ export function ModalResultadoDirecto(props: {
       const body = {
         eventos: [...eventosSlots, ...eventosOtros],
         ganador_corrido_id: esCorrido ? ganadorCorridoId : undefined,
-        ganador_desempate_id: requiereDesempate ? ganadorDesempateId : undefined,
+        ganador_desempate_id: requiereDesempate && sinMarcadorTanda ? (ganadorDesempateId ?? undefined) : undefined,
+        penales_local: requiereDesempate && !sinMarcadorTanda ? penalesLocal : undefined,
+        penales_visitante: requiereDesempate && !sinMarcadorTanda ? penalesVisitante : undefined,
+        hubo_tiempo_extra: esEliminacion ? huboTiempoExtra : undefined,
       };
       const { data, error } = await api.POST("/api/v1/partidos/{partido_id}/resultado-directo", {
         params: { path: { partido_id: partido.id } },
@@ -458,7 +493,7 @@ export function ModalResultadoDirecto(props: {
   const puedeGuardar =
     todosLosSlotsCompletos &&
     (!esCorrido || ganadorCorridoId !== null) &&
-    (!requiereDesempate || ganadorDesempateId !== null) &&
+    (!requiereDesempate || (sinMarcadorTanda ? ganadorDesempateId !== null : tandaValida)) &&
     pendienteConfirmar === null;
 
   return (
@@ -780,12 +815,60 @@ export function ModalResultadoDirecto(props: {
           </label>
         )}
 
-        {/* Desempate manual (Fase 0, Finding 1): marcador empatado en un
-            partido de fase Eliminación — radios, no un select (Design
-            review): las dos opciones tienen que ser visibles sin abrir
-            nada, mismo criterio que el resto de decisiones de una sola
-            vía de este módulo. */}
-        {requiereDesempate && (
+        {/* Desempate de eliminatoria: tiempo extra y penales (D-D12,
+            divulgación progresiva): el checkbox de prórroga es
+            independiente de si el marcador quedó empatado — solo
+            necesita que el partido sea de Eliminación. */}
+        {esEliminacion && (
+          <label className="resource-form__checkbox">
+            <input type="checkbox" checked={huboTiempoExtra} onChange={(e) => setHuboTiempoExtra(e.target.checked)} />
+            Se jugó prórroga
+          </label>
+        )}
+
+        {/* Marcador empatado en un partido de fase Eliminación — steppers
+            de tanda de penales como opción principal (D-D4/D-D7: NOMBRE
+            DE EQUIPO, nunca "Local"/"Visitante"; arrancan en 0; confirmar
+            deshabilitado mientras estén iguales), con "no tengo el
+            marcador de la tanda" (E4) cayendo al radio manual de siempre
+            — un link de texto DEBAJO, no una opción par. */}
+        {requiereDesempate && !sinMarcadorTanda && (
+          <div className="resource-form">
+            <p className="muted--cuerpo">Empate en el marcador — tanda de penales</p>
+            <label>
+              {nombreLocal}
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={30}
+                value={penalesLocal}
+                onChange={(e) => setPenalesLocal(Math.max(0, Math.min(30, Number(e.target.value) || 0)))}
+              />
+            </label>
+            <label>
+              {nombreVisitante}
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={30}
+                value={penalesVisitante}
+                onChange={(e) => setPenalesVisitante(Math.max(0, Math.min(30, Number(e.target.value) || 0)))}
+              />
+            </label>
+            {!tandaValida && <p className="muted">Una tanda de penales no puede terminar empatada.</p>}
+            {tandaValida && (
+              <p className="muted">
+                Penales {penalesLocal}-{penalesVisitante} — avanza {penalesLocal > penalesVisitante ? nombreLocal : nombreVisitante}.
+              </p>
+            )}
+            <button type="button" className="link-button" onClick={() => setSinMarcadorTanda(true)}>
+              No tengo el marcador de la tanda
+            </button>
+          </div>
+        )}
+        {requiereDesempate && sinMarcadorTanda && (
           <div className="resource-form">
             <p className="muted--cuerpo">Empate en el marcador — ¿quién avanza?</p>
             <label className="cronometro__radio">
@@ -806,6 +889,9 @@ export function ModalResultadoDirecto(props: {
               />
               {nombreVisitante}
             </label>
+            <button type="button" className="link-button" onClick={() => setSinMarcadorTanda(false)}>
+              ← Tengo el marcador de la tanda
+            </button>
           </div>
         )}
 

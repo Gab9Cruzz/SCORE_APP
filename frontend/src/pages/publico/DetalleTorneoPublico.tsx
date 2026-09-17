@@ -5,6 +5,7 @@ import { api, apiErrorMessage } from "../../api/client";
 import { Escudo } from "../../components/publico/Escudo";
 import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
 import { BracketView } from "../torneo-admin/torneo-dashboard/BracketView";
+import { formatearResultadoDesempate, fraseResultadoDesempate } from "../../lib/desempate";
 
 interface TorneoDetalle {
   id: number;
@@ -47,6 +48,11 @@ interface ResultadoRow {
   goles_visitante: number;
   fecha_partido: string;
   estado: string;
+  // Desempate de eliminatoria: tiempo extra y penales (D-D9).
+  metodo_desempate?: "Tiempo_Extra" | "Penales" | "Manual" | null;
+  hubo_tiempo_extra?: boolean;
+  penales_local?: number | null;
+  penales_visitante?: number | null;
 }
 interface GoleadorRow {
   jugador_id: number;
@@ -245,18 +251,42 @@ export function DetalleTorneoPublicoPage() {
           )}
           {!!resultadosQuery.data?.length && (
             <ul className="publico-torneo__resultados">
-              {resultadosQuery.data.map((r) => (
-                <li key={r.partido_id}>
-                  <Link to={`/partidos/${r.partido_id}`} className="publico-torneo__resultado-fila">
-                    <span className="muted">{formatearFecha(r.fecha_partido)}</span>
-                    <span>{r.equipo_local}</span>
-                    <span className="publico-torneo__marcador">
-                      {r.estado === "Programado" ? "vs" : `${r.goles_local} - ${r.goles_visitante}`}
-                    </span>
-                    <span>{r.equipo_visitante}</span>
-                  </Link>
-                </li>
-              ))}
+              {resultadosQuery.data.map((r) => {
+                const frase =
+                  r.estado === "Programado"
+                    ? null
+                    : fraseResultadoDesempate({
+                        golesLocal: r.goles_local,
+                        golesVisitante: r.goles_visitante,
+                        metodoDesempate: r.metodo_desempate,
+                        huboTiempoExtra: r.hubo_tiempo_extra,
+                        penalesLocal: r.penales_local,
+                        penalesVisitante: r.penales_visitante,
+                      });
+                return (
+                  <li key={r.partido_id}>
+                    <Link to={`/partidos/${r.partido_id}`} className="publico-torneo__resultado-fila">
+                      <span className="muted">{formatearFecha(r.fecha_partido)}</span>
+                      <span>{r.equipo_local}</span>
+                      <span className="publico-torneo__marcador">
+                        {r.estado === "Programado"
+                          ? "vs"
+                          : formatearResultadoDesempate({
+                              golesLocal: r.goles_local,
+                              golesVisitante: r.goles_visitante,
+                              metodoDesempate: r.metodo_desempate,
+                              huboTiempoExtra: r.hubo_tiempo_extra,
+                              penalesLocal: r.penales_local,
+                              penalesVisitante: r.penales_visitante,
+                            })}
+                      </span>
+                      <span>{r.equipo_visitante}</span>
+                    </Link>
+                    {/* D-D9: línea en prosa, solo cuando hay algo que contar. */}
+                    {frase && <p className="muted publico-torneo__resultado-desempate">{frase}</p>}
+                  </li>
+                );
+              })}
             </ul>
           )}
           {formato === "Eliminacion" && <BracketView torneoId={id} />}

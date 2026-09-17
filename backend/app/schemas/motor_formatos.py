@@ -30,6 +30,13 @@ class PlayoffsRequest(BaseModel):
 
     clasificados_por_grupo: int | None = None
     formato_eliminatoria: Literal["Unico", "Ida_Vuelta", "Mixto"] | None = None
+    # Desempate de eliminatoria: tiempo extra y penales
+    # (docs/plans/desempate-tiempo-extra-penales-plan.md, D1/§3): mismo
+    # criterio exacto que `formato_eliminatoria` — si se manda, se
+    # PERSISTE en `Torneo.metodo_desempate_eliminatoria`; si no, se usa el
+    # guardado. `MotorFormatosService.generar_playoffs` rechaza un valor
+    # distinto de 'Manual' si el torneo es 'Corrido' (D5/§7).
+    metodo_desempate_eliminatoria: Literal["Manual", "Penales_Directo"] | None = None
 
 
 class CerrarTorneoRequest(BaseModel):
