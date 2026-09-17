@@ -260,6 +260,7 @@ describe("EstadisticasDelTorneoPage", () => {
           http.get(TORNEOS, () => HttpResponse.json([{ id: 20, numero_edicion: 1, estado: "Activo" }])),
           http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/20/posiciones", () => HttpResponse.json([])),
           http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/20/goleadores", () => HttpResponse.json([])),
+          http.get("http://127.0.0.1:8000/api/v1/estadisticas/torneos/20/resultados", () => HttpResponse.json([])),
           http.get("http://127.0.0.1:8000/api/v1/torneos/20/bracket", () =>
             HttpResponse.json([
               {
@@ -271,7 +272,11 @@ describe("EstadisticasDelTorneoPage", () => {
                 slot_siguiente: null,
                 partido_perdedor_siguiente_id: null,
                 slot_perdedor_siguiente: null,
+                partido_ida_id: null,
                 estado: "Programado",
+                fecha_partido: "2026-04-01T00:00:00",
+                ganador_corrido_id: null,
+                es_walkover: false,
               },
             ]),
           ),

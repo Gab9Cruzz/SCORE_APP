@@ -19,6 +19,15 @@ interface PartidoBracket {
   // misma llave en un solo nodo (Design review, Pass 1/7).
   partido_ida_id: number | null;
   estado: string;
+  fecha_partido: string;
+  ganador_corrido_id: number | null;
+  es_walkover: boolean;
+}
+
+interface ResultadoRow {
+  partido_id: number;
+  goles_local: number;
+  goles_visitante: number;
 }
 
 const ETIQUETA_ESTADO_PIERNA: Record<string, string> = {
@@ -35,11 +44,14 @@ const ETIQUETA_ESTADO_PIERNA: Record<string, string> = {
  * "Ganador Partido N" nunca queda como un espacio en blanco sin
  * explicación, que es el requisito real del mockup.
  *
- * Cierre de Fase Regular + Llaves + Playoffs (Fase E3): cuando un partido
- * tiene `partido_ida_id`, se agrupa con su IDA en UN SOLO nodo — dos
- * filas de pierna, no dos cards sueltas (Design review, Pass 1/7: "one
- * node = one llave", una llave a dos piernas independientes duplicaría
- * la cantidad de cajas y el bracket dejaría de leerse como un bracket).
+ * Cierre de Fase Regular + Llaves + Playoffs (Fase E3/D11): cuando un
+ * partido tiene `partido_ida_id`, se agrupa con su IDA en UN SOLO nodo —
+ * dos filas de pierna con fecha y marcador, más el agregado en su propia
+ * fila (Design review, Pass 1/7: "one node = one llave", una llave a dos
+ * piernas independientes duplicaría la cantidad de cajas). El marcador
+ * sale de `GET /estadisticas/torneos/{id}/resultados` (la misma vista que
+ * ya usa el portal público) — el bracket en sí (`GET /bracket`) no trae
+ * goles a propósito, para poder mostrar shells sin equipos todavía.
  *
  * Extraído de MotorFormatosPanel.tsx (control-mesa-reactividad-playoffs-
  * plan.md, Fase 3 §6): antes solo vivía en la pestaña Partidos del
@@ -58,6 +70,28 @@ export function BracketView({ torneoId }: { torneoId: number }) {
       return data as PartidoBracket[];
     },
   });
+  // D11: solo hace falta para pintar marcador/agregado — un fallo acá no
+  // debe tumbar el bracket entero (sigue mostrando nombres y fechas sin
+  // marcador, degradado con gracia). `enabled` atado a que YA haya
+  // partidos: sin esto se pedía igual con un bracket vacío/todavía
+  // cargando.
+  const hayPartidosEnBracket = (query.data?.length ?? 0) > 0;
+  const resultadosQuery = useQuery({
+    queryKey: ["resultados", torneoId],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/estadisticas/torneos/{torneo_id}/resultados", {
+        params: { path: { torneo_id: torneoId } },
+      } as never);
+      if (error) throw error;
+      return data as ResultadoRow[];
+    },
+    enabled: hayPartidosEnBracket,
+  });
+  const golesPorPartido = useMemo(
+    () => new Map((resultadosQuery.data ?? []).map((r) => [r.partido_id, { local: r.goles_local, visitante: r.goles_visitante }])),
+    [resultadosQuery.data],
+  );
+
   const equipos = useResourceCrud<EquipoRow>({ resourceKey: "equipos", basePath: "/api/v1/equipos" });
   const nombreEquipoBase = useMemo(
     () => new Map((equipos.listQuery.data ?? []).map((e) => [e.id, e.nombre])),
@@ -99,6 +133,10 @@ export function BracketView({ torneoId }: { torneoId: number }) {
   const ordenRondas = [...porRonda.entries()].sort((a, b) => b[1].length - a[1].length).map(([nombre]) => nombre);
   const hayLlaves = canonicos.some((p) => p.partido_ida_id != null);
 
+  function formatearFecha(iso: string): string {
+    return new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
+  }
+
   // `partidoCanonico` es SIEMPRE la vuelta (o el partido único) — el que
   // carga Partido_Siguiente_ID/Slot_Siguiente reales. Para resolver el
   // placeholder de una pierna sin equipo, el slot a buscar es el de la
@@ -114,35 +152,96 @@ export function BracketView({ torneoId }: { torneoId: number }) {
     return "Por definir";
   }
 
+  // D11 + "Corrido (non-goal) disciplines get their own aggregate copy"
+  // (Design review): sin marcador de goles en `golesPorPartido`, se cae a
+  // `ganador_corrido_id` si está — y si ninguno de los dos hay todavía,
+  // no se muestra nada (partido sin jugar).
+  function marcadorDePierna(p: PartidoBracket): string | null {
+    const goles = golesPorPartido.get(p.id);
+    if (goles) return `${goles.local}-${goles.visitante}`;
+    if (p.ganador_corrido_id != null) {
+      return `Ganador: ${nombreEquipo.get(p.ganador_corrido_id) ?? `#${p.ganador_corrido_id}`}`;
+    }
+    return null;
+  }
+
+  // Agregado de una llave: suma de goles invirtiendo local/visitante de la
+  // ida (misma cuenta que fn_resolver_llave, 06_triggers.sql) — solo si
+  // AMBAS piernas tienen marcador de goles. Para Corrido no hay "global"
+  // numérico (se decide por victorias de pierna, no goles): se arma una
+  // leyenda de texto en su lugar.
+  function agregadoDeLlave(ida: PartidoBracket, vuelta: PartidoBracket): string | null {
+    const golesIda = golesPorPartido.get(ida.id);
+    const golesVuelta = golesPorPartido.get(vuelta.id);
+    if (golesIda && golesVuelta) {
+      const globalLocal = golesVuelta.local + golesIda.visitante;
+      const globalVisitante = golesVuelta.visitante + golesIda.local;
+      return `Global ${globalLocal}-${globalVisitante}`;
+    }
+    if (ida.ganador_corrido_id != null && vuelta.ganador_corrido_id != null) {
+      const ganadorIda = nombreEquipo.get(ida.ganador_corrido_id) ?? `#${ida.ganador_corrido_id}`;
+      const ganadorVuelta = nombreEquipo.get(vuelta.ganador_corrido_id) ?? `#${vuelta.ganador_corrido_id}`;
+      return ganadorIda === ganadorVuelta ? `Definido: ${ganadorIda}` : `Ida: ${ganadorIda} · Vuelta: ${ganadorVuelta}`;
+    }
+    return null;
+  }
+
+  // D3 (Design review, Pass 7): variante visual de walkover — mismo badge
+  // que ya usa PartidosDelTorneoPage ("W.O."), para que un 3-0 por
+  // ausencia no se confunda con un 3-0 jugado.
+  function badgeWalkover(p: PartidoBracket) {
+    if (!p.es_walkover) return null;
+    return (
+      <span className="badge badge--archivado" title="Cerrado por walkover (ausencia)">
+        {" "}
+        W.O.
+      </span>
+    );
+  }
+
   function renderPartido(p: PartidoBracket) {
+    const marcador = marcadorDePierna(p);
     if (p.partido_ida_id == null) {
       return (
         <div key={p.id} className="bracket__partido">
+          <p className="fila-partido__hora">{formatearFecha(p.fecha_partido)}</p>
           <div className="bracket__equipo">{etiqueta(p.equipos_id_local, p, "Local")}</div>
           <div className="bracket__equipo">{etiqueta(p.equipos_id_visitante, p, "Visitante")}</div>
+          {marcador && (
+            <p className="muted--cuerpo">
+              {marcador}
+              {badgeWalkover(p)}
+            </p>
+          )}
         </div>
       );
     }
     // Llave a dos partidos — un nodo, dos filas de pierna (Design review:
     // "one node = one llave", nunca dos cards sueltas).
     const ida = idaPorId.get(p.partido_ida_id);
+    const agregado = ida ? agregadoDeLlave(ida, p) : null;
     return (
       <div key={p.id} className="bracket__partido bracket__partido--llave">
         <div className="bracket__pierna">
-          <span className="bracket__pierna-fecha">Ida</span>
+          <span className="bracket__pierna-fecha">{ida ? formatearFecha(ida.fecha_partido) : ""} · Ida</span>
           <span>
             {ida ? etiqueta(ida.equipos_id_local, p, "Visitante") : "…"} vs{" "}
             {ida ? etiqueta(ida.equipos_id_visitante, p, "Local") : "…"}
+            {ida && marcadorDePierna(ida) && <> · {marcadorDePierna(ida)}</>}
+            {ida && badgeWalkover(ida)}
             {ida && <span className="muted"> ({ETIQUETA_ESTADO_PIERNA[ida.estado] ?? ida.estado})</span>}
           </span>
         </div>
         <div className="bracket__pierna">
-          <span className="bracket__pierna-fecha">Vuelta</span>
+          <span className="bracket__pierna-fecha">{formatearFecha(p.fecha_partido)} · Vuelta</span>
           <span>
             {etiqueta(p.equipos_id_local, p, "Local")} vs {etiqueta(p.equipos_id_visitante, p, "Visitante")}
+            {marcador && <> · {marcador}</>}
+            {badgeWalkover(p)}
             <span className="muted"> ({ETIQUETA_ESTADO_PIERNA[p.estado] ?? p.estado})</span>
           </span>
         </div>
+        {agregado && <p className="bracket__agregado">{agregado}</p>}
         {ida && ida.estado !== "Programado" && ida.estado !== "En curso" && p.estado === "Programado" && (
           <p className="bracket__agregado">Ida jugada · Vuelta pendiente</p>
         )}

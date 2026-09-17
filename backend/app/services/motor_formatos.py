@@ -382,7 +382,18 @@ class MotorFormatosService:
         `[1, N, 2, N-1...]` le daba un bye al PEOR clasificado (seed N)
         junto al mejor. Con `barajar=True` (sorteo aleatorio, sin ranking
         real) `seeds` se deriva del propio orden post-shuffle — mismo
-        comportamiento de siempre para un sorteo genuinamente al azar."""
+        comportamiento de siempre para un sorteo genuinamente al azar.
+
+        T16 — forma de dos piernas (Cierre de Fase Regular + Llaves +
+        Playoffs): cada cruce de rondas 2+ ya no es un shell, es una
+        LLAVE (`_crear_llave`) de 1 o 2 partidos según
+        `formato_eliminatoria` — 'Unico' siempre 1; 'Ida_Vuelta' siempre
+        2, Final incluida; 'Mixto' 2 en todo menos la Final. Un bye
+        SIGUE sin jugar ida ni vuelta (se sienta directo en las dos
+        piernas del padre, si el padre es una llave — ver el bloque
+        `con_bye_iter` más abajo). El Tercer Lugar es SIEMPRE partido
+        único en los tres formatos, nunca una llave — no es una ronda del
+        bracket, es un partido de consolación."""
         n = len(equipo_ids)
         if n < 2:
             raise DomainRuleError("Hacen falta al menos 2 equipos matriculados para sortear el bracket.")

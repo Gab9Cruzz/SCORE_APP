@@ -154,6 +154,10 @@ BEGIN
         v_ganador_desempate := p_ganador_desempate_override;
     END IF;
 
+    IF v_ida_id IS NOT NULL THEN
+        PERFORM 1 FROM PARTIDOS WHERE ID = v_ida_id FOR UPDATE;
+    END IF;
+
     SELECT Tipo_Cronometro INTO v_tipo_cronometro FROM CONFIGURACION_TIEMPO_TORNEO WHERE Torneo_ID = v_torneo_id;
 
     SELECT m.ganador_equipo_id, m.goles_local, m.goles_visitante INTO ida_ganador, ida_gl, ida_gv
@@ -201,7 +205,7 @@ BEGIN
     END IF;
 
     IF NEW.Partido_Ida_ID IS NOT NULL THEN
-        SELECT Estado INTO v_estado_ida FROM PARTIDOS WHERE ID = NEW.Partido_Ida_ID;
+        SELECT Estado INTO v_estado_ida FROM PARTIDOS WHERE ID = NEW.Partido_Ida_ID FOR UPDATE;
         IF v_estado_ida NOT IN ('Finalizado', 'Cancelado') THEN
             RAISE EXCEPTION 'partido_vuelta_ida_sin_resolver';
         END IF;

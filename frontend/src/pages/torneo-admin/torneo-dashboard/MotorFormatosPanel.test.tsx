@@ -149,8 +149,9 @@ describe("MotorFormatosPanel — Eliminación", () => {
             partido_ida_id: null,
             estado: "Programado",
           },
-        ]),
+        ].map((p) => ({ ...p, fecha_partido: "2026-04-01T00:00:00", ganador_corrido_id: null, es_walkover: false }))),
       ),
+      http.get(`http://127.0.0.1:8000/api/v1/estadisticas/torneos/${TORNEO_ID}/resultados`, () => HttpResponse.json([])),
       http.get(EQUIPOS, () =>
         HttpResponse.json([
           { id: 1, nombre: "Tigres" },

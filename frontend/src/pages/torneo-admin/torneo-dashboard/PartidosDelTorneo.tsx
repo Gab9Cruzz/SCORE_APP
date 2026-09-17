@@ -136,7 +136,11 @@ export function PartidosDelTorneoPage() {
       <MotorFormatosPanel torneoId={torneoId} formato={formato} equiposInscritosCount={equiposInscritos.length} />
       <div className="page__header">
         <h2>Partidos de esta edición</h2>
-        <button type="button" onClick={() => setModo({ tipo: "crear" })}>
+        <button
+          type="button"
+          disabled={torneoEstado === "Finalizado"}
+          onClick={() => setModo({ tipo: "crear" })}
+        >
           + Nuevo
         </button>
       </div>

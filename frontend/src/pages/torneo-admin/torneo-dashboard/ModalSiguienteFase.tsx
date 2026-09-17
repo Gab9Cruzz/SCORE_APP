@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { api, apiErrorMessage } from "../../../api/client";
+import { useModalFocusTrap } from "../../../hooks/useModalFocusTrap";
 
 type AccionDisponible = "cerrar_directo" | "generar_playoffs";
 type FormatoEliminatoria = "Unico" | "Ida_Vuelta" | "Mixto";
@@ -35,14 +36,26 @@ const FORMATO_OPCIONES: { value: FormatoEliminatoria; titulo: string; subtitulo:
  * /estado-fase) ya filtró eso antes de que este componente se monte. */
 export function ModalSiguienteFase(props: {
   torneoId: number;
+  formatoTorneo: "Liga" | "Eliminacion" | "Grupos_Playoffs";
   accionesDisponibles: AccionDisponible[];
   formatoEliminatoriaActual: FormatoEliminatoria;
   clasificadosPorGrupoActual: number | null;
+  fechaInicioTorneo: string | null;
   onClose: () => void;
   onCerrado: () => void;
   onPlayoffsGenerados: () => void;
 }) {
-  const { torneoId, accionesDisponibles, formatoEliminatoriaActual, clasificadosPorGrupoActual, onClose, onCerrado, onPlayoffsGenerados } = props;
+  const {
+    torneoId,
+    formatoTorneo,
+    accionesDisponibles,
+    formatoEliminatoriaActual,
+    clasificadosPorGrupoActual,
+    fechaInicioTorneo,
+    onClose,
+    onCerrado,
+    onPlayoffsGenerados,
+  } = props;
   const queryClient = useQueryClient();
 
   // D9: cuando solo hay una acción disponible, el paso 1 (radio de un
@@ -52,13 +65,11 @@ export function ModalSiguienteFase(props: {
   );
   const mostrarPaso1 = accionesDisponibles.length > 1;
 
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // D9 (Design review, Pass 6): trap de Tab + Escape + foco de vuelta al
+  // disparador — antes gap de `ModalClasificadosPorGrupo` (aria-modal sin
+  // ninguna de las tres), que este modal más largo habría profundizado.
+  useModalFocusTrap(panelRef, onClose);
 
   function invalidar() {
     queryClient.invalidateQueries({ queryKey: ["partidos"] });
@@ -72,7 +83,7 @@ export function ModalSiguienteFase(props: {
 
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-siguiente-fase-titulo">
-      <div className={`modal-panel${anchoPaso2 ? " modal-panel--ancho" : ""}`}>
+      <div ref={panelRef} className={`modal-panel${anchoPaso2 ? " modal-panel--ancho" : ""}`}>
         {mostrarPaso1 && camino == null && (
           <>
             <p className="modal-panel__paso">Paso 1 de 2 · Camino</p>
@@ -119,8 +130,10 @@ export function ModalSiguienteFase(props: {
         {camino === "generar_playoffs" && (
           <PasoGenerarPlayoffs
             torneoId={torneoId}
+            formatoTorneo={formatoTorneo}
             formatoEliminatoriaActual={formatoEliminatoriaActual}
             clasificadosPorGrupoActual={clasificadosPorGrupoActual}
+            fechaInicioTorneo={fechaInicioTorneo}
             mostrarVolver={mostrarPaso1}
             onVolver={() => setCamino(null)}
             onCancelar={onClose}
@@ -324,21 +337,79 @@ function PasoCerrarDirecto(props: {
 
 /** Paso 2b — absorbe ModalClasificadosPorGrupo (clasificados por grupo /
  * de la tabla) y suma el selector de formato de eliminatoria. */
+/** D10 (Design review, Pass 3): el selector de formato muestra CONSECUENCIA,
+ * no mecánica — "14 partidos · la final cae aprox. el {fecha}" en vez de
+ * obligar al admin a imaginarse cuánto alarga la temporada Ida_Vuelta.
+ * Mismas fórmulas que `_sortear_bracket`/`fechas_de_ronda` en
+ * motor_formatos.py: cualquier bracket de eliminación simple tiene
+ * exactamente `n - 1` partidos reales para producir 1 campeón (sea cual
+ * sea la cantidad de byes) — Ida_Vuelta duplica esa cuenta, Mixto la
+ * duplica salvo la Final (que cuenta 1 sola vez). Tercer Lugar (+1,
+ * siempre único) se asume incluido — es "aprox" a propósito, la cuenta
+ * real la decide `Torneo.Incluye_Tercer_Lugar`, que este modal no conoce. */
+function estimarPlayoffs(
+  n: number,
+  formato: FormatoEliminatoria,
+  fechaInicioIso: string | null,
+): { partidos: number; fechaFinalAprox: Date } | null {
+  if (n < 2 || !fechaInicioIso) return null;
+  const rondas = Math.ceil(Math.log2(n));
+  const partidosReales = n - 1;
+  const partidosEliminatoria =
+    formato === "Unico" ? partidosReales : formato === "Ida_Vuelta" ? partidosReales * 2 : partidosReales * 2 - 1;
+  const partidos = partidosEliminatoria + (n >= 3 ? 1 : 0); // + Tercer Lugar, aprox.
+  const fechaFinalAprox = new Date(fechaInicioIso);
+  fechaFinalAprox.setDate(fechaFinalAprox.getDate() + 7 * rondas);
+  return { partidos, fechaFinalAprox };
+}
+
 function PasoGenerarPlayoffs(props: {
   torneoId: number;
+  formatoTorneo: "Liga" | "Eliminacion" | "Grupos_Playoffs";
   formatoEliminatoriaActual: FormatoEliminatoria;
   clasificadosPorGrupoActual: number | null;
+  fechaInicioTorneo: string | null;
   mostrarVolver: boolean;
   onVolver: () => void;
   onCancelar: () => void;
   onGenerado: () => void;
 }) {
-  const { torneoId, formatoEliminatoriaActual, clasificadosPorGrupoActual, mostrarVolver, onVolver, onCancelar, onGenerado } = props;
+  const {
+    torneoId,
+    formatoTorneo,
+    formatoEliminatoriaActual,
+    clasificadosPorGrupoActual,
+    fechaInicioTorneo,
+    mostrarVolver,
+    onVolver,
+    onCancelar,
+    onGenerado,
+  } = props;
   const [clasificados, setClasificados] = useState(String(clasificadosPorGrupoActual ?? 2));
   const [formato, setFormato] = useState<FormatoEliminatoria>(formatoEliminatoriaActual);
 
   const n = Number(clasificados);
   const esValido = clasificados !== "" && Number.isInteger(n) && n >= 1;
+
+  // Grupos_Playoffs: "clasificados" es POR GRUPO — el total que entra a la
+  // llave es esa cifra multiplicada por la cantidad de grupos. Liga ya es
+  // el total (no hay grupos que multiplicar).
+  const posicionesQuery = useQuery({
+    queryKey: ["tabla-posiciones", torneoId],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/estadisticas/torneos/{torneo_id}/posiciones", {
+        params: { path: { torneo_id: torneoId } },
+      } as never);
+      if (error) throw error;
+      return data as { grupo_id: number | null }[];
+    },
+    enabled: formatoTorneo === "Grupos_Playoffs",
+  });
+  const numeroDeGrupos = formatoTorneo === "Grupos_Playoffs"
+    ? new Set((posicionesQuery.data ?? []).map((f) => f.grupo_id)).size || 1
+    : 1;
+  const totalClasificados = esValido ? n * numeroDeGrupos : 0;
+  const estimacion = esValido ? estimarPlayoffs(totalClasificados, formato, fechaInicioTorneo) : null;
 
   const generar = useMutation({
     mutationFn: async () => {
@@ -377,6 +448,12 @@ function PasoGenerarPlayoffs(props: {
             </span>
           </label>
         ))}
+        {estimacion && (
+          <p className="muted--cuerpo">
+            {estimacion.partidos} partido(s) · la final cae aprox. el{" "}
+            {estimacion.fechaFinalAprox.toLocaleDateString("es-AR", { day: "2-digit", month: "short" })}.
+          </p>
+        )}
         {formato !== "Unico" && (
           <p className="muted--cuerpo">La vuelta se agenda 7 días después de la ida. Podés mover las fechas después desde cada partido.</p>
         )}

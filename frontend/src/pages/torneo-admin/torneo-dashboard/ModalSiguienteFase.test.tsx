@@ -17,9 +17,11 @@ function renderModal(props: Partial<Parameters<typeof ModalSiguienteFase>[0]> = 
     <Wrapper>
       <ModalSiguienteFase
         torneoId={TORNEO_ID}
+        formatoTorneo="Liga"
         accionesDisponibles={["cerrar_directo", "generar_playoffs"]}
         formatoEliminatoriaActual="Unico"
         clasificadosPorGrupoActual={2}
+        fechaInicioTorneo="2026-04-01"
         onClose={vi.fn()}
         onCerrado={vi.fn()}
         onPlayoffsGenerados={vi.fn()}

@@ -678,6 +678,15 @@ BEGIN
         v_ganador_desempate := p_ganador_desempate_override;
     END IF;
 
+    -- Mismo FOR UPDATE que el BEFORE trigger de validación (defensa en
+    -- profundidad: esta función también se llama desde Python para
+    -- resolver el podio, fuera de ese trigger) — bloquea la fila de la
+    -- IDA por el resto de esta transacción mientras se lee su marcador,
+    -- para que un finalize concurrente de la ida no pise esta lectura.
+    IF v_ida_id IS NOT NULL THEN
+        PERFORM 1 FROM PARTIDOS WHERE ID = v_ida_id FOR UPDATE;
+    END IF;
+
     SELECT Tipo_Cronometro INTO v_tipo_cronometro FROM CONFIGURACION_TIEMPO_TORNEO WHERE Torneo_ID = v_torneo_id;
 
     SELECT m.ganador_equipo_id, m.goles_local, m.goles_visitante INTO ida_ganador, ida_gl, ida_gv
@@ -745,7 +754,12 @@ BEGIN
     END IF;
 
     IF NEW.Partido_Ida_ID IS NOT NULL THEN
-        SELECT Estado INTO v_estado_ida FROM PARTIDOS WHERE ID = NEW.Partido_Ida_ID;
+        -- FOR UPDATE (accepted obligation del review): dos operadores de
+        -- mesa finalizando la ida y la vuelta EN SIMULTÁNEO no deben poder
+        -- pasar los dos esta lectura antes de que cualquiera escriba — el
+        -- lock de fila serializa la carrera, no solo el chequeo de estado
+        -- (que por sí solo es una ventana TOCTOU sin esto).
+        SELECT Estado INTO v_estado_ida FROM PARTIDOS WHERE ID = NEW.Partido_Ida_ID FOR UPDATE;
         IF v_estado_ida NOT IN ('Finalizado', 'Cancelado') THEN
             RAISE EXCEPTION 'partido_vuelta_ida_sin_resolver';
         END IF;

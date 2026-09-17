@@ -296,7 +296,16 @@ function TablaPosiciones({
         <tbody>
           {filas.map((p) => (
             <tr key={p.equipo_id}>
-              <td>{p.equipo}</td>
+              <td>
+                {p.equipo}
+                {/* Cierre de Fase Regular + Llaves + Playoffs (Design
+                    review): un empate real en Pts/DG/GF se muestra como
+                    empate, nunca como un ranking implícito que el dato no
+                    sostiene — esta tabla no numera posiciones, pero el
+                    orden visual solo (1° arriba, 2° debajo...) igual
+                    sugiere una hasta que se marca. */}
+                {empatados.has(p.equipo_id) && <span className="muted--cuerpo"> (empatado)</span>}
+              </td>
               <td>{p.pj}</td>
               <td>{p.pg}</td>
               <td>{p.pe}</td>

@@ -296,6 +296,23 @@ export function DetalleTorneoPublicoPage() {
   );
 }
 
+// Cierre de Fase Regular + Llaves + Playoffs (Design review): mismo
+// criterio que EstadisticasDelTorneo.tsx — un empate real en Pts/DG/GF se
+// muestra como empate, nunca como el ranking implícito que el orden de la
+// lista (sin numerar posiciones) podría sugerir.
+function idsEmpatadosPublico(filas: PosicionRow[]): Set<number> {
+  const empatados = new Set<number>();
+  const mismosPuntos = (a: PosicionRow, b: PosicionRow) => a.pts === b.pts && a.dg === b.dg && a.gf === b.gf;
+  for (let i = 0; i < filas.length; i++) {
+    const anterior = filas[i - 1];
+    const siguiente = filas[i + 1];
+    if ((anterior && mismosPuntos(filas[i], anterior)) || (siguiente && mismosPuntos(filas[i], siguiente))) {
+      empatados.add(filas[i].equipo_id);
+    }
+  }
+  return empatados;
+}
+
 function TablaPosicionesPublica({ filas }: { filas: PosicionRow[] }) {
   const porGrupo = new Map<string, PosicionRow[]>();
   for (const fila of filas) {
@@ -307,40 +324,46 @@ function TablaPosicionesPublica({ filas }: { filas: PosicionRow[] }) {
 
   return (
     <>
-      {[...porGrupo.values()].map((grupoFilas) => (
-        <div className="table-scroll" key={grupoFilas[0]?.equipo_id}>
-          <table>
-            <thead>
-              <tr>
-                <th>Equipo</th>
-                <th>PJ</th>
-                <th>PG</th>
-                <th>PE</th>
-                <th>PP</th>
-                <th>GF</th>
-                <th>GC</th>
-                <th>DG</th>
-                <th>Pts</th>
-              </tr>
-            </thead>
-            <tbody>
-              {grupoFilas.map((p) => (
-                <tr key={p.equipo_id}>
-                  <td>{p.equipo}</td>
-                  <td>{p.pj}</td>
-                  <td>{p.pg}</td>
-                  <td>{p.pe}</td>
-                  <td>{p.pp}</td>
-                  <td>{p.gf}</td>
-                  <td>{p.gc}</td>
-                  <td>{p.dg}</td>
-                  <td>{p.pts}</td>
+      {[...porGrupo.values()].map((grupoFilas) => {
+        const empatados = idsEmpatadosPublico(grupoFilas);
+        return (
+          <div className="table-scroll" key={grupoFilas[0]?.equipo_id}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Equipo</th>
+                  <th>PJ</th>
+                  <th>PG</th>
+                  <th>PE</th>
+                  <th>PP</th>
+                  <th>GF</th>
+                  <th>GC</th>
+                  <th>DG</th>
+                  <th>Pts</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
+              </thead>
+              <tbody>
+                {grupoFilas.map((p) => (
+                  <tr key={p.equipo_id}>
+                    <td>
+                      {p.equipo}
+                      {empatados.has(p.equipo_id) && <span className="muted--cuerpo"> (empatado)</span>}
+                    </td>
+                    <td>{p.pj}</td>
+                    <td>{p.pg}</td>
+                    <td>{p.pe}</td>
+                    <td>{p.pp}</td>
+                    <td>{p.gf}</td>
+                    <td>{p.gc}</td>
+                    <td>{p.dg}</td>
+                    <td>{p.pts}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
     </>
   );
 }

@@ -72,6 +72,29 @@ export function GestionarPartidoPage() {
   });
   const partido = partidoQuery.data;
 
+  // Cierre de Fase Regular + Llaves + Playoffs (Fase E4/D8, Design
+  // review — CRÍTICO): los controles de carga se deshabilitan ANTES del
+  // intento, nunca fallan después — un operador que toca "Empezar
+  // Partido"/"Cargar resultado directo" en un torneo cerrado tiene que
+  // ver el control ya bloqueado, no un 400 crudo del trigger. En la
+  // práctica `cerrado` (partido.estado Finalizado/Cancelado) ya cubre
+  // casi todos los casos (cerrar_torneo exige que TODOS los partidos de
+  // la fase ya estén terminados) — el hueco real es un partido creado a
+  // mano DESPUÉS del cierre (el guard de escritura no bloquea el INSERT,
+  // solo el UPDATE), que quedaría "Programado" para siempre sin este chequeo.
+  const torneoQuery = useQuery({
+    queryKey: ["torneo", partido?.torneo_id],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}", {
+        params: { path: { torneo_id: partido!.torneo_id } },
+      } as never);
+      if (error) throw error;
+      return data as { estado: string; fecha_cierre: string | null };
+    },
+    enabled: partido != null,
+  });
+  const torneoCerrado = torneoQuery.data?.estado === "Finalizado";
+
   const convocadosQuery = useQuery({
     queryKey: ["convocados", id],
     queryFn: async () => {
@@ -335,6 +358,10 @@ export function GestionarPartidoPage() {
 
   const enCurso = cronometroQuery.data?.partido_iniciado ?? preflightQuery.data?.partido_iniciado ?? false;
   const cerrado = partido.estado === "Finalizado" || partido.estado === "Cancelado";
+  // Bloqueo efectivo para las acciones de escritura — ver el comentario
+  // grande más arriba sobre por qué `cerrado` (a nivel partido) no
+  // alcanza para el caso borde de un partido creado DESPUÉS del cierre.
+  const bloqueado = cerrado || torneoCerrado;
   const sinRival = partido.equipos_id_local == null || partido.equipos_id_visitante == null;
   const nombreLocal =
     partido.equipos_id_local != null ? nombreEquipo.get(partido.equipos_id_local) ?? `#${partido.equipos_id_local}` : "?";
@@ -381,6 +408,14 @@ export function GestionarPartidoPage() {
 
       {!online && <p className="muted mesa-offline-aviso">Sin conexión — lo que armes se guarda en este dispositivo.</p>}
 
+      {torneoCerrado && (
+        <p className="banner-info-persistente" aria-live="polite">
+          Torneo cerrado
+          {torneoQuery.data?.fecha_cierre ? ` el ${new Date(torneoQuery.data.fecha_cierre).toLocaleDateString("es-AR")}` : ""} —
+          los resultados están bloqueados.
+        </p>
+      )}
+
       {borradorDisponible && cambiosSinGuardar && (
         <div className="card">
           <p>Tenés una alineación sin guardar en este dispositivo.</p>
@@ -417,6 +452,8 @@ export function GestionarPartidoPage() {
         </p>
       ) : cerrado ? (
         <p className="muted">Este partido está {partido.estado.toLowerCase()} — la alineación quedó cerrada.</p>
+      ) : torneoCerrado ? (
+        <p className="muted">El torneo está cerrado — la alineación quedó bloqueada.</p>
       ) : (
         <>
           <div className="selector-equipo" role="tablist">
@@ -496,7 +533,7 @@ export function GestionarPartidoPage() {
         </>
       )}
 
-      {!cerrado && !sinRival && (
+      {!bloqueado && !sinRival && (
         <div className="gestionar-partido__acciones">
           {!enCurso && (
             <>
@@ -534,7 +571,7 @@ export function GestionarPartidoPage() {
           con las dos acciones principales. */}
       <details className="gestionar-partido__otras">
         <summary>Otras acciones</summary>
-        {!enCurso && !cerrado && (
+        {!enCurso && !bloqueado && (
           <EditorFechaPartido
             partidoId={partido.id}
             fechaActual={partido.fecha_partido}
@@ -556,7 +593,7 @@ export function GestionarPartidoPage() {
           // mover la fecha hacia atrás no revalida nada de lo ya cargado.
           <p className="muted">La fecha no se puede cambiar con el partido en curso.</p>
         )}
-        {!cerrado && partido.equipos_id_local != null && partido.equipos_id_visitante != null && (
+        {!bloqueado && partido.equipos_id_local != null && partido.equipos_id_visitante != null && (
           <AccionWalkoverMesa
             equipoLocalId={partido.equipos_id_local}
             equipoVisitanteId={partido.equipos_id_visitante}

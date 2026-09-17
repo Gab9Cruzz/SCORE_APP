@@ -70,7 +70,11 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
         params: { path: { torneo_id: torneoId } },
       } as never);
       if (error) throw error;
-      return data as { clasificados_por_grupo: number | null; formato_eliminatoria: "Unico" | "Ida_Vuelta" | "Mixto" };
+      return data as {
+        clasificados_por_grupo: number | null;
+        formato_eliminatoria: "Unico" | "Ida_Vuelta" | "Mixto";
+        fecha_inicio: string;
+      };
     },
     enabled: modalAbierto,
   });
@@ -196,9 +200,11 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
       {modalAbierto && !torneoQuery.isLoading && (
         <ModalSiguienteFase
           torneoId={torneoId}
+          formatoTorneo={formato}
           accionesDisponibles={estado.acciones_disponibles}
           formatoEliminatoriaActual={torneoQuery.data?.formato_eliminatoria ?? "Unico"}
           clasificadosPorGrupoActual={torneoQuery.data?.clasificados_por_grupo ?? null}
+          fechaInicioTorneo={torneoQuery.data?.fecha_inicio ?? null}
           onClose={() => setModalAbierto(false)}
           onCerrado={() => setModalAbierto(false)}
           onPlayoffsGenerados={() => setModalAbierto(false)}
