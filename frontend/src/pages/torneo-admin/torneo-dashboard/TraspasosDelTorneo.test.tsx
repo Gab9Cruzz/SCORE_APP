@@ -15,6 +15,8 @@ const CONTEXTO: TorneoDashboardContext = {
   torneoContexto: "Liga Relámpago — Edición 2",
   formato: "Liga",
   incluyeTercerLugar: true,
+  torneoEstado: "Activo",
+  fechaCierre: null,
 };
 
 vi.mock("react-router-dom", async (importOriginal) => {

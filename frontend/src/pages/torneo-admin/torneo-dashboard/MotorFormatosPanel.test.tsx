@@ -8,35 +8,47 @@ import { MotorFormatosPanel } from "./MotorFormatosPanel";
 
 const EQUIPOS = "http://127.0.0.1:8000/api/v1/equipos";
 const TORNEO_ID = 20;
+const ESTADO_FASE_URL = `http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}/estado-fase`;
+const TORNEO_URL = `http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}`;
+
+function mockEstadoFase(overrides: Record<string, unknown> = {}) {
+  server.use(
+    http.get(ESTADO_FASE_URL, () =>
+      HttpResponse.json({
+        fase_actual: { id: 1, nombre: "Fase", tipo: "Liga", estado: "En_Curso" },
+        partidos_total: 0,
+        partidos_finalizados: 0,
+        partidos_cancelados: 0,
+        partidos_pendientes: 0,
+        fase_completa: false,
+        acciones_disponibles: [],
+        torneo_cerrado: false,
+        podio: null,
+        ...overrides,
+      }),
+    ),
+  );
+}
 
 function renderPanel(props: Partial<Parameters<typeof MotorFormatosPanel>[0]> = {}) {
   const Wrapper = createWrapper();
   return render(
     <Wrapper>
-      <MotorFormatosPanel
-        torneoId={TORNEO_ID}
-        formato="Liga"
-        partidos={[]}
-        equiposInscritosCount={4}
-        {...props}
-      />
+      <MotorFormatosPanel torneoId={TORNEO_ID} formato="Liga" equiposInscritosCount={4} {...props} />
     </Wrapper>,
   );
 }
 
 describe("MotorFormatosPanel — Liga", () => {
   it("muestra Generar Fixture cuando no hay calendario todavía", async () => {
-    renderPanel({ formato: "Liga", partidos: [] });
+    mockEstadoFase({ fase_actual: null });
+    renderPanel({ formato: "Liga" });
     expect(await screen.findByText("Aún no se generó el calendario.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generar Fixture" })).toBeInTheDocument();
   });
 
-  it("no muestra nada si el fixture ya se generó (partidos con fase_id)", () => {
-    renderPanel({ formato: "Liga", partidos: [{ fase_id: 1, grupo_id: null, estado: "Programado" }] });
-    expect(screen.queryByText("Aún no se generó el calendario.")).not.toBeInTheDocument();
-  });
-
   it("Generar Fixture llama a POST /torneos/{id}/fixture", async () => {
+    mockEstadoFase({ fase_actual: null });
     let llamado = false;
     server.use(
       http.post(`http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}/fixture`, () => {
@@ -45,15 +57,47 @@ describe("MotorFormatosPanel — Liga", () => {
       }),
     );
     const user = userEvent.setup();
-    renderPanel({ formato: "Liga", partidos: [] });
+    renderPanel({ formato: "Liga" });
     await user.click(await screen.findByRole("button", { name: "Generar Fixture" }));
     await waitFor(() => expect(llamado).toBe(true));
+  });
+
+  it("fase en curso (no completa): muestra el conteo de 3 partes, sin botón de acción", async () => {
+    mockEstadoFase({
+      partidos_total: 6,
+      partidos_finalizados: 2,
+      partidos_cancelados: 0,
+      partidos_pendientes: 4,
+      fase_completa: false,
+      acciones_disponibles: [],
+    });
+    renderPanel({ formato: "Liga" });
+    expect(await screen.findByText("2 jugado(s) · 0 cancelado(s) · 4 pendiente(s)")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Configurar Siguiente Fase" })).not.toBeInTheDocument();
+  });
+
+  it("fase completa con los 2 caminos: el botón dice 'Configurar Siguiente Fase'", async () => {
+    mockEstadoFase({
+      partidos_total: 6,
+      partidos_finalizados: 6,
+      fase_completa: true,
+      acciones_disponibles: ["cerrar_directo", "generar_playoffs"],
+    });
+    renderPanel({ formato: "Liga" });
+    expect(await screen.findByRole("button", { name: "Configurar Siguiente Fase" })).toBeInTheDocument();
+  });
+
+  it("torneo cerrado: el panel no renderiza nada (el podio vive en TorneoDashboard)", async () => {
+    mockEstadoFase({ torneo_cerrado: true });
+    const { container } = renderPanel({ formato: "Liga" });
+    await waitFor(() => expect(container.querySelector(".motor-formatos-panel")).not.toBeInTheDocument());
   });
 });
 
 describe("MotorFormatosPanel — Eliminación", () => {
   it("muestra Hacer Sorteo cuando no hay bracket todavía", async () => {
-    renderPanel({ formato: "Eliminacion", partidos: [] });
+    mockEstadoFase({ fase_actual: null });
+    renderPanel({ formato: "Eliminacion" });
     expect(await screen.findByText("Aún no se hizo el sorteo.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hacer Sorteo" })).toBeInTheDocument();
   });
@@ -61,6 +105,11 @@ describe("MotorFormatosPanel — Eliminación", () => {
   // T46 — una casilla sin equipo dice "Ganador Partido N", nunca queda
   // en blanco sin explicación.
   it("el bracket muestra 'Ganador Partido N' en casillas sin equipo aún", async () => {
+    mockEstadoFase({
+      fase_actual: { id: 1, nombre: "Eliminatoria", tipo: "Eliminacion", estado: "En_Curso" },
+      partidos_total: 3,
+      partidos_pendientes: 3,
+    });
     server.use(
       http.get(`http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}/bracket`, () =>
         HttpResponse.json([
@@ -73,6 +122,7 @@ describe("MotorFormatosPanel — Eliminación", () => {
             slot_siguiente: "Local",
             partido_perdedor_siguiente_id: null,
             slot_perdedor_siguiente: null,
+            partido_ida_id: null,
             estado: "Programado",
           },
           {
@@ -84,6 +134,7 @@ describe("MotorFormatosPanel — Eliminación", () => {
             slot_siguiente: "Visitante",
             partido_perdedor_siguiente_id: null,
             slot_perdedor_siguiente: null,
+            partido_ida_id: null,
             estado: "Programado",
           },
           {
@@ -95,6 +146,7 @@ describe("MotorFormatosPanel — Eliminación", () => {
             slot_siguiente: null,
             partido_perdedor_siguiente_id: null,
             slot_perdedor_siguiente: null,
+            partido_ida_id: null,
             estado: "Programado",
           },
         ]),
@@ -108,55 +160,61 @@ describe("MotorFormatosPanel — Eliminación", () => {
         ]),
       ),
     );
-    renderPanel({ formato: "Eliminacion", partidos: [{ fase_id: 1, grupo_id: null, estado: "Programado" }] });
+    renderPanel({ formato: "Eliminacion" });
 
     expect(await screen.findByText("Tigres")).toBeInTheDocument();
     expect(screen.getByText("Ganador Partido 1")).toBeInTheDocument();
     expect(screen.getByText("Ganador Partido 2")).toBeInTheDocument();
   });
+
+  it("bracket completo: el botón dice 'Cerrar Torneo'", async () => {
+    mockEstadoFase({
+      fase_actual: { id: 1, nombre: "Eliminatoria", tipo: "Eliminacion", estado: "En_Curso" },
+      partidos_total: 1,
+      partidos_finalizados: 1,
+      fase_completa: true,
+      acciones_disponibles: ["cerrar_directo"],
+    });
+    server.use(http.get(`http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}/bracket`, () => HttpResponse.json([])));
+    renderPanel({ formato: "Eliminacion" });
+    expect(await screen.findByRole("button", { name: "Cerrar Torneo" })).toBeInTheDocument();
+  });
 });
 
 describe("MotorFormatosPanel — Grupos + Playoffs", () => {
   it("muestra Sortear Grupos cuando no hay grupos todavía", async () => {
-    renderPanel({ formato: "Grupos_Playoffs", partidos: [] });
-    expect(await screen.findByText("Fase de Grupos: sorteo pendiente.")).toBeInTheDocument();
+    mockEstadoFase({ fase_actual: null });
+    renderPanel({ formato: "Grupos_Playoffs" });
+    expect(await screen.findByText("Sorteo pendiente.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sortear Grupos" })).toBeInTheDocument();
   });
 
-  it("muestra Generar Playoffs solo cuando todos los partidos de grupos terminaron", async () => {
-    const { rerender } = renderPanel({
-      formato: "Grupos_Playoffs",
-      partidos: [
-        { fase_id: 1, grupo_id: 10, estado: "Programado" },
-        { fase_id: 1, grupo_id: 10, estado: "Finalizado" },
-      ],
+  it("grupos en curso: sin botón de Generar Playoffs todavía", async () => {
+    mockEstadoFase({
+      fase_actual: { id: 1, nombre: "Fase de Grupos", tipo: "Grupos", estado: "En_Curso" },
+      partidos_total: 2,
+      partidos_finalizados: 1,
+      partidos_pendientes: 1,
+      fase_completa: false,
+      acciones_disponibles: [],
     });
-    expect(await screen.findByText(/en curso/)).toBeInTheDocument();
+    renderPanel({ formato: "Grupos_Playoffs" });
+    expect(await screen.findByText("1 jugado(s) · 0 cancelado(s) · 1 pendiente(s)")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Generar Playoffs" })).not.toBeInTheDocument();
-
-    const Wrapper = createWrapper();
-    rerender(
-      <Wrapper>
-        <MotorFormatosPanel
-          torneoId={TORNEO_ID}
-          formato="Grupos_Playoffs"
-          partidos={[
-            { fase_id: 1, grupo_id: 10, estado: "Finalizado" },
-            { fase_id: 1, grupo_id: 10, estado: "Finalizado" },
-          ]}
-          equiposInscritosCount={4}
-        />
-      </Wrapper>,
-    );
-    expect(await screen.findByText("Fase de Grupos: terminada.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Generar Playoffs" })).toBeInTheDocument();
   });
 
-  it("Generar Playoffs abre un modal (no window.prompt) pre-cargado con clasificados_por_grupo, y persiste el override elegido", async () => {
+  it("Generar Playoffs abre el modal (no window.prompt) pre-cargado con clasificados_por_grupo, y persiste el override elegido", async () => {
+    mockEstadoFase({
+      fase_actual: { id: 1, nombre: "Fase de Grupos", tipo: "Grupos", estado: "En_Curso" },
+      partidos_total: 2,
+      partidos_finalizados: 2,
+      fase_completa: true,
+      acciones_disponibles: ["generar_playoffs"],
+    });
     let cuerpoEnviado: { clasificados_por_grupo?: number } | undefined;
     server.use(
-      http.get(`http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}`, () =>
-        HttpResponse.json({ id: TORNEO_ID, clasificados_por_grupo: 2 }),
+      http.get(TORNEO_URL, () =>
+        HttpResponse.json({ id: TORNEO_ID, clasificados_por_grupo: 2, formato_eliminatoria: "Unico" }),
       ),
       http.post(`http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}/playoffs`, async ({ request }) => {
         cuerpoEnviado = (await request.json()) as never;
@@ -164,13 +222,7 @@ describe("MotorFormatosPanel — Grupos + Playoffs", () => {
       }),
     );
     const user = userEvent.setup();
-    renderPanel({
-      formato: "Grupos_Playoffs",
-      partidos: [
-        { fase_id: 1, grupo_id: 10, estado: "Finalizado" },
-        { fase_id: 1, grupo_id: 10, estado: "Finalizado" },
-      ],
-    });
+    renderPanel({ formato: "Grupos_Playoffs" });
 
     await user.click(await screen.findByRole("button", { name: "Generar Playoffs" }));
 
@@ -182,25 +234,28 @@ describe("MotorFormatosPanel — Grupos + Playoffs", () => {
     const modal = input.closest(".modal-panel") as HTMLElement;
     await user.click(within(modal).getByRole("button", { name: "Generar Playoffs" }));
 
-    await waitFor(() => expect(cuerpoEnviado).toEqual({ clasificados_por_grupo: 1 }));
+    await waitFor(() =>
+      expect(cuerpoEnviado).toEqual({ clasificados_por_grupo: 1, formato_eliminatoria: "Unico" }),
+    );
     // El modal se cierra al confirmar con éxito.
     expect(screen.queryByLabelText("Clasificados por grupo")).not.toBeInTheDocument();
   });
 
   it("el modal de Generar Playoffs rechaza un valor menor a 1", async () => {
+    mockEstadoFase({
+      fase_actual: { id: 1, nombre: "Fase de Grupos", tipo: "Grupos", estado: "En_Curso" },
+      partidos_total: 2,
+      partidos_finalizados: 2,
+      fase_completa: true,
+      acciones_disponibles: ["generar_playoffs"],
+    });
     server.use(
-      http.get(`http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}`, () =>
-        HttpResponse.json({ id: TORNEO_ID, clasificados_por_grupo: null }),
+      http.get(TORNEO_URL, () =>
+        HttpResponse.json({ id: TORNEO_ID, clasificados_por_grupo: null, formato_eliminatoria: "Unico" }),
       ),
     );
     const user = userEvent.setup();
-    renderPanel({
-      formato: "Grupos_Playoffs",
-      partidos: [
-        { fase_id: 1, grupo_id: 10, estado: "Finalizado" },
-        { fase_id: 1, grupo_id: 10, estado: "Finalizado" },
-      ],
-    });
+    renderPanel({ formato: "Grupos_Playoffs" });
 
     await user.click(await screen.findByRole("button", { name: "Generar Playoffs" }));
     const input = await screen.findByLabelText("Clasificados por grupo");

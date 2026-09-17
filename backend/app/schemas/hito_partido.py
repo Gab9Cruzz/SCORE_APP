@@ -21,6 +21,12 @@ class HitoPartidoCreate(BaseModel):
     # Estado='Finalizado' (Flujo 5 del plan: "¿Quién ganó?" antes de
     # "Finalizar partido").
     ganador_corrido_id: int | None = None
+    # Desempate manual (Fase 0 de cierre-fase-regular-llaves-playoffs-
+    # plan.md, Finding 1): mismo motivo que ganador_corrido_id de arriba,
+    # solo para tipo_hito='Fin_Partido' de un partido de fase Eliminación
+    # que termina empatado en goles — fn_validar_partido_eliminacion_
+    # desempate lo exige antes de que este Hito dispare Estado='Finalizado'.
+    ganador_desempate_id: int | None = None
     # Cierre forzado (Área 4, T6): reusa este mismo endpoint
     # (POST /partidos/{id}/hitos) con tipo_hito='Fin_Partido' — evita un
     # segundo camino de escritura para el mismo Hito terminal (ver Sección 1

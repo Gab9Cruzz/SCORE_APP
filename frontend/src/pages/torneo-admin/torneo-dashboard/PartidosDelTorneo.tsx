@@ -55,7 +55,7 @@ const formatearFecha = (iso: string) => new Date(iso).toLocaleString("es-AR", { 
  * (trg_partidos_validar_inscripcion en 06_triggers.sql rechaza si no,
  * esto es solo UX). */
 export function PartidosDelTorneoPage() {
-  const { torneoId, torneoContexto, formato } = useOutletContext<TorneoDashboardContext>();
+  const { torneoId, torneoContexto, formato, torneoEstado, fechaCierre } = useOutletContext<TorneoDashboardContext>();
   const navigate = useNavigate();
   const [modo, setModo] = useState<Modo>({ tipo: "lista" });
 
@@ -124,12 +124,16 @@ export function PartidosDelTorneoPage() {
 
   return (
     <div>
-      <MotorFormatosPanel
-        torneoId={torneoId}
-        formato={formato}
-        partidos={crud.listQuery.data ?? []}
-        equiposInscritosCount={equiposInscritos.length}
-      />
+      {/* Cierre de Fase Regular + Llaves + Playoffs (Fase E4/D8, Design
+          review): un lock sin causa declarada lee como un bug — el banner
+          nombra la fecha, siempre visible mientras el torneo esté cerrado. */}
+      {torneoEstado === "Finalizado" && (
+        <p className="banner-info-persistente" aria-live="polite">
+          Torneo cerrado{fechaCierre ? ` el ${new Date(fechaCierre).toLocaleDateString("es-AR")}` : ""} — los
+          resultados están bloqueados.
+        </p>
+      )}
+      <MotorFormatosPanel torneoId={torneoId} formato={formato} equiposInscritosCount={equiposInscritos.length} />
       <div className="page__header">
         <h2>Partidos de esta edición</h2>
         <button type="button" onClick={() => setModo({ tipo: "crear" })}>

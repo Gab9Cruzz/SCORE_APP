@@ -72,6 +72,17 @@ ALTER TABLE TORNEO
     -- Permite_Cambios_Ilimitados, que gobierna la regla de no-retorno).
     ADD CONSTRAINT chk_torneo_maximo_cambios CHECK (Maximo_Cambios_Por_Equipo IS NULL OR Maximo_Cambios_Por_Equipo >= 1);
 
+-- Cierre de Fase Regular + Llaves + Playoffs (cierre-fase-regular-llaves-
+-- playoffs-plan.md, Fase A1/A2). Podio: ON DELETE SET NULL — un equipo no
+-- se borra físicamente nunca (baja lógica, Estado), pero si algún día se
+-- hiciera, un torneo cerrado no debe quedar bloqueado por una FK RESTRICT
+-- sobre su propio historial.
+ALTER TABLE TORNEO
+    ADD CONSTRAINT fk_torneo_campeon FOREIGN KEY (Campeon_Equipo_ID) REFERENCES EQUIPOS(ID) ON DELETE SET NULL,
+    ADD CONSTRAINT fk_torneo_subcampeon FOREIGN KEY (Subcampeon_Equipo_ID) REFERENCES EQUIPOS(ID) ON DELETE SET NULL,
+    ADD CONSTRAINT fk_torneo_tercer_puesto FOREIGN KEY (Tercer_Puesto_Equipo_ID) REFERENCES EQUIPOS(ID) ON DELETE SET NULL,
+    ADD CONSTRAINT chk_torneo_formato_eliminatoria CHECK (Formato_Eliminatoria IN ('Unico', 'Ida_Vuelta', 'Mixto'));
+
 -- EQUIPOS
 -- Disciplina_ID/Modalidad_ID: sin ON DELETE CASCADE a proposito — el
 -- catalogo de disciplinas es solo-lectura desde la API y un equipo no
@@ -248,6 +259,11 @@ ALTER TABLE PARTIDOS
     ADD CONSTRAINT fk_partidos_grupo FOREIGN KEY (Grupo_ID) REFERENCES GRUPO(ID),
     ADD CONSTRAINT fk_partidos_siguiente FOREIGN KEY (Partido_Siguiente_ID) REFERENCES PARTIDOS(ID) ON DELETE SET NULL,
     ADD CONSTRAINT fk_partidos_perdedor_siguiente FOREIGN KEY (Partido_Perdedor_Siguiente_ID) REFERENCES PARTIDOS(ID) ON DELETE SET NULL,
+    -- Fase A3 (cierre-fase-regular-llaves-playoffs-plan.md): llave a dos
+    -- partidos. Mismo patrón exacto que los dos de arriba — autorreferenciada,
+    -- ON DELETE SET NULL (Finding 8 del review: es la convención ya
+    -- establecida acá, no delete-ordering en el service).
+    ADD CONSTRAINT fk_partidos_ida FOREIGN KEY (Partido_Ida_ID) REFERENCES PARTIDOS(ID) ON DELETE SET NULL,
     ADD CONSTRAINT fk_partidos_ganador_desempate FOREIGN KEY (Ganador_Desempate_ID) REFERENCES EQUIPOS(ID),
     ADD CONSTRAINT fk_partidos_ganador_corrido FOREIGN KEY (Ganador_Corrido_ID) REFERENCES EQUIPOS(ID),
     ADD CONSTRAINT chk_partidos_equipos_distintos CHECK (EQUIPOS_ID_LOCAL IS NULL OR EQUIPOS_ID_VISITANTE IS NULL OR EQUIPOS_ID_LOCAL <> EQUIPOS_ID_VISITANTE),

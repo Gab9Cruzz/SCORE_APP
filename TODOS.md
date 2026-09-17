@@ -716,3 +716,17 @@ implementado 2026-09-15 (R1+R2+R3 completos)
   muestra un indicador "EN VIVO" en vez del minuto real: pedirlo exigiría
   una consulta de cronómetro por fila (N+1), el mismo costo que
   `preflight-inicio` ya evita a propósito en el resto del repo.
+
+## Palmarés por grupo de torneos (aparcado — /autoplan 2026-09-16)
+
+- **Palmarés a través de las ediciones de un `TORNEO_GRUPO`** — agregar los
+  podios de cada `numero_edicion` en una vista de historial. `TORNEO.torneo_grupo_id`
+  + `numero_edicion` ya modelan las ediciones (`torneos-admin-plan.md`), así
+  que una vez que existan las columnas de podio de
+  `cierre-fase-regular-llaves-playoffs-plan.md` esto es una vista más una
+  página. **Por qué:** un campeón que se acumula vale más que uno que se
+  resetea cada edición — es el gancho de retención más barato que este modelo
+  de datos permite. **Contra:** no hay consumidor todavía y depende de que
+  primero exista la página pública de campeón (UC2 de ese plan, sin resolver).
+  **Esfuerzo:** M → con CC, S. **Prioridad:** P3. **Bloqueado por:** las
+  columnas de podio de ese plan, y UC2.

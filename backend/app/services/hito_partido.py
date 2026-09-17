@@ -381,6 +381,15 @@ class HitoPartidoService:
             # validación lo rechaza.
             partido = await self.partido_repo.save_changes(partido, ganador_corrido_id=data.ganador_corrido_id)
 
+        if data.tipo_hito == "Fin_Partido" and data.ganador_desempate_id is not None:
+            # Mismo motivo que el ganador_corrido_id de arriba: se setea
+            # ANTES del Hito, para que fn_validar_partido_eliminacion_
+            # desempate ya lo vea no-NULL si el partido terminó empatado en
+            # goles. No se exige acá (a diferencia de Corrido) — el
+            # trigger es quien sabe si hacía falta, mismo criterio que
+            # PartidoUpdate.ganador_desempate_id.
+            partido = await self.partido_repo.save_changes(partido, ganador_desempate_id=data.ganador_desempate_id)
+
         hito = await self.repo.create(
             partido_id=partido_id,
             tipo_hito=data.tipo_hito,
@@ -441,6 +450,9 @@ class HitoPartidoService:
             if data.ganador_corrido_id not in (partido.equipos_id_local, partido.equipos_id_visitante):
                 raise DomainRuleError("El ganador debe ser uno de los dos equipos que disputan el partido.")
             partido = await self.partido_repo.save_changes(partido, ganador_corrido_id=data.ganador_corrido_id)
+
+        if data.ganador_desempate_id is not None:
+            partido = await self.partido_repo.save_changes(partido, ganador_desempate_id=data.ganador_desempate_id)
 
         hito = await self.repo.create(
             partido_id=partido.id,

@@ -455,3 +455,112 @@ async def test_solo_mios_sin_efecto_para_admin_general_y_anonimo(
         "/api/v1/torneos", params={"solo_mios": "true"}, headers=admin_general_headers
     )
     assert [t["id"] for t in resp_admin.json()] == [t["id"] for t in resp_sin_filtro.json()]
+
+
+# ---------- Cierre de Fase Regular + Llaves + Playoffs (Finding 16/T14, E5/T13) ----------
+
+
+async def test_ida_vuelta_ahora_se_acepta_en_grupos_playoffs(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    """A4: Ida_Vuelta en Grupos_Playoffs significa "round robin doble
+    DENTRO de cada grupo" — antes rechazado por la condición combinada
+    original."""
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "torneo_grupo_nombre": "Grupos Ida Vuelta",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
+            "modalidad_id": MODALIDAD_FUTBOL_11_ID,
+            "fecha_inicio": "2026-04-01",
+            "fecha_fin": "2026-06-30",
+            "formato": "Grupos_Playoffs",
+            "equipos_por_grupo": 4,
+            "ida_vuelta": True,
+        },
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+
+async def test_clasificados_por_grupo_ahora_se_acepta_en_liga(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    """C2/T3: clasificados_por_grupo en Liga significa "cuántos de la
+    tabla pasan a la liguilla" — misma columna que Grupos_Playoffs."""
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "torneo_grupo_nombre": "Liga Con Liguilla",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
+            "modalidad_id": MODALIDAD_FUTBOL_11_ID,
+            "fecha_inicio": "2026-04-01",
+            "fecha_fin": "2026-06-30",
+            "formato": "Liga",
+            "clasificados_por_grupo": 4,
+        },
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+
+async def test_equipos_por_grupo_sigue_exclusivo_de_grupos_playoffs(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "torneo_grupo_nombre": "Liga Con Equipos Por Grupo",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
+            "modalidad_id": MODALIDAD_FUTBOL_11_ID,
+            "fecha_inicio": "2026-04-01",
+            "fecha_fin": "2026-06-30",
+            "formato": "Liga",
+            "equipos_por_grupo": 4,
+        },
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 400, resp.text
+
+
+async def test_formato_eliminatoria_se_puede_setear_al_crear_torneo_eliminacion_puro(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    """E5/T13/Finding 15: un torneo Eliminacion puro (sin fase regular
+    previa) también puede ser a doble partido desde el alta — el selector
+    de "Configurar Siguiente Fase" es solo post-fase-regular y nunca lo
+    alcanzaría."""
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "torneo_grupo_nombre": "Copa Eliminacion Ida Vuelta",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
+            "modalidad_id": MODALIDAD_FUTBOL_11_ID,
+            "fecha_inicio": "2026-04-01",
+            "fecha_fin": "2026-06-30",
+            "formato": "Eliminacion",
+            "formato_eliminatoria": "Ida_Vuelta",
+        },
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["formato_eliminatoria"] == "Ida_Vuelta"
+
+
+async def test_formato_eliminatoria_default_unico_no_cambia_comportamiento(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "torneo_grupo_nombre": "Copa Default Unico",
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
+            "modalidad_id": MODALIDAD_FUTBOL_11_ID,
+            "fecha_inicio": "2026-04-01",
+            "fecha_fin": "2026-06-30",
+            "formato": "Eliminacion",
+        },
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["formato_eliminatoria"] == "Unico"

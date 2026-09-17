@@ -129,6 +129,15 @@ export function Cronometro(props: {
    * (app/services/minuto_partido.py), con precisión real; esto solo evita
    * que el operador tipee un número a ciegas. */
   onMinutoActual?: (minuto: number | null) => void;
+  /** Fase 0 de cierre-fase-regular-llaves-playoffs-plan.md (Finding 1):
+   * `true` cuando este partido es de fase Eliminación Y el marcador de
+   * goles está empatado — sin UI para esto, ningún partido de bracket
+   * empatado se podía cerrar (el trigger lo rechaza pidiendo
+   * Ganador_Desempate_ID). Calculado por el padre (MesaPanel ya conoce
+   * `ronda_nombre`/marcador), no acá — este componente no tiene visión de
+   * goles. Ignorado en un torneo 'Corrido' (ya tiene su propio flujo
+   * "¿Quién ganó?" arriba). */
+  requiereDesempate?: boolean;
 }) {
   const {
     partidoId,
@@ -139,12 +148,18 @@ export function Cronometro(props: {
     onFinalizado,
     mostrarInicio = true,
     onMinutoActual,
+    requiereDesempate = false,
   } = props;
   const queryClient = useQueryClient();
   const [now, setNow] = useState(() => Date.now());
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [eligiendoGanador, setEligiendoGanador] = useState(false);
   const [ganadorElegido, setGanadorElegido] = useState<number | null>(null);
+  // Desempate manual (Fase 0, Finding 1) — mismo patrón que eligiendoGanador/
+  // ganadorElegido de arriba, estado propio porque es un flujo de
+  // confirmación distinto (aplica a 'Periodos', no a 'Corrido').
+  const [eligiendoDesempate, setEligiendoDesempate] = useState(false);
+  const [desempateElegido, setDesempateElegido] = useState<number | null>(null);
   // Área 4 (T6): confirmación del cierre forzado — separado de
   // `eligiendoGanador` (son dos flujos de confirmación distintos, aunque
   // ambos terminan en Fin_Partido).
@@ -174,6 +189,7 @@ export function Cronometro(props: {
       tipo_hito: TipoHito;
       numero_periodo?: number;
       ganador_corrido_id?: number;
+      ganador_desempate_id?: number;
       forzado?: boolean;
       motivo_cierre?: MotivoCierre;
       motivo_cierre_detalle?: string;
@@ -296,6 +312,15 @@ export function Cronometro(props: {
     await registrar.mutateAsync({ tipo_hito: "Fin_Partido" } as never);
   }
 
+  // Desempate manual (Fase 0, Finding 1): mismo espejo, con el ganador
+  // elegido viajando en el propio Hito Fin_Partido — fn_validar_partido_
+  // eliminacion_desempate lo exige antes de dejar pasar el UPDATE a
+  // Estado='Finalizado' que este Hito dispara.
+  async function finalizarUltimoPeriodoYPartidoConDesempate(ganadorId: number) {
+    await registrar.mutateAsync({ tipo_hito: "Fin_Periodo", numero_periodo: estado.periodo_abierto ?? undefined } as never);
+    await registrar.mutateAsync({ tipo_hito: "Fin_Partido", ganador_desempate_id: ganadorId } as never);
+  }
+
   const esUltimoPeriodo = estado.cantidad_periodos != null && estado.periodo_abierto === estado.cantidad_periodos;
 
   let contenido: ReactNode;
@@ -369,6 +394,41 @@ export function Cronometro(props: {
         </div>
       </div>
     );
+  } else if (eligiendoDesempate) {
+    // Desempate manual (Fase 0, Finding 1): el marcador de goles terminó
+    // empatado en un partido de fase Eliminación — el sistema registra
+    // QUIÉN avanza, no CÓMO (penales/tiempo extra/decisión arbitral),
+    // mismo nivel de detalle que el resto de TRASPASOS.Motivo.
+    contenido = (
+      <div>
+        <p className="cronometro__label">Empate en el marcador — ¿quién avanza?</p>
+        <label className="cronometro__radio">
+          <input type="radio" checked={desempateElegido === equipoLocalId} onChange={() => setDesempateElegido(equipoLocalId)} />
+          {nombreLocal}
+        </label>
+        <label className="cronometro__radio">
+          <input
+            type="radio"
+            checked={desempateElegido === equipoVisitanteId}
+            onChange={() => setDesempateElegido(equipoVisitanteId)}
+          />
+          {nombreVisitante}
+        </label>
+        {registrar.isError && <p className="error-text">{apiErrorMessage(registrar.error)}</p>}
+        <div className="resource-form__actions">
+          <button type="button" className="link-button" onClick={() => setEligiendoDesempate(false)}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={desempateElegido == null || registrar.isPending}
+            onClick={() => void finalizarUltimoPeriodoYPartidoConDesempate(desempateElegido as number)}
+          >
+            {registrar.isPending ? "Cerrando..." : "Confirmar y finalizar"}
+          </button>
+        </div>
+      </div>
+    );
   } else {
     // Corriendo o pausado — período abierto (Periodos) o partido en
     // marcha (Corrido).
@@ -398,7 +458,19 @@ export function Cronometro(props: {
             <button
               type="button"
               disabled={registrar.isPending}
-              onClick={() => (esUltimoPeriodo ? finalizarUltimoPeriodoYPartido() : accion("Fin_Periodo", { numero_periodo: estado.periodo_abierto ?? undefined }))}
+              onClick={() => {
+                if (!esUltimoPeriodo) {
+                  accion("Fin_Periodo", { numero_periodo: estado.periodo_abierto ?? undefined });
+                } else if (requiereDesempate) {
+                  // Fase 0 (Finding 1): el marcador está empatado y este
+                  // partido es de fase Eliminación — el botón deshabilita
+                  // ANTES del intento en vez de fallar después (Design
+                  // review): pide el desempate en vez de finalizar directo.
+                  setEligiendoDesempate(true);
+                } else {
+                  finalizarUltimoPeriodoYPartido();
+                }
+              }}
             >
               {esUltimoPeriodo ? "Fin del Partido" : `Fin ${label}`}
             </button>

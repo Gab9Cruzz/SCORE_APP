@@ -549,6 +549,169 @@ CREATE TRIGGER trg_grupo_equipo_un_grupo_por_fase
 BEFORE INSERT OR UPDATE ON GRUPO_EQUIPO
 FOR EACH ROW EXECUTE FUNCTION fn_validar_equipo_un_grupo_por_fase();
 
+-- ------------------------------------------------------------
+-- Cierre de Fase Regular + Llaves + Playoffs
+-- (docs/plans/cierre-fase-regular-llaves-playoffs-plan.md, Fase B).
+-- fn_marcador_partido/fn_resolver_llave se agregan ANTES de los dos
+-- triggers que siguen porque ambos pasan a llamarlas.
+-- ------------------------------------------------------------
+
+-- B1: helper compartido — "quién ganó y con qué marcador" para UN
+-- partido, sin importar la disciplina. Antes esta lógica estaba
+-- duplicada en fn_propagar_ganador_bracket y en
+-- fn_validar_partido_eliminacion_desempate; la llave a dos partidos la
+-- necesitaría una tercera vez — se extrae una sola vez acá y los dos
+-- triggers existentes pasan a llamarla (arreglo en la raíz, no un guard
+-- por llamador).
+--
+-- Contrato (CEO review, corrige la redacción original de la Fase B1):
+-- devuelve (ganador_equipo_id, goles_local, goles_visitante), resolviendo
+-- GANADOR — no solo goles — en las 3 disciplinas del catálogo:
+--   - Walkover: el equipo PRESENTE, 3-0 (Es_Walkover/Walkover_Equipo_Ausente_ID).
+--   - 'Corrido' (Tenis/Ajedrez/LoL...): Ganador_Corrido_ID. Goles_Local/
+--     Visitante salen NULL — no aplican, y fn_resolver_llave los ignora
+--     para estas disciplinas (cuenta victorias de pierna, no goles).
+--   - Goles (fútbol/básquet/etc.): cuenta vw_goles_acreditados; empate
+--     resuelto por Ganador_Desempate_ID si ya está seteado (NULL si no).
+-- Un partido sin ganador resoluble (ej. Corrido sin Ganador_Corrido_ID
+-- todavía, o Cancelado) devuelve ganador_equipo_id NULL — no es un error,
+-- lo interpreta el llamador (fn_resolver_llave: "esta pierna no aportó
+-- una victoria a nadie").
+CREATE OR REPLACE FUNCTION fn_marcador_partido(p_partido_id INT)
+RETURNS TABLE(ganador_equipo_id INT, goles_local INT, goles_visitante INT) AS $$
+DECLARE
+    v_local INT;
+    v_visitante INT;
+    v_es_walkover BOOLEAN;
+    v_walkover_ausente INT;
+    v_ganador_desempate INT;
+    v_ganador_corrido INT;
+    v_torneo_id INT;
+    v_tipo_cronometro VARCHAR(20);
+    v_gl INT;
+    v_gv INT;
+BEGIN
+    SELECT EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE, Es_Walkover, Walkover_Equipo_Ausente_ID,
+           Ganador_Desempate_ID, Ganador_Corrido_ID, Torneo_ID
+      INTO v_local, v_visitante, v_es_walkover, v_walkover_ausente,
+           v_ganador_desempate, v_ganador_corrido, v_torneo_id
+      FROM PARTIDOS WHERE ID = p_partido_id;
+
+    IF v_es_walkover THEN
+        ganador_equipo_id := CASE WHEN v_walkover_ausente = v_local THEN v_visitante ELSE v_local END;
+        goles_local := CASE WHEN v_walkover_ausente = v_local THEN 0 ELSE 3 END;
+        goles_visitante := CASE WHEN v_walkover_ausente = v_visitante THEN 0 ELSE 3 END;
+        RETURN NEXT;
+        RETURN;
+    END IF;
+
+    SELECT Tipo_Cronometro INTO v_tipo_cronometro FROM CONFIGURACION_TIEMPO_TORNEO WHERE Torneo_ID = v_torneo_id;
+
+    IF v_tipo_cronometro = 'Corrido' THEN
+        ganador_equipo_id := v_ganador_corrido;   -- puede ser NULL (pierna sin ganador todavía / Cancelada)
+        goles_local := NULL;
+        goles_visitante := NULL;
+        RETURN NEXT;
+        RETURN;
+    END IF;
+
+    SELECT
+        COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = v_local),
+        COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = v_visitante)
+      INTO v_gl, v_gv
+      FROM vw_goles_acreditados ga
+     WHERE ga.PARTIDOS_ID = p_partido_id;
+
+    goles_local := COALESCE(v_gl, 0);
+    goles_visitante := COALESCE(v_gv, 0);
+    ganador_equipo_id := CASE
+        WHEN goles_local > goles_visitante THEN v_local
+        WHEN goles_visitante > goles_local THEN v_visitante
+        ELSE v_ganador_desempate   -- NULL si el empate no está resuelto todavía
+    END;
+    RETURN NEXT;
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
+-- B2: resuelve el ganador de una llave a DOS partidos (Ida/Vuelta),
+-- p_partido_vuelta_id es la VUELTA (la única que carga Partido_Ida_ID).
+--
+-- `p_ganador_desempate_override`: cuando se llama desde el trigger BEFORE
+-- de validación (fn_validar_partido_eliminacion_desempate), la fila de la
+-- VUELTA todavía no está físicamente actualizada en PARTIDOS — leer
+-- Ganador_Desempate_ID de la tabla devolvería el valor VIEJO, no el que
+-- viene en este mismo UPDATE. Se pasa NEW.Ganador_Desempate_ID acá para
+-- no repetir ese bug (mismo motivo por el que el validador de partido
+-- único usa NEW.Ganador_Desempate_ID directo, nunca una sub-consulta).
+-- Desde el trigger AFTER de propagación no hace falta: para entonces la
+-- fila ya está commiteada, así que el default NULL (leer de la tabla) ya
+-- trae el valor correcto.
+--
+-- Reglas (CEO review): para una disciplina de goles, suma goles de AMBAS
+-- piernas invirtiendo local/visitante de la IDA (la vuelta juega de local
+-- quien fue visitante en la ida). Para 'Corrido', cuenta VICTORIAS DE
+-- PIERNA (no goles) — 1 a 1 es empate y cae a Ganador_Desempate_ID de la
+-- vuelta, igual que un empate de goles. Una pierna Cancelada aporta 0-0 y
+-- ninguna victoria de pierna — nunca bloquea la resolución.
+CREATE OR REPLACE FUNCTION fn_resolver_llave(p_partido_vuelta_id INT, p_ganador_desempate_override INT DEFAULT NULL)
+RETURNS TABLE(ganador_equipo_id INT) AS $$
+DECLARE
+    v_ida_id INT;
+    v_torneo_id INT;
+    v_local_vta INT;
+    v_visit_vta INT;
+    v_ganador_desempate INT;
+    v_tipo_cronometro VARCHAR(20);
+    ida_ganador INT; ida_gl INT; ida_gv INT;
+    vta_ganador INT; vta_gl INT; vta_gv INT;
+    v_gl_total INT;
+    v_gv_total INT;
+    v_victorias_local INT := 0;
+    v_victorias_visit INT := 0;
+BEGIN
+    SELECT Partido_Ida_ID, Torneo_ID, EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE, Ganador_Desempate_ID
+      INTO v_ida_id, v_torneo_id, v_local_vta, v_visit_vta, v_ganador_desempate
+      FROM PARTIDOS WHERE ID = p_partido_vuelta_id;
+
+    IF p_ganador_desempate_override IS NOT NULL THEN
+        v_ganador_desempate := p_ganador_desempate_override;
+    END IF;
+
+    SELECT Tipo_Cronometro INTO v_tipo_cronometro FROM CONFIGURACION_TIEMPO_TORNEO WHERE Torneo_ID = v_torneo_id;
+
+    SELECT m.ganador_equipo_id, m.goles_local, m.goles_visitante INTO ida_ganador, ida_gl, ida_gv
+      FROM fn_marcador_partido(v_ida_id) m;
+    SELECT m.ganador_equipo_id, m.goles_local, m.goles_visitante INTO vta_ganador, vta_gl, vta_gv
+      FROM fn_marcador_partido(p_partido_vuelta_id) m;
+
+    IF v_tipo_cronometro = 'Corrido' THEN
+        IF ida_ganador IS NOT NULL AND ida_ganador = v_local_vta THEN v_victorias_local := v_victorias_local + 1; END IF;
+        IF ida_ganador IS NOT NULL AND ida_ganador = v_visit_vta THEN v_victorias_visit := v_victorias_visit + 1; END IF;
+        IF vta_ganador IS NOT NULL AND vta_ganador = v_local_vta THEN v_victorias_local := v_victorias_local + 1; END IF;
+        IF vta_ganador IS NOT NULL AND vta_ganador = v_visit_vta THEN v_victorias_visit := v_victorias_visit + 1; END IF;
+
+        ganador_equipo_id := CASE
+            WHEN v_victorias_local > v_victorias_visit THEN v_local_vta
+            WHEN v_victorias_visit > v_victorias_local THEN v_visit_vta
+            ELSE v_ganador_desempate
+        END;
+    ELSE
+        -- ida_gv (goles del VISITANTE de la ida) es el mismo equipo que
+        -- v_local_vta (local de la vuelta) — de ahí el cruce.
+        v_gl_total := COALESCE(vta_gl, 0) + COALESCE(ida_gv, 0);
+        v_gv_total := COALESCE(vta_gv, 0) + COALESCE(ida_gl, 0);
+        ganador_equipo_id := CASE
+            WHEN v_gl_total > v_gv_total THEN v_local_vta
+            WHEN v_gv_total > v_gl_total THEN v_visit_vta
+            ELSE v_ganador_desempate
+        END;
+    END IF;
+    RETURN NEXT;
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Exige Ganador_Desempate_ID en CUALQUIER partido de una fase Eliminación
 -- que termine empatado en goles — no solo los que propagan a un
 -- siguiente partido. Es lo que hace que el partido de Tercer Lugar
@@ -556,31 +719,71 @@ FOR EACH ROW EXECUTE FUNCTION fn_validar_equipo_un_grupo_por_fase();
 -- separado del trigger de propagación (Decisión Eng #17) porque un solo
 -- trigger condicionado a "tiene siguiente" dejaría pasar ese caso sin
 -- validar.
+--
+-- Fase B4/B5 (llaves a dos partidos) suma dos reglas más, ambas ANTES de
+-- la validación de empate de arriba (aplican a cualquier partido de
+-- bracket, tenga o no Fase_ID de Eliminación en este chequeo puntual):
+--   - F12: la VUELTA no puede finalizar mientras su IDA no esté resuelta
+--     (Finalizado o Cancelado) — sin esto, dos operadores de mesa
+--     finalizando fuera de orden hacen que fn_resolver_llave agregue
+--     contra una ida todavía abierta y avance al equipo equivocado.
+--   - Un 0-0 en la IDA es legal (se sale temprano, sin validar nada) — el
+--     empate se valida sobre el GLOBAL de la llave, solo al finalizar la
+--     VUELTA.
 CREATE OR REPLACE FUNCTION fn_validar_partido_eliminacion_desempate()
 RETURNS TRIGGER AS $$
 DECLARE
     v_tipo_fase VARCHAR(20);
+    v_estado_ida VARCHAR(20);
+    v_es_ida BOOLEAN;
+    v_ganador_agregado INT;
     v_goles_local INT;
     v_goles_visitante INT;
 BEGIN
-    -- 3B-13 (docs/plans/cierre-backlog-todos-plan.md): un walkover NUNCA
-    -- está "empatado sin desempate" — es 3-0 por definición, así que este
-    -- chequeo no aplica (sin este AND, un walkover en Eliminación con 0
-    -- eventos reales de cada lado se vería como 0-0 y el trigger lo
-    -- rechazaría pidiendo un Ganador_Desempate_ID que no tiene sentido acá).
-    IF NEW.Estado = 'Finalizado' AND OLD.Estado <> 'Finalizado' AND NEW.Fase_ID IS NOT NULL
-       AND NOT NEW.Es_Walkover THEN
-        SELECT Tipo INTO v_tipo_fase FROM FASE WHERE ID = NEW.Fase_ID;
-        IF v_tipo_fase = 'Eliminacion' THEN
-            SELECT
-                COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_LOCAL),
-                COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_VISITANTE)
-              INTO v_goles_local, v_goles_visitante
-              FROM vw_goles_acreditados ga
-             WHERE ga.PARTIDOS_ID = NEW.ID;
-            IF v_goles_local = v_goles_visitante AND NEW.Ganador_Desempate_ID IS NULL THEN
-                RAISE EXCEPTION 'partido_eliminacion_empatado_sin_desempate';
-            END IF;
+    IF NEW.Estado <> 'Finalizado' OR OLD.Estado = 'Finalizado' THEN
+        RETURN NEW;
+    END IF;
+
+    IF NEW.Partido_Ida_ID IS NOT NULL THEN
+        SELECT Estado INTO v_estado_ida FROM PARTIDOS WHERE ID = NEW.Partido_Ida_ID;
+        IF v_estado_ida NOT IN ('Finalizado', 'Cancelado') THEN
+            RAISE EXCEPTION 'partido_vuelta_ida_sin_resolver';
+        END IF;
+    END IF;
+
+    -- 3B-13: un walkover NUNCA está "empatado sin desempate" — es 3-0 por
+    -- definición (mismo comentario que antes de esta migración).
+    IF NEW.Fase_ID IS NULL OR NEW.Es_Walkover THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT Tipo INTO v_tipo_fase FROM FASE WHERE ID = NEW.Fase_ID;
+    IF v_tipo_fase <> 'Eliminacion' THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT EXISTS(SELECT 1 FROM PARTIDOS WHERE Partido_Ida_ID = NEW.ID) INTO v_es_ida;
+    IF v_es_ida THEN
+        RETURN NEW;   -- B4: un 0-0 (o cualquier resultado) en la IDA es legal.
+    END IF;
+
+    IF NEW.Partido_Ida_ID IS NOT NULL THEN
+        SELECT r.ganador_equipo_id INTO v_ganador_agregado
+          FROM fn_resolver_llave(NEW.ID, NEW.Ganador_Desempate_ID) r;
+        IF v_ganador_agregado IS NULL THEN
+            RAISE EXCEPTION 'llave_empatada_en_global_sin_desempate';
+        END IF;
+    ELSE
+        -- Partido único (Formato_Eliminatoria='Unico', o Tercer Lugar,
+        -- siempre único) — comportamiento de siempre.
+        SELECT
+            COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_LOCAL),
+            COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_VISITANTE)
+          INTO v_goles_local, v_goles_visitante
+          FROM vw_goles_acreditados ga
+         WHERE ga.PARTIDOS_ID = NEW.ID;
+        IF v_goles_local = v_goles_visitante AND NEW.Ganador_Desempate_ID IS NULL THEN
+            RAISE EXCEPTION 'partido_eliminacion_empatado_sin_desempate';
         END IF;
     END IF;
     RETURN NEW;
@@ -599,38 +802,27 @@ FOR EACH ROW EXECUTE FUNCTION fn_validar_partido_eliminacion_desempate();
 -- trigger, ya con el ganador resuelto en la misma fila, sin un tercer
 -- trigger aparte). Corre AFTER el de validación de arriba, así que si
 -- hubo empate, Ganador_Desempate_ID ya está garantizado no-NULL acá.
+--
+-- Fase B3 (llaves a dos partidos): un partido de IDA nunca entra acá con
+-- nada que propagar (nace sin Partido_Siguiente_ID/Partido_Perdedor_
+-- Siguiente_ID propios — "no propaga nada", termina y espera la vuelta).
+-- Un partido de VUELTA (Partido_Ida_ID no-NULL) propaga el resultado
+-- AGREGADO de fn_resolver_llave, no el de su propio marcador.
 CREATE OR REPLACE FUNCTION fn_propagar_ganador_bracket()
 RETURNS TRIGGER AS $$
 DECLARE
     v_ganador_id INT;
     v_perdedor_id INT;
-    v_goles_local INT;
-    v_goles_visitante INT;
 BEGIN
     IF NEW.Estado = 'Finalizado' AND OLD.Estado <> 'Finalizado'
        AND (NEW.Partido_Siguiente_ID IS NOT NULL OR NEW.Partido_Perdedor_Siguiente_ID IS NOT NULL) THEN
 
-        -- 3B-13: un walkover resuelve el ganador directo por
-        -- Walkover_Equipo_Ausente_ID (el OTRO equipo) — no hay eventos
-        -- reales que contar (nadie jugó), así que el conteo normal de
-        -- abajo se salta entero para estas filas.
-        IF NEW.Es_Walkover THEN
-            v_ganador_id := CASE WHEN NEW.Walkover_Equipo_Ausente_ID = NEW.EQUIPOS_ID_LOCAL
-                                  THEN NEW.EQUIPOS_ID_VISITANTE ELSE NEW.EQUIPOS_ID_LOCAL END;
+        IF NEW.Partido_Ida_ID IS NOT NULL THEN
+            SELECT r.ganador_equipo_id INTO v_ganador_id FROM fn_resolver_llave(NEW.ID) r;
         ELSE
-            SELECT
-                COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_LOCAL),
-                COUNT(*) FILTER (WHERE ga.Equipo_Acreditado = NEW.EQUIPOS_ID_VISITANTE)
-              INTO v_goles_local, v_goles_visitante
-              FROM vw_goles_acreditados ga
-             WHERE ga.PARTIDOS_ID = NEW.ID;
-
-            v_ganador_id := CASE
-                WHEN v_goles_local > v_goles_visitante THEN NEW.EQUIPOS_ID_LOCAL
-                WHEN v_goles_visitante > v_goles_local THEN NEW.EQUIPOS_ID_VISITANTE
-                ELSE NEW.Ganador_Desempate_ID     -- ya validado NOT NULL por el trigger BEFORE si hubo empate
-            END;
+            SELECT m.ganador_equipo_id INTO v_ganador_id FROM fn_marcador_partido(NEW.ID) m;
         END IF;
+
         v_perdedor_id := CASE WHEN v_ganador_id = NEW.EQUIPOS_ID_LOCAL
                                THEN NEW.EQUIPOS_ID_VISITANTE ELSE NEW.EQUIPOS_ID_LOCAL END;
 
@@ -641,6 +833,22 @@ BEGIN
                    EQUIPOS_ID_VISITANTE = CASE WHEN NEW.Slot_Siguiente = 'Visitante'
                                                 THEN v_ganador_id ELSE EQUIPOS_ID_VISITANTE END
              WHERE ID = NEW.Partido_Siguiente_ID;
+
+            -- Fase C1: si el destino es la VUELTA de una llave (tiene
+            -- Partido_Ida_ID propio), el mismo ganador entra TAMBIÉN a su
+            -- IDA, en el slot INVERTIDO — la vuelta invierte localía
+            -- respecto de la ida (EC de diseño: un solo feeder alcanza
+            -- para completar los DOS partidos de la llave destino, sin
+            -- duplicar el encadenamiento en una segunda columna). No hace
+            -- nada si el destino no es una vuelta (Partido_Ida_ID NULL ahí).
+            UPDATE PARTIDOS AS ida
+               SET EQUIPOS_ID_LOCAL     = CASE WHEN NEW.Slot_Siguiente = 'Visitante'
+                                                THEN v_ganador_id ELSE ida.EQUIPOS_ID_LOCAL END,
+                   EQUIPOS_ID_VISITANTE = CASE WHEN NEW.Slot_Siguiente = 'Local'
+                                                THEN v_ganador_id ELSE ida.EQUIPOS_ID_VISITANTE END
+              FROM PARTIDOS AS vuelta
+             WHERE vuelta.ID = NEW.Partido_Siguiente_ID
+               AND ida.ID = vuelta.Partido_Ida_ID;
         END IF;
 
         IF NEW.Partido_Perdedor_Siguiente_ID IS NOT NULL THEN
@@ -773,6 +981,63 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_partido_validar_ganador_corrido
 BEFORE UPDATE ON PARTIDOS
 FOR EACH ROW EXECUTE FUNCTION fn_validar_ganador_corrido();
+
+-- ------------------------------------------------------------
+-- Cierre de Fase Regular + Llaves + Playoffs — bloqueo de escritura en un
+-- torneo cerrado (Finding 4 / T3 del review: Torneo.Estado no lo leía
+-- NINGÚN servicio, verificado — cerrar_torneo() sin esto no bloqueaba
+-- nada). Un solo guard en la capa de trigger cubre los tres puntos de
+-- escritura de un resultado (PARTIDOS, EVENTOS_PARTIDO, HITOS_PARTIDO) de
+-- una sola vez: el patrón de guard-por-servicio ya demostró tener
+-- agujeros (services/partido.py necesitó DOS guards de torneo archivado
+-- en dos call-sites distintos, y services/evento_partido.py no tiene
+-- ninguno hoy — bug preexistente, señalado pero no corregido acá, ver
+-- docs/plans/cierre-fase-regular-llaves-playoffs-plan.md).
+--
+-- Alcance exacto: UPDATE en PARTIDOS (no INSERT/DELETE — generar un
+-- bracket nuevo o rehacer un sorteo no pasa por acá, y de todos modos
+-- ninguno de los dos corre sobre un torneo cerrado por regla de negocio
+-- del service); INSERT/UPDATE/DELETE en EVENTOS_PARTIDO/HITOS_PARTIDO
+-- (ahí es donde vive un gol, una tarjeta, o un Fin_Partido). Sin
+-- excepción para cerrar_torneo()/reabrir_torneo(): ninguno de los dos
+-- escribe en estas tres tablas (solo tocan TORNEO/FASE), así que no hay
+-- conflicto que exceptuar.
+CREATE OR REPLACE FUNCTION fn_bloquear_escritura_torneo_cerrado()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_torneo_id INT;
+    v_partido_id INT;
+    v_estado_torneo VARCHAR(20);
+BEGIN
+    IF TG_TABLE_NAME = 'partidos' THEN
+        v_torneo_id := COALESCE(NEW.Torneo_ID, OLD.Torneo_ID);
+    ELSIF TG_TABLE_NAME = 'eventos_partido' THEN
+        v_partido_id := COALESCE(NEW.PARTIDOS_ID, OLD.PARTIDOS_ID);
+        SELECT Torneo_ID INTO v_torneo_id FROM PARTIDOS WHERE ID = v_partido_id;
+    ELSE -- hitos_partido
+        v_partido_id := COALESCE(NEW.Partido_ID, OLD.Partido_ID);
+        SELECT Torneo_ID INTO v_torneo_id FROM PARTIDOS WHERE ID = v_partido_id;
+    END IF;
+
+    SELECT Estado INTO v_estado_torneo FROM TORNEO WHERE ID = v_torneo_id;
+    IF v_estado_torneo = 'Finalizado' THEN
+        RAISE EXCEPTION 'torneo_cerrado_resultados_bloqueados';
+    END IF;
+    RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_partidos_bloquear_torneo_cerrado
+BEFORE UPDATE ON PARTIDOS
+FOR EACH ROW EXECUTE FUNCTION fn_bloquear_escritura_torneo_cerrado();
+
+CREATE TRIGGER trg_eventos_partido_bloquear_torneo_cerrado
+BEFORE INSERT OR UPDATE OR DELETE ON EVENTOS_PARTIDO
+FOR EACH ROW EXECUTE FUNCTION fn_bloquear_escritura_torneo_cerrado();
+
+CREATE TRIGGER trg_hitos_partido_bloquear_torneo_cerrado
+BEFORE INSERT OR UPDATE OR DELETE ON HITOS_PARTIDO
+FOR EACH ROW EXECUTE FUNCTION fn_bloquear_escritura_torneo_cerrado();
 
 -- ------------------------------------------------------------
 -- Verificación final

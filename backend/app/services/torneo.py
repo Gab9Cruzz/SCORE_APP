@@ -218,13 +218,32 @@ class TorneoService:
         """T33: parámetros que no aplican al Formato elegido → 400 con
         mensaje claro. Design sección E del plan: el selector de Formato
         muestra solo los campos que aplican, pero la API es la frontera de
-        confianza real (mismo criterio que el resto del módulo)."""
-        if formato != "Liga" and ida_vuelta:
+        confianza real (mismo criterio que el resto del módulo).
+
+        Fase A4/C2 (cierre-fase-regular-llaves-playoffs-plan.md, Finding 16
+        / T14): la condición combinada original se separa en 3, una por
+        campo, cada una con su propio mensaje:
+          - `ida_vuelta` ahora también se acepta en Grupos_Playoffs, con el
+            significado "round robin doble DENTRO de cada grupo" (no
+            confundir con Formato_Eliminatoria='Ida_Vuelta', que es la
+            fase Eliminatoria) — se reusa la misma columna en vez de
+            agregar `Grupos_Ida_Vuelta` con semántica idéntica.
+          - `equipos_por_grupo` sigue exclusivo de Grupos_Playoffs (no
+            tiene sentido en Liga: no hay grupos).
+          - `clasificados_por_grupo` ahora también se acepta en Liga, con
+            el significado "cuántos de la tabla pasan a la liguilla" —
+            misma columna, evita una segunda con cardinalidad idéntica
+            (Taste Decision T3)."""
+        if formato not in ("Liga", "Grupos_Playoffs") and ida_vuelta:
             raise DomainRuleError(f"Ida y vuelta no aplica a Formato {formato}.")
-        if formato != "Grupos_Playoffs" and (equipos_por_grupo is not None or clasificados_por_grupo is not None):
+        if formato != "Grupos_Playoffs" and equipos_por_grupo is not None:
             raise DomainRuleError(
-                f"Equipos por grupo y Clasificados por grupo no aplican a Formato {formato} "
-                "— son parámetros exclusivos de Grupos + Playoffs."
+                f"Equipos por grupo no aplica a Formato {formato} — es exclusivo de Grupos + Playoffs."
+            )
+        if formato not in ("Grupos_Playoffs", "Liga") and clasificados_por_grupo is not None:
+            raise DomainRuleError(
+                f"Clasificados por grupo no aplica a Formato {formato} — es exclusivo de Grupos + Playoffs "
+                "(clasificados por grupo) o Liga (clasificados a la liguilla de playoffs)."
             )
 
     async def _validar_maximo_titulares(self, maximo: int | None, modalidad_id: int) -> None:

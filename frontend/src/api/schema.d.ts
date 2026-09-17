@@ -316,6 +316,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/torneos/{torneo_id}/estado-fase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estado Fase
+         * @description C4 (cierre-fase-regular-llaves-playoffs-plan.md): fuente única de
+         *     "¿la fase terminó y qué se puede hacer ahora?" — no público (a
+         *     diferencia de /bracket): informa qué botones de administración
+         *     mostrar, no un dato de audiencia.
+         */
+        get: operations["estado_fase_api_v1_torneos__torneo_id__estado_fase_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/torneos/{torneo_id}/cerrar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cerrar Torneo
+         * @description Cierre de fase regular (C3): resuelve y persiste el podio. 400 si
+         *     el torneo ya está cerrado, si la fase actual no está completa, si es
+         *     de tipo Grupos (Opción A no existe ahí), o si hay un empate en el
+         *     podio sin `orden_podio`.
+         */
+        post: operations["cerrar_torneo_api_v1_torneos__torneo_id__cerrar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/torneos/{torneo_id}/reabrir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reabrir Torneo
+         * @description Finding 4 / T3: reversa un cierre — limpia el podio y devuelve el
+         *     torneo/fase a en curso. 400 si el torneo no está cerrado.
+         */
+        post: operations["reabrir_torneo_api_v1_torneos__torneo_id__reabrir_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/grupos": {
         parameters: {
             query?: never;
@@ -1628,6 +1695,19 @@ export interface components {
             client_secret?: string | null;
         };
         /**
+         * CerrarTorneoRequest
+         * @description POST /torneos/{id}/cerrar — `orden_podio`: el orden explícito que
+         *     el admin eligió para desempatar equipos empatados en pts/dg/gf en el
+         *     podio de una Liga (Finding 2 / Taste Decision T1), o `None` para
+         *     tomar la tabla tal cual viene. El servidor valida que cada id mandado
+         *     esté inscripto en el torneo y REALMENTE empatado con el equipo que
+         *     desplaza — no es un input de confianza.
+         */
+        CerrarTorneoRequest: {
+            /** Orden Podio */
+            orden_podio?: number[] | null;
+        };
+        /**
          * ConfiguracionTiempoTorneoCreate
          * @description Viaja anidado en TorneoCreate/TorneoUpdate como `config_tiempo`
          *     (gestion-avanzada-equipos-control-mesa-plan.md) — se crea/actualiza en
@@ -2095,6 +2175,35 @@ export interface components {
             /** Hitos */
             hitos: components["schemas"]["HitoPartidoOut"][];
         };
+        /**
+         * EstadoFaseOut
+         * @description GET /torneos/{id}/estado-fase — C4 del plan: fuente única de "¿la
+         *     fase terminó y qué se puede hacer ahora?", para que el frontend deje
+         *     de reimplementar esta regla escaneando `partidos` en el cliente.
+         *
+         *     El conteo es de 3 partes (Design review — reemplaza el "N de M
+         *     resueltos" original): Finalizado/Cancelado/pendiente, porque la
+         *     regla real es "Finalizado O Cancelado", nunca "100% Finalizado"
+         *     literal (un partido cancelado nunca llega a Finalizado).
+         */
+        EstadoFaseOut: {
+            fase_actual: components["schemas"]["FaseEstadoOut"] | null;
+            /** Partidos Total */
+            partidos_total: number;
+            /** Partidos Finalizados */
+            partidos_finalizados: number;
+            /** Partidos Cancelados */
+            partidos_cancelados: number;
+            /** Partidos Pendientes */
+            partidos_pendientes: number;
+            /** Fase Completa */
+            fase_completa: boolean;
+            /** Acciones Disponibles */
+            acciones_disponibles: ("cerrar_directo" | "generar_playoffs")[];
+            /** Torneo Cerrado */
+            torneo_cerrado: boolean;
+            podio: components["schemas"]["PodioOut"] | null;
+        };
         /** EventoCreate */
         EventoCreate: {
             /** Nombre */
@@ -2190,6 +2299,23 @@ export interface components {
             descripcion?: string | null;
             /** Estado */
             estado?: ("Activo" | "Inactivo") | null;
+        };
+        /** FaseEstadoOut */
+        FaseEstadoOut: {
+            /** Id */
+            id: number;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Tipo
+             * @enum {string}
+             */
+            tipo: "Liga" | "Grupos" | "Eliminacion";
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "Pendiente" | "En_Curso" | "Finalizada";
         };
         /** FaseOut */
         FaseOut: {
@@ -2411,6 +2537,8 @@ export interface components {
             minuto_reloj?: number | null;
             /** Ganador Corrido Id */
             ganador_corrido_id?: number | null;
+            /** Ganador Desempate Id */
+            ganador_desempate_id?: number | null;
             /**
              * Forzado
              * @default false
@@ -2811,6 +2939,8 @@ export interface components {
             partido_perdedor_siguiente_id?: number | null;
             /** Slot Perdedor Siguiente */
             slot_perdedor_siguiente?: ("Local" | "Visitante") | null;
+            /** Partido Ida Id */
+            partido_ida_id?: number | null;
             /** Ganador Desempate Id */
             ganador_desempate_id?: number | null;
             /** Ganador Corrido Id */
@@ -2948,10 +3078,30 @@ export interface components {
          *     (Gate Final T2 de ese plan: persistir, no efímero) — la próxima
          *     generación para este torneo no vuelve a preguntar salvo que el
          *     operador quiera cambiarlo.
+         *
+         *     `formato_eliminatoria` (cierre-fase-regular-llaves-playoffs-plan.md,
+         *     Fase D): igual criterio que `clasificados_por_grupo` — si se manda,
+         *     se PERSISTE en `Torneo.formato_eliminatoria`; si no, se usa el
+         *     guardado.
          */
         PlayoffsRequest: {
             /** Clasificados Por Grupo */
             clasificados_por_grupo?: number | null;
+            /** Formato Eliminatoria */
+            formato_eliminatoria?: ("Unico" | "Ida_Vuelta" | "Mixto") | null;
+        };
+        /** PodioOut */
+        PodioOut: {
+            /** Campeon Equipo Id */
+            campeon_equipo_id: number | null;
+            /** Subcampeon Equipo Id */
+            subcampeon_equipo_id: number | null;
+            /** Tercer Puesto Equipo Id */
+            tercer_puesto_equipo_id: number | null;
+            /** Fecha Cierre */
+            fecha_cierre: string | null;
+            /** Diverge De Tabla Actual */
+            diverge_de_tabla_actual: boolean;
         };
         /** PosicionOut */
         PosicionOut: {
@@ -3093,6 +3243,8 @@ export interface components {
             eventos: components["schemas"]["ResultadoDirectoEvento"][];
             /** Ganador Corrido Id */
             ganador_corrido_id?: number | null;
+            /** Ganador Desempate Id */
+            ganador_desempate_id?: number | null;
         };
         /**
          * ResultadoDirectoEvento
@@ -3235,6 +3387,12 @@ export interface components {
              * @default true
              */
             incluye_tercer_lugar: boolean;
+            /**
+             * Formato Eliminatoria
+             * @default Unico
+             * @enum {string}
+             */
+            formato_eliminatoria: "Unico" | "Ida_Vuelta" | "Mixto";
             config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoCreate"] | null;
             /** Cupo Maximo Inscripciones */
             cupo_maximo_inscripciones?: number | null;
@@ -3378,6 +3536,12 @@ export interface components {
              * @default true
              */
             incluye_tercer_lugar: boolean;
+            /**
+             * Formato Eliminatoria
+             * @default Unico
+             * @enum {string}
+             */
+            formato_eliminatoria: "Unico" | "Ida_Vuelta" | "Mixto";
             config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoOut"] | null;
             /** Cupo Maximo Inscripciones */
             cupo_maximo_inscripciones?: number | null;
@@ -3420,6 +3584,16 @@ export interface components {
              * Format: date-time
              */
             fecha_modificacion: string;
+            /** Campeon Equipo Id */
+            campeon_equipo_id?: number | null;
+            /** Subcampeon Equipo Id */
+            subcampeon_equipo_id?: number | null;
+            /** Tercer Puesto Equipo Id */
+            tercer_puesto_equipo_id?: number | null;
+            /** Fecha Cierre */
+            fecha_cierre?: string | null;
+            /** Orden Podio Manual */
+            orden_podio_manual?: number[] | null;
         };
         /** TorneoUpdate */
         TorneoUpdate: {
@@ -4223,6 +4397,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PartidoOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    estado_fase_api_v1_torneos__torneo_id__estado_fase_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                torneo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstadoFaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cerrar_torneo_api_v1_torneos__torneo_id__cerrar_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                torneo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CerrarTorneoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TorneoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reabrir_torneo_api_v1_torneos__torneo_id__reabrir_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                torneo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TorneoOut"];
                 };
             };
             /** @description Validation Error */

@@ -589,6 +589,7 @@ export function GestionarPartidoPage() {
             id: partido.id,
             equipos_id_local: partido.equipos_id_local,
             equipos_id_visitante: partido.equipos_id_visitante,
+            ronda_nombre: partido.ronda_nombre ?? null,
           }}
           nombreEquipo={nombreEquipo}
           onClose={() => setResultadoDirectoAbierto(false)}

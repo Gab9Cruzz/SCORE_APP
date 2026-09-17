@@ -50,6 +50,7 @@ SCRIPTS_VIGENTES = [
     "29_migracion_maximo_titulares.sql",
     "30_migracion_fin_forzado.sql",
     "31_migracion_portal_publico.sql",
+    "32_migracion_cierre_fase_y_llaves.sql",
 ]
 
 # F10/E-L6 (portal-publico-feed-partidos-plan.md): el test de cobertura de

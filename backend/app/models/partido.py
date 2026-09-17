@@ -62,3 +62,9 @@ class Partido(TimestampMixin, Base):
     # comentario completo en 01_schema.sql.
     es_walkover: Mapped[bool] = mapped_column(default=False)
     walkover_equipo_ausente_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id"))
+    # Cierre de Fase Regular + Llaves + Playoffs (Fase A3): encadenamiento
+    # de una llave a dos partidos. Solo el partido de VUELTA lo tiene
+    # seteado (apunta a su IDA) — "es ida" se deriva (otro partido lo
+    # referencia), no hay columna Es_Vuelta redundante. ON DELETE SET NULL,
+    # mismo patrón que Partido_Siguiente_ID (02_constraints.sql).
+    partido_ida_id: Mapped[int | None] = mapped_column(ForeignKey("partidos.id"))

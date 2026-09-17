@@ -280,6 +280,17 @@ class PartidoService:
             partido.ganador_corrido_id = data.ganador_corrido_id
             await self.session.flush()
 
+        if data.ganador_desempate_id is not None:
+            # Desempate manual (Fase 0, Finding 1): mismo motivo que el
+            # ganador_corrido_id de arriba — fn_validar_partido_eliminacion_
+            # desempate exige Ganador_Desempate_ID ya seteado cuando el
+            # Hito Fin_Partido dispare Estado='Finalizado', si el partido
+            # terminó empatado en goles. Se acepta sin exigirlo (el
+            # trigger es quien decide si hacía falta o no) — mismo criterio
+            # que PartidoUpdate.ganador_desempate_id no lo valida en Python.
+            partido.ganador_desempate_id = data.ganador_desempate_id
+            await self.session.flush()
+
         self.session.add(HitoPartido(partido_id=id_, tipo_hito="Fin_Partido", registrado_por=usuario_actual.id))
         await self.session.flush()
 

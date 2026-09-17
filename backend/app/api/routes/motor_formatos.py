@@ -5,9 +5,11 @@ from app.api.deps import get_current_user, require_roles, require_torneo_access,
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.fase import FaseOut
-from app.schemas.motor_formatos import PlayoffsRequest, SorteoRequest
+from app.schemas.motor_formatos import CerrarTorneoRequest, EstadoFaseOut, PlayoffsRequest, SorteoRequest
 from app.schemas.partido import PartidoOut
+from app.schemas.torneo import TorneoOut
 from app.services.motor_formatos import MotorFormatosService
+from app.services.torneo import TorneoService
 
 # Motor de Formatos de Competición (motor-formatos-plantillas-navegacion-
 # plan.md, requerimiento #4) — Generar Fixture (Liga), Hacer Sorteo
@@ -63,7 +65,10 @@ async def generar_playoffs(
     (control-mesa-reactividad-playoffs-plan.md, Fase 3 §6): opcional,
     default None = usa el config del torneo sin cambios."""
     fase = await MotorFormatosService(session).generar_playoffs(
-        torneo_id, usuario_actual.id, clasificados_por_grupo=data.clasificados_por_grupo
+        torneo_id,
+        usuario_actual.id,
+        clasificados_por_grupo=data.clasificados_por_grupo,
+        formato_eliminatoria=data.formato_eliminatoria,
     )
     return FaseOut.model_validate(fase)
 
@@ -81,3 +86,52 @@ async def bracket(torneo_id: int, session: AsyncSession = Depends(get_db)) -> li
     enumerable por un anónimo aunque el detalle del torneo ya 404eara."""
     partidos = await MotorFormatosService(session).bracket(torneo_id)
     return [PartidoOut.model_validate(p) for p in partidos]
+
+
+@router.get(
+    "/{torneo_id}/estado-fase",
+    response_model=EstadoFaseOut,
+    dependencies=[Depends(require_roles("TorneoAdmin")), Depends(require_torneo_access())],
+)
+async def estado_fase(torneo_id: int, session: AsyncSession = Depends(get_db)) -> EstadoFaseOut:
+    """C4 (cierre-fase-regular-llaves-playoffs-plan.md): fuente única de
+    "¿la fase terminó y qué se puede hacer ahora?" — no público (a
+    diferencia de /bracket): informa qué botones de administración
+    mostrar, no un dato de audiencia."""
+    estado = await MotorFormatosService(session).estado_fase(torneo_id)
+    return EstadoFaseOut.model_validate(estado)
+
+
+@router.post(
+    "/{torneo_id}/cerrar",
+    response_model=TorneoOut,
+    dependencies=[Depends(require_roles("TorneoAdmin")), Depends(require_torneo_access())],
+)
+async def cerrar_torneo(
+    torneo_id: int,
+    data: CerrarTorneoRequest = CerrarTorneoRequest(),
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+) -> TorneoOut:
+    """Cierre de fase regular (C3): resuelve y persiste el podio. 400 si
+    el torneo ya está cerrado, si la fase actual no está completa, si es
+    de tipo Grupos (Opción A no existe ahí), o si hay un empate en el
+    podio sin `orden_podio`."""
+    await MotorFormatosService(session).cerrar_torneo(torneo_id, usuario_actual.id, orden_podio=data.orden_podio)
+    return await TorneoService(session).get(torneo_id)
+
+
+@router.post(
+    "/{torneo_id}/reabrir",
+    response_model=TorneoOut,
+    dependencies=[Depends(require_roles("TorneoAdmin")), Depends(require_torneo_access())],
+)
+async def reabrir_torneo(
+    torneo_id: int,
+    session: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+) -> TorneoOut:
+    """Finding 4 / T3: reversa un cierre — limpia el podio y devuelve el
+    torneo/fase a en curso. 400 si el torneo no está cerrado."""
+    await MotorFormatosService(session).reabrir_torneo(torneo_id, usuario_actual.id)
+    return await TorneoService(session).get(torneo_id)

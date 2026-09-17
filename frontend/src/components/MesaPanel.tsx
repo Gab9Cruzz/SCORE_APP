@@ -282,6 +282,13 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
     return { local, visitante };
   }, [eventosRegistrados, eventoNombrePorId, equipoLocalId]);
 
+  // Fase 0 (cierre-fase-regular-llaves-playoffs-plan.md, Finding 1):
+  // Ronda_Nombre solo se setea para un partido de bracket (Motor de
+  // Formatos, Eliminación) — ver motor_formatos.py — nunca para Liga/
+  // Grupos. No hace falta un endpoint nuevo para saber "¿esto es
+  // Eliminación?": el dato ya viaja en el propio partido.
+  const requiereDesempate = partidoQuery.data?.ronda_nombre != null && marcador.local === marcador.visitante;
+
   const mutation = useMutation({
     mutationFn: async (body: EventoBody) => {
       const { data, error } = await api.POST("/api/v1/eventos-partido", { body });
@@ -457,6 +464,7 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
         nombreVisitante={nombreVisitante}
         mostrarInicio={false}
         onMinutoActual={setMinutoActual}
+        requiereDesempate={requiereDesempate}
       />
 
       {/* 3A-8 (docs/plans/cierre-backlog-todos-plan.md, EC-C): antes, la

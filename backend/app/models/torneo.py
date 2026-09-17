@@ -1,6 +1,7 @@
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import Boolean, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -79,3 +80,23 @@ class Torneo(TimestampMixin, Base):
     # logueado). default=False acá (torneo nuevo); la migración 31_
     # backfillea TRUE para las filas preexistentes.
     publicado: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Cierre de Fase Regular + Llaves + Playoffs (docs/plans/cierre-fase-
+    # regular-llaves-playoffs-plan.md, Fase A1). Podio del torneo — los
+    # tres son NULL mientras el torneo no está cerrado, y
+    # Tercer_Puesto_Equipo_ID sigue NULL para un torneo de 2 equipos (no
+    # se inventa un tercero que no jugó). `cerrar_torneo` los persiste
+    # junto con Fecha_Cierre; `reabrir_torneo` los vuelve a NULL.
+    campeon_equipo_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id"), nullable=True)
+    subcampeon_equipo_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id"), nullable=True)
+    tercer_puesto_equipo_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id"), nullable=True)
+    fecha_cierre: Mapped[datetime | None] = mapped_column(nullable=True)
+    # A2 — selector de formato de eliminatoria (Único/Ida y Vuelta/Mixto).
+    # Default 'Unico' reproduce el comportamiento actual exacto para todo
+    # torneo existente (chk_torneo_formato_eliminatoria, 02_constraints.sql).
+    formato_eliminatoria: Mapped[str] = mapped_column(String(20), default="Unico")
+    # Orden explícito que el admin eligió para desempatar el podio cuando
+    # 2+ equipos llegan empatados en pts/dg/gf a un mismo puesto (Finding 2 /
+    # Taste Decision T1, CEO review) — lista de Equipo_ID en el orden
+    # elegido. Se conserva a través de reabrir_torneo/re-cierre (no se
+    # pierde el trabajo de desempate ya hecho) y se re-ofrece como default.
+    orden_podio_manual: Mapped[list | None] = mapped_column(JSONB, nullable=True)

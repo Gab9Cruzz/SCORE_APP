@@ -93,6 +93,11 @@ class PartidoOut(PartidoBase):
     slot_siguiente: SlotBracket | None = None
     partido_perdedor_siguiente_id: int | None = None
     slot_perdedor_siguiente: SlotBracket | None = None
+    # Cierre de Fase Regular + Llaves + Playoffs (Fase A3/D): en el
+    # partido de VUELTA, apunta a su IDA — así BracketView puede agrupar
+    # las dos piernas de una misma llave. NULL en un partido único o en
+    # el de IDA (que no lo lleva).
+    partido_ida_id: int | None = None
     ganador_desempate_id: int | None = None
     ganador_corrido_id: int | None = None
     # 3B-13 (docs/plans/cierre-backlog-todos-plan.md).
@@ -151,6 +156,12 @@ class ResultadoDirectoCreate(BaseModel):
     # goles) — fn_validar_ganador_corrido lo exige al pasar a 'Finalizado'.
     # Un torneo 'Periodos' lo ignora (el resultado sale del marcador de goles).
     ganador_corrido_id: int | None = None
+    # Desempate manual (Fase 0 de cierre-fase-regular-llaves-playoffs-
+    # plan.md, Finding 1): solo hace falta si el marcador de goles termina
+    # empatado en un partido de fase Eliminación — fn_validar_partido_
+    # eliminacion_desempate lo exige al pasar a 'Finalizado'. Mismo patrón
+    # que ganador_corrido_id: se setea ANTES del Hito Fin_Partido.
+    ganador_desempate_id: int | None = None
 
 
 # ------------------------------------------------------------

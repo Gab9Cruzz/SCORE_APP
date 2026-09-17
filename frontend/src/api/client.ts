@@ -58,12 +58,24 @@ api.use({
   },
 });
 
+// Cierre de Fase Regular + Llaves + Playoffs (docs/plans/cierre-fase-
+// regular-llaves-playoffs-plan.md): los códigos snake_case que lanzan los
+// triggers nuevos (RAISE EXCEPTION 'codigo', sin traducir a español ahí —
+// exceptions/handlers.py los pasa tal cual) — copy table de la Design
+// review, "cada rechazo mapeado a texto + acción de recuperación".
+const CODIGOS_ERROR_TRADUCIDOS: Record<string, string> = {
+  partido_vuelta_ida_sin_resolver: "Falta cerrar (o cancelar) el partido de ida antes de cerrar la vuelta.",
+  llave_empatada_en_global_sin_desempate: "La llave está empatada en el marcador global — cargá el desempate en el partido de vuelta.",
+  partido_eliminacion_empatado_sin_desempate: "El partido terminó empatado — cargá el desempate antes de finalizarlo.",
+  torneo_cerrado_resultados_bloqueados: "Este torneo está cerrado — los resultados están bloqueados. Reabrilo para poder editarlos.",
+};
+
 /** Extrae un mensaje legible del error de FastAPI ({"detail": "..."} o
  * {"detail": [{"msg": "..."}]} para 422 de validación de Pydantic). */
 export function apiErrorMessage(error: unknown, fallback = "Ocurrió un error inesperado."): string {
   if (error && typeof error === "object" && "detail" in error) {
     const detail = (error as { detail: unknown }).detail;
-    if (typeof detail === "string") return detail;
+    if (typeof detail === "string") return CODIGOS_ERROR_TRADUCIDOS[detail] ?? detail;
     if (Array.isArray(detail)) {
       return detail
         .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : String(d)))

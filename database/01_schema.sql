@@ -171,7 +171,30 @@ CREATE TABLE TORNEO (
     -- FALSE acá porque esto es CREATE TABLE (entorno nuevo, sin filas que
     -- backfillear) — 31_migracion_portal_publico.sql documenta por qué
     -- una base YA PROVISIONADA hace ADD COLUMN...DEFAULT TRUE primero.
-    Publicado BOOLEAN NOT NULL DEFAULT FALSE
+    Publicado BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Cierre de Fase Regular + Llaves + Playoffs
+    -- (docs/plans/cierre-fase-regular-llaves-playoffs-plan.md, Fase A1/A2).
+    -- Podio: los tres son NULL mientras el torneo no está cerrado — un
+    -- torneo de 2 equipos no tiene tercero, y Tercer_Puesto_Equipo_ID
+    -- queda NULL en vez de inventarlo. cerrar_torneo() los persiste junto
+    -- con Fecha_Cierre; reabrir_torneo() los vuelve a limpiar.
+    Campeon_Equipo_ID INT,
+    Subcampeon_Equipo_ID INT,
+    Tercer_Puesto_Equipo_ID INT,
+    Fecha_Cierre TIMESTAMP,
+    -- Selector de formato de eliminatoria (requerimiento #2 del plan):
+    -- Unico | Ida_Vuelta | Mixto (chk_torneo_formato_eliminatoria,
+    -- 02_constraints.sql). Default 'Unico' reproduce el comportamiento
+    -- actual EXACTO de todo torneo existente — sin este default, una base
+    -- vieja cambiaría de comportamiento al aplicar la migración.
+    Formato_Eliminatoria VARCHAR(20) NOT NULL DEFAULT 'Unico',
+    -- Orden explícito que el admin eligió para desempatar el podio cuando
+    -- 2+ equipos llegan empatados en pts/dg/gf a un mismo puesto (Finding 2
+    -- / Taste Decision T1 del review) — JSON con la lista de Equipo_ID en
+    -- el orden elegido. Sobrevive a reabrir_torneo/re-cierre (no se pierde
+    -- el desempate ya resuelto a mano) y se re-ofrece como valor por
+    -- defecto la próxima vez.
+    Orden_Podio_Manual JSONB
 );
 
 -- Disciplina_ID/Modalidad_ID son NOT NULL desde
@@ -513,7 +536,17 @@ CREATE TABLE PARTIDOS (
     -- existen, nadie jugó). Distinto de Ganador_Desempate_ID/Ganador_Corrido_ID:
     -- esos resuelven CÓMO terminó un partido que SÍ se jugó.
     Es_Walkover BOOLEAN NOT NULL DEFAULT FALSE,
-    Walkover_Equipo_Ausente_ID INT
+    Walkover_Equipo_Ausente_ID INT,
+    -- Cierre de Fase Regular + Llaves + Playoffs (Fase A3): encadenamiento
+    -- de una llave a DOS partidos (Ida/Vuelta) — una sola columna
+    -- autorreferencial, mismo patrón que Partido_Siguiente_ID. Solo el
+    -- partido de VUELTA la tiene seteada (apunta a su IDA); "es ida" se
+    -- DERIVA (otro partido lo referencia acá), no hay columna Es_Vuelta
+    -- redundante. El partido de IDA no lleva Partido_Siguiente_ID propio
+    -- (no propaga solo) — el de VUELTA sí, y propaga el resultado
+    -- AGREGADO de la llave (fn_resolver_llave, 06_triggers.sql), no el de
+    -- su propio marcador.
+    Partido_Ida_ID INT
 );
 
 CREATE TABLE EVENTOS (

@@ -10,6 +10,11 @@
   --danger: #ef6a6a;
   --warning: #e0b23a;
   --radius: 10px;
+  /* Cierre de Fase Regular + Llaves + Playoffs (Design review, Pass 1) —
+     colores del podio como tokens, nunca hardcodeados en el componente. */
+  --podio-oro: #d4af37;
+  --podio-plata: #b9c2cf;
+  --podio-bronce: #c9814a;
   color-scheme: dark;
 }
 
@@ -138,6 +143,61 @@ main {
   gap: 1rem;
 }
 
+/* Cierre de Fase Regular + Llaves + Playoffs (Design review, Pass 1):
+   el podio vive UNA sola vez, en el header del dashboard — nunca
+   duplicado en MotorFormatosPanel. Un bloque de 3 filas, no 3 tarjetas:
+   1° es el ancla visual de la página, 2°/3° a peso normal debajo. */
+.podio {
+  margin: 0.75rem 0 1rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.podio__fila {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.25rem 0;
+}
+
+.podio__puesto {
+  width: 1.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.podio__fila--1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.podio__fila--1 .podio__puesto {
+  color: var(--podio-oro);
+}
+
+.podio__fila--2 .podio__puesto {
+  color: var(--podio-plata);
+}
+
+.podio__fila--3 .podio__puesto {
+  color: var(--podio-bronce);
+}
+
+.podio__provenance {
+  margin: 0.5rem 0 0;
+}
+
+.podio__divergencia {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--warning);
+  color: #2a2205;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
 @media (min-width: 800px) {
   .dashboard-grid {
     grid-template-columns: 1.3fr 1fr 1fr;
@@ -146,6 +206,33 @@ main {
 
 .table-scroll {
   overflow-x: auto;
+}
+
+/* Cierre de Fase Regular + Llaves + Playoffs (Design review, Pass 2):
+   GET /estado-fase convierte un render antes instantáneo (derivado del
+   cliente) en una lectura de red — este skeleton reserva la altura del
+   botón para que el panel no salte cuando la respuesta llega. */
+.estado-fase__skeleton {
+  height: 2.5rem;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--surface-alt) 25%, var(--border) 50%, var(--surface-alt) 75%);
+  background-size: 200% 100%;
+  animation: estado-fase-shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .estado-fase__skeleton {
+    animation: none;
+  }
+}
+
+@keyframes estado-fase-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 table {
@@ -197,6 +284,16 @@ td:first-child {
 .muted {
   color: var(--text-muted);
   font-size: 0.85rem;
+}
+
+/* Cierre de Fase Regular + Llaves + Playoffs (Design review, Pass 6):
+   copia DECISORIA (subtítulos de formato, fecha de cierre del podio,
+   motivo de un botón deshabilitado) no puede ser la letra más chica de
+   la pantalla — .muted (13.6px) queda para lo verdaderamente secundario,
+   sin tocarla (es transversal a toda la app). */
+.muted--cuerpo {
+  font-size: 1rem;
+  color: var(--text-muted);
 }
 
 .torneo-picker {
@@ -1001,6 +1098,22 @@ td:first-child {
   max-width: 480px;
 }
 
+/* ModalSiguienteFase, paso 2 (Design review, Pass 6): clasificados +
+   selector de formato + preview de podio no entran cómodos en 480px —
+   el overlay ya scrollea (.modal-overlay), ensanchar es gratis. Solo
+   para el paso 2, nunca el default. */
+.modal-panel--ancho {
+  max-width: 560px;
+}
+
+.modal-panel__paso {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0 0 0.5rem;
+}
+
 .modal-panel__equipo-fila {
   display: flex;
   align-items: center;
@@ -1415,6 +1528,50 @@ td:first-child {
 
 .bracket__equipo:first-child {
   border-bottom: 1px solid var(--border);
+}
+
+/* Cierre de Fase Regular + Llaves + Playoffs (Design review, Pass 1/7):
+   una llave a dos partidos es UN nodo, no dos — dos filas de pierna
+   compactas + un divisor + el agregado en su propia fila, peso 700. El
+   ancho de columna sube de 180 a 220px SOLO si el bracket tiene alguna
+   llave (BracketView decide la clase, `.bracket` ya scrollea horizontal). */
+.bracket__columna--llave {
+  min-width: 220px;
+}
+
+.bracket__partido--llave .bracket__pierna {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.bracket__partido--llave .bracket__pierna-fecha {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+}
+
+.bracket__partido--llave .bracket__agregado {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid var(--border);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.bracket__badge-desempate {
+  display: inline-block;
+  margin: 0.25rem 0.75rem 0;
+  padding: 0.15rem 0.5rem;
+  background: var(--warning);
+  color: #2a2205;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 /* Traspasos — selector buscable + autocompletados (Flujo 2,

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../api/client";
 import { Escudo } from "../../components/publico/Escudo";
+import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
 import { BracketView } from "../torneo-admin/torneo-dashboard/BracketView";
 
 interface TorneoDetalle {
@@ -12,6 +13,12 @@ interface TorneoDetalle {
   formato: "Liga" | "Eliminacion" | "Grupos_Playoffs";
   fecha_inicio: string;
   estado: string;
+  // Cierre de Fase Regular + Llaves + Playoffs (Fase E4) — NULL mientras
+  // el torneo no está cerrado.
+  campeon_equipo_id: number | null;
+  subcampeon_equipo_id: number | null;
+  tercer_puesto_equipo_id: number | null;
+  fecha_cierre: string | null;
 }
 interface TorneoGrupoDetalle {
   id: number;
@@ -180,6 +187,8 @@ export function DetalleTorneoPublicoPage() {
         <BotonCompartir titulo={grupo?.nombre ?? torneo.nombre} />
       </header>
 
+      {torneo.estado === "Finalizado" && <PodioPublico torneo={torneo} />}
+
       <nav className="publico-torneo__tabs" role="tablist">
         {formato !== "Eliminacion" && (
           <button
@@ -341,6 +350,46 @@ function TablaPosicionesPublica({ filas }: { filas: PosicionRow[] }) {
  * móvil cuando está disponible. `navigator.clipboard` no existe en
  * contexto inseguro (http:// sin TLS): en ese caso el link se muestra
  * seleccionable en vez de que el botón no haga nada. */
+/** Cierre de Fase Regular + Llaves + Playoffs (Fase E4): el podio también
+ * en el portal público si el torneo está `publicado` — mismo bloque
+ * visual que TorneoDashboard.tsx, sin la franja de divergencia (Design
+ * review: esa es ADMIN-ONLY, un visitante anónimo avisado de "este podio
+ * podría estar mal" queda peor que uno viendo un podio simplemente
+ * desactualizado) y sin el control de Reabrir. */
+function PodioPublico({ torneo }: { torneo: TorneoDetalle }) {
+  const ids = [torneo.campeon_equipo_id, torneo.subcampeon_equipo_id, torneo.tercer_puesto_equipo_id].filter(
+    (id): id is number => id != null,
+  );
+  const nombreEquipo = useNombrePorIdConFaltantes("/api/v1/equipos", new Map(), ids);
+  if (torneo.campeon_equipo_id == null) return null;
+
+  return (
+    <div className="podio">
+      <div className="podio__fila podio__fila--1">
+        <span className="podio__puesto">1°</span>
+        <span>{nombreEquipo.get(torneo.campeon_equipo_id) ?? `Equipo #${torneo.campeon_equipo_id}`}</span>
+      </div>
+      {torneo.subcampeon_equipo_id != null && (
+        <div className="podio__fila podio__fila--2">
+          <span className="podio__puesto">2°</span>
+          <span>{nombreEquipo.get(torneo.subcampeon_equipo_id) ?? `Equipo #${torneo.subcampeon_equipo_id}`}</span>
+        </div>
+      )}
+      {torneo.tercer_puesto_equipo_id != null && (
+        <div className="podio__fila podio__fila--3">
+          <span className="podio__puesto">3°</span>
+          <span>{nombreEquipo.get(torneo.tercer_puesto_equipo_id) ?? `Equipo #${torneo.tercer_puesto_equipo_id}`}</span>
+        </div>
+      )}
+      {torneo.fecha_cierre && (
+        <p className="podio__provenance muted--cuerpo">
+          Torneo finalizado el {new Date(torneo.fecha_cierre).toLocaleDateString("es-AR")}.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function BotonCompartir({ titulo }: { titulo: string }) {
   const [estado, setEstado] = useState<"idle" | "copiado" | "sin-clipboard">("idle");
   const url = typeof window !== "undefined" ? window.location.href : "";

@@ -9,6 +9,10 @@ EstadoTorneo = Literal["Activo", "Inactivo", "Finalizado"]
 # Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md,
 # requerimiento #4) — F1: CHECK enum, no tabla catálogo.
 FormatoTorneo = Literal["Liga", "Eliminacion", "Grupos_Playoffs"]
+# Cierre de Fase Regular + Llaves + Playoffs (docs/plans/cierre-fase-
+# regular-llaves-playoffs-plan.md, requerimiento #2) — selector de
+# formato de eliminatoria.
+FormatoEliminatoria = Literal["Unico", "Ida_Vuelta", "Mixto"]
 
 
 class TorneoBase(BaseModel):
@@ -40,6 +44,12 @@ class TorneoBase(BaseModel):
     equipos_por_grupo: int | None = None
     clasificados_por_grupo: int | None = None
     incluye_tercer_lugar: bool = True
+    # Finding 15 / E5 (cierre-fase-regular-llaves-playoffs-plan.md):
+    # expuesto en el alta para que un torneo `Eliminacion` PURO (sin fase
+    # regular previa) también pueda ser a doble partido — el selector del
+    # flujo "Configurar Siguiente Fase" es solo post-fase-regular y nunca
+    # lo alcanzaría. Default 'Unico' reproduce el comportamiento actual.
+    formato_eliminatoria: FormatoEliminatoria = "Unico"
     # Motor de Tiempos (gestion-avanzada-equipos-control-mesa-plan.md) — si
     # no se manda, TorneoService la crea con un default derivado de
     # Modalidad.tamano_equipo (Corrido si es individual, Periodos 2x45' si
@@ -181,3 +191,9 @@ class TorneoOut(TorneoBase):
     # explícitamente — Torneo (el modelo ORM) no tiene este atributo
     # directo, no es una relationship de SQLAlchemy.
     config_tiempo: ConfiguracionTiempoTorneoOut | None = None
+    # Podio (Fase A1) — los tres NULL mientras el torneo no está cerrado.
+    campeon_equipo_id: int | None = None
+    subcampeon_equipo_id: int | None = None
+    tercer_puesto_equipo_id: int | None = None
+    fecha_cierre: datetime | None = None
+    orden_podio_manual: list[int] | None = None

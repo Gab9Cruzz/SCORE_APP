@@ -66,7 +66,7 @@ interface EventoTimelineResuelto {
  * sigue sirviendo partidos sin convocatoria guardada) — ver
  * `sinConvocatoria` abajo. */
 export function ModalResultadoDirecto(props: {
-  partido: { id: number; equipos_id_local: number; equipos_id_visitante: number };
+  partido: { id: number; equipos_id_local: number; equipos_id_visitante: number; ronda_nombre?: string | null };
   nombreEquipo: Map<number, string>;
   onClose: () => void;
   onGuardado: () => void;
@@ -411,6 +411,14 @@ export function ModalResultadoDirecto(props: {
   }
 
   const [ganadorCorridoId, setGanadorCorridoId] = useState<number | null>(null);
+  // Desempate manual (Fase 0 de cierre-fase-regular-llaves-playoffs-
+  // plan.md, Finding 1): Ronda_Nombre solo se setea para un partido de
+  // bracket (Eliminación) — mismo dato que ya usa MesaPanel.tsx para el
+  // flujo en vivo, sin pedir un endpoint nuevo.
+  const esEliminacion = partido.ronda_nombre != null;
+  const marcadorEmpatado = marcadorLocal === marcadorVisitante;
+  const requiereDesempate = esEliminacion && !esCorrido && marcadorEmpatado;
+  const [ganadorDesempateId, setGanadorDesempateId] = useState<number | null>(null);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -434,6 +442,7 @@ export function ModalResultadoDirecto(props: {
       const body = {
         eventos: [...eventosSlots, ...eventosOtros],
         ganador_corrido_id: esCorrido ? ganadorCorridoId : undefined,
+        ganador_desempate_id: requiereDesempate ? ganadorDesempateId : undefined,
       };
       const { data, error } = await api.POST("/api/v1/partidos/{partido_id}/resultado-directo", {
         params: { path: { partido_id: partido.id } },
@@ -446,7 +455,11 @@ export function ModalResultadoDirecto(props: {
   });
 
   const todosLosSlotsCompletos = slots.every((s) => s.jugadorId !== null && s.minuto !== "");
-  const puedeGuardar = todosLosSlotsCompletos && (!esCorrido || ganadorCorridoId !== null) && pendienteConfirmar === null;
+  const puedeGuardar =
+    todosLosSlotsCompletos &&
+    (!esCorrido || ganadorCorridoId !== null) &&
+    (!requiereDesempate || ganadorDesempateId !== null) &&
+    pendienteConfirmar === null;
 
   return (
     <div
@@ -765,6 +778,35 @@ export function ModalResultadoDirecto(props: {
               <option value={partido.equipos_id_visitante}>{nombreVisitante}</option>
             </select>
           </label>
+        )}
+
+        {/* Desempate manual (Fase 0, Finding 1): marcador empatado en un
+            partido de fase Eliminación — radios, no un select (Design
+            review): las dos opciones tienen que ser visibles sin abrir
+            nada, mismo criterio que el resto de decisiones de una sola
+            vía de este módulo. */}
+        {requiereDesempate && (
+          <div className="resource-form">
+            <p className="muted--cuerpo">Empate en el marcador — ¿quién avanza?</p>
+            <label className="cronometro__radio">
+              <input
+                type="radio"
+                name="ganador-desempate"
+                checked={ganadorDesempateId === partido.equipos_id_local}
+                onChange={() => setGanadorDesempateId(partido.equipos_id_local)}
+              />
+              {nombreLocal}
+            </label>
+            <label className="cronometro__radio">
+              <input
+                type="radio"
+                name="ganador-desempate"
+                checked={ganadorDesempateId === partido.equipos_id_visitante}
+                onChange={() => setGanadorDesempateId(partido.equipos_id_visitante)}
+              />
+              {nombreVisitante}
+            </label>
+          </div>
         )}
 
         {mutation.isError && <p className="error-text">{apiErrorMessage(mutation.error)}</p>}

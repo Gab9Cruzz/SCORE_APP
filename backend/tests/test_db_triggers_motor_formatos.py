@@ -287,4 +287,269 @@ async def test_trigger_rechaza_equipo_en_dos_grupos_de_la_misma_fase(db_session:
     with pytest.raises((IntegrityError, DBAPIError)) as exc_info:
         await db_session.flush()
     assert "ya_asignado_a_otro_grupo" in str(exc_info.value)
+
+
+# ------------------------------------------------------------
+# Cierre de Fase Regular + Llaves + Playoffs
+# (docs/plans/cierre-fase-regular-llaves-playoffs-plan.md, Fase B)
+# ------------------------------------------------------------
+
+
+async def _armar_llave_2_equipos(
+    db_session: AsyncSession, nombre: str, formato_eliminatoria: str = "Ida_Vuelta"
+) -> tuple[Torneo, Partido, Partido, dict[int, int]]:
+    """Bracket de 2 equipos bajo un `formato_eliminatoria` a dos piernas:
+    la Final ES la única llave, `_sortear_bracket` la arma directo (EC-58,
+    tamano < 4, sin shells)."""
+    torneo, equipos = await _crear_torneo_con_equipos(
+        db_session, nombre, 2, formato="Eliminacion", formato_eliminatoria=formato_eliminatoria
+    )
+    fase = Fase(torneo_id=torneo.id, nombre="Eliminatoria", tipo="Eliminacion", orden=1, estado="Pendiente")
+    db_session.add(fase)
+    await db_session.flush()
+    usuario = await _crear_usuario_admin(db_session, f"{nombre.lower().replace(' ', '_')}_admin")
+    await db_session.commit()
+
+    await MotorFormatosService(db_session).sortear(torneo.id, usuario.id, semilla="fija")
+
+    partidos = (
+        (await db_session.execute(select(Partido).where(Partido.fase_id == fase.id, Partido.ronda_nombre == "Final")))
+        .scalars()
+        .all()
+    )
+    vuelta = next(p for p in partidos if p.partido_ida_id is not None)
+    ida = next(p for p in partidos if p.id == vuelta.partido_ida_id)
+
+    jugadores_por_equipo: dict[int, int] = {}
+    for equipo_id in equipos:
+        jugadores_por_equipo[equipo_id] = await _registrar_jugador_en_equipo(
+            db_session, torneo.id, equipo_id, f"Jugador {equipo_id}", f"CL{equipo_id}"
+        )
+    await db_session.commit()
+    return torneo, ida, vuelta, jugadores_por_equipo
+
+
+async def test_trigger_ida_0_0_es_legal(db_session: AsyncSession):
+    """B4: un 0-0 en la IDA nunca exige desempate — la validación de
+    empate se corre recién sobre el GLOBAL, al finalizar la VUELTA."""
+    torneo, ida, vuelta, jugadores = await _armar_llave_2_equipos(db_session, "Llave Ida 0-0")
+    ida.estado = "Finalizado"
+    await db_session.commit()  # no debe lanzar
+    assert ida.estado == "Finalizado"
+    await db_session.rollback()
+
+
+async def test_trigger_vuelta_exige_desempate_si_agregado_empatado(db_session: AsyncSession):
+    """B4: ida 1-0, vuelta 0-1 -> global 1-1, sin Ganador_Desempate_ID en
+    la vuelta -> rechazado, aunque NINGUNO de los dos partidos por
+    separado esté empatado."""
+    torneo, ida, vuelta, jugadores = await _armar_llave_2_equipos(db_session, "Llave Global Empate")
+    local_ida = ida.equipos_id_local
+    visit_ida = ida.equipos_id_visitante
+    await _registrar_goles(db_session, ida.id, jugadores[local_ida], local_ida, 1)
+    ida.estado = "Finalizado"
+    await db_session.commit()
+
+    # La vuelta invierte localía: visit_ida juega de LOCAL acá. Si gana la
+    # vuelta 1-0, el agregado queda 1-1 (cada equipo ganó su partido de
+    # local) — el caso clásico que ninguno de los 2 marcadores individuales
+    # deja ver por separado.
+    await _registrar_goles(db_session, vuelta.id, jugadores[visit_ida], visit_ida, 1)
+    vuelta.estado = "Finalizado"
+    with pytest.raises((IntegrityError, DBAPIError)) as exc_info:
+        await db_session.flush()
+    assert "llave_empatada_en_global_sin_desempate" in str(exc_info.value)
+    await db_session.rollback()
+
+
+async def test_trigger_vuelta_acepta_agregado_empatado_con_desempate(db_session: AsyncSession):
+    """Contraparte: mismo 1-1 global, pero con Ganador_Desempate_ID en la
+    vuelta -> acepta, y el campeón resuelto es el desempatado (no hay
+    'próxima ronda' acá — bracket de 2, la Final es el único partido)."""
+    torneo, ida, vuelta, jugadores = await _armar_llave_2_equipos(db_session, "Llave Global Empate OK")
+    local_ida = ida.equipos_id_local
+    visit_ida = ida.equipos_id_visitante
+    await _registrar_goles(db_session, ida.id, jugadores[local_ida], local_ida, 1)
+    ida.estado = "Finalizado"
+    await db_session.commit()
+
+    await _registrar_goles(db_session, vuelta.id, jugadores[visit_ida], visit_ida, 1)
+    vuelta.estado = "Finalizado"
+    vuelta.ganador_desempate_id = visit_ida
+    await db_session.commit()  # no debe lanzar
+    await db_session.rollback()
+
+
+async def test_trigger_rechaza_vuelta_si_ida_no_resuelta(db_session: AsyncSession):
+    """F12: la VUELTA no puede finalizar mientras su IDA sigue
+    Programado/En curso — dos operadores de mesa cerrando fuera de orden
+    no deben poder hacer que fn_resolver_llave agregue contra una ida
+    todavía abierta."""
+    torneo, ida, vuelta, jugadores = await _armar_llave_2_equipos(db_session, "Llave Fuera De Orden")
+    local_vta = vuelta.equipos_id_local
+    await _registrar_goles(db_session, vuelta.id, jugadores[local_vta], local_vta, 1)
+    vuelta.estado = "Finalizado"
+    with pytest.raises((IntegrityError, DBAPIError)) as exc_info:
+        await db_session.flush()
+    assert "partido_vuelta_ida_sin_resolver" in str(exc_info.value)
+    await db_session.rollback()
+
+
+async def test_trigger_vuelta_acepta_ida_cancelada(db_session: AsyncSession):
+    """F12 + Cancelado addendum: una IDA Cancelada (nunca Finalizado)
+    igual habilita la vuelta — "Finalizado o Cancelado" resuelve, nunca
+    bloquea para siempre."""
+    torneo, ida, vuelta, jugadores = await _armar_llave_2_equipos(db_session, "Llave Ida Cancelada")
+    ida.estado = "Cancelado"
+    await db_session.commit()
+
+    local_vta = vuelta.equipos_id_local
+    await _registrar_goles(db_session, vuelta.id, jugadores[local_vta], local_vta, 1)
+    vuelta.estado = "Finalizado"
+    await db_session.commit()  # no debe lanzar — la ida cancelada aporta 0-0.
+    await db_session.rollback()
+
+
+async def test_trigger_propaga_agregado_y_completa_ambas_piernas_del_padre(db_session: AsyncSession):
+    """B3/C1, el corazón del motor de llaves: en un bracket de 4 equipos a
+    Ida_Vuelta, cuando una semifinal (llave a dos partidos) termina, el
+    ganador del AGREGADO llega a la Final — y a las DOS piernas de la
+    Final, en el slot invertido correspondiente, con un solo feeder
+    (fn_propagar_ganador_bracket "espeja" a la ida del destino)."""
+    torneo, equipos = await _crear_torneo_con_equipos(
+        db_session, "Llave 4 Ida Vuelta", 4, formato="Eliminacion", formato_eliminatoria="Ida_Vuelta"
+    )
+    fase = Fase(torneo_id=torneo.id, nombre="Eliminatoria", tipo="Eliminacion", orden=1, estado="Pendiente")
+    db_session.add(fase)
+    await db_session.flush()
+    usuario = await _crear_usuario_admin(db_session, "llave4_admin")
+    await db_session.commit()
+
+    await MotorFormatosService(db_session).sortear(torneo.id, usuario.id, semilla="fija")
+
+    semis_vuelta = (
+        (
+            await db_session.execute(
+                select(Partido).where(
+                    Partido.fase_id == fase.id,
+                    Partido.ronda_nombre == "Semifinal",
+                    Partido.partido_ida_id.is_not(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(semis_vuelta) == 2  # las 2 semifinales son llaves a dos partidos.
+
+    jugadores_por_equipo: dict[int, int] = {}
+    for equipo_id in equipos:
+        jugadores_por_equipo[equipo_id] = await _registrar_jugador_en_equipo(
+            db_session, torneo.id, equipo_id, f"J{equipo_id}", f"CEDIV{equipo_id}"
+        )
+    await db_session.commit()
+
+    ganadores = []
+    for vuelta in semis_vuelta:
+        ida = await db_session.get(Partido, vuelta.partido_ida_id)
+        local_ida = ida.equipos_id_local
+        # Gana el local de la ida en las dos piernas: 1-0 y (vuelta,
+        # invertido) 0-1 a su favor -> agregado 2-0, sin ambigüedad.
+        await _registrar_goles(db_session, ida.id, jugadores_por_equipo[local_ida], local_ida, 1)
+        ida.estado = "Finalizado"
+        await db_session.commit()
+
+        await _registrar_goles(db_session, vuelta.id, jugadores_por_equipo[local_ida], local_ida, 1)
+        vuelta.estado = "Finalizado"
+        await db_session.commit()
+        ganadores.append(local_ida)
+
+    final_partidos = (
+        (await db_session.execute(select(Partido).where(Partido.fase_id == fase.id, Partido.ronda_nombre == "Final")))
+        .scalars()
+        .all()
+    )
+    assert len(final_partidos) == 2  # la Final también es una llave a dos partidos.
+    final_vuelta = next(p for p in final_partidos if p.partido_ida_id is not None)
+    final_ida = next(p for p in final_partidos if p.id == final_vuelta.partido_ida_id)
+
+    # Los dos ganadores de semifinal están sentados en AMBAS piernas de la
+    # Final, con localía invertida entre ida y vuelta.
+    assert {final_vuelta.equipos_id_local, final_vuelta.equipos_id_visitante} == set(ganadores)
+    assert {final_ida.equipos_id_local, final_ida.equipos_id_visitante} == set(ganadores)
+    assert final_ida.equipos_id_local == final_vuelta.equipos_id_visitante
+    assert final_ida.equipos_id_visitante == final_vuelta.equipos_id_local
+
+    await db_session.rollback()
+
+
+async def test_trigger_walkover_en_una_pierna_suma_al_agregado(db_session: AsyncSession):
+    """Accepted addendum: una pierna por walkover suma 3-0 al agregado
+    como cualquier otro resultado — fn_marcador_partido unifica Walkover/
+    Corrido/goles, fn_resolver_llave no necesita saber cuál fue cuál."""
+    torneo, ida, vuelta, jugadores = await _armar_llave_2_equipos(db_session, "Llave Walkover Pierna")
+    ausente = ida.equipos_id_visitante
+    ida.estado = "Finalizado"
+    ida.es_walkover = True
+    ida.walkover_equipo_ausente_id = ausente
+    await db_session.commit()
+
+    # Vuelta: el mismo ausente de la ida marca 1 (invertido: es local acá).
+    await _registrar_goles(db_session, vuelta.id, jugadores[ausente], ausente, 1)
+    vuelta.estado = "Finalizado"
+    await db_session.commit()  # agregado: 3 (presente) - 1 (ausente) = presente gana, sin empate.
+    await db_session.rollback()
+
+
+async def test_trigger_bloquea_update_partido_en_torneo_cerrado(db_session: AsyncSession):
+    """Finding 4 / T3: una vez Torneo.Estado='Finalizado', ningún resultado
+    se puede seguir modificando."""
+    torneo, equipos = await _crear_torneo_con_equipos(db_session, "Torneo Cerrado Update", 2, formato="Liga")
+    fase = Fase(torneo_id=torneo.id, nombre="Liga Regular", tipo="Liga", orden=1, estado="Finalizada")
+    db_session.add(fase)
+    partido = Partido(
+        torneo_id=torneo.id,
+        equipos_id_local=equipos[0],
+        equipos_id_visitante=equipos[1],
+        fecha_partido="2026-04-01",
+        fase_id=None,
+        estado="Programado",
+    )
+    db_session.add(partido)
+    await db_session.flush()
+    torneo.estado = "Finalizado"
+    await db_session.commit()
+
+    partido.jornada = 1
+    with pytest.raises((IntegrityError, DBAPIError)) as exc_info:
+        await db_session.flush()
+    assert "torneo_cerrado_resultados_bloqueados" in str(exc_info.value)
+    await db_session.rollback()
+
+
+async def test_trigger_bloquea_evento_partido_en_torneo_cerrado(db_session: AsyncSession):
+    torneo, equipos = await _crear_torneo_con_equipos(db_session, "Torneo Cerrado Evento", 2, formato="Liga")
+    partido = Partido(
+        torneo_id=torneo.id,
+        equipos_id_local=equipos[0],
+        equipos_id_visitante=equipos[1],
+        fecha_partido="2026-04-01",
+        estado="Programado",
+    )
+    db_session.add(partido)
+    await db_session.flush()
+    jugador_id = await _registrar_jugador_en_equipo(db_session, torneo.id, equipos[0], "JC", "CEDCERRADO1")
+    await db_session.commit()
+
+    torneo.estado = "Finalizado"
+    await db_session.commit()
+
+    evento_gol_id = (await db_session.execute(select(Evento.id).where(Evento.nombre == "Gol"))).scalar_one()
+    db_session.add(
+        EventoPartido(partidos_id=partido.id, jugador_id=jugador_id, equipo_id=equipos[0], eventos_id=evento_gol_id, minuto=5)
+    )
+    with pytest.raises((IntegrityError, DBAPIError)) as exc_info:
+        await db_session.flush()
+    assert "torneo_cerrado_resultados_bloqueados" in str(exc_info.value)
+    await db_session.rollback()
     await db_session.rollback()
