@@ -203,6 +203,53 @@ describe("MesaPanel — offline-first (3B-1, docs/plans/cierre-backlog-todos-pla
 
     expect(await screen.findByText("Cargar evento")).toBeInTheDocument();
   });
+
+  // A1 (docs/plans/cierre-pendientes-todos-plan.md): el 409 de
+  // ConcurrencyConflictError ("evento_conflicto_concurrente") se rutea por
+  // el MISMO mecanismo de recuperación que un fallo de red — un solo
+  // camino, no una segunda afordancia de reintento.
+  it("un 409 de conflicto de concurrencia se encola como el evento pendiente, no como un rechazo real", async () => {
+    server.use(
+      http.post(EVENTOS_PARTIDO, () => HttpResponse.json({ detail: "evento_conflicto_concurrente" }, { status: 409 })),
+    );
+    const user = userEvent.setup();
+    montarMesaPanel();
+    await screen.findByText("Cargar evento");
+
+    await cargarUnGol(user);
+
+    expect(await screen.findByText(/todavía no se pudo enviar/)).toBeInTheDocument();
+    expect(screen.queryByText("Cargar evento")).not.toBeInTheDocument();
+  });
+
+  it("un 409 de conflicto de concurrencia al cargar un Cambio desde ModalSustitucion también se encola", async () => {
+    const user = userEvent.setup();
+    montarMesaPanel();
+    server.use(
+      http.get(PLANTILLA_1, () =>
+        HttpResponse.json([
+          { jugador_id: 5, jugador: "Andrés Vera", equipo_id: 1, equipo: "Tiburones FC", dorsal: 9, jugador_perfil_id: 50 },
+          { jugador_id: 6, jugador: "Bruno Ríos", equipo_id: 1, equipo: "Tiburones FC", dorsal: 10, jugador_perfil_id: 51 },
+        ]),
+      ),
+      http.get(EVENTOS, () =>
+        HttpResponse.json([
+          { id: 1, nombre: "Gol", estado: "Activo" },
+          { id: 3, nombre: "Tarjeta Roja", estado: "Activo" },
+          { id: 4, nombre: "Cambio", estado: "Activo" },
+        ]),
+      ),
+      http.post(EVENTOS_PARTIDO, () => HttpResponse.json({ detail: "evento_conflicto_concurrente" }, { status: 409 })),
+    );
+
+    const filaAndres = (await screen.findByText(/Andrés Vera/)).closest("li");
+    if (!filaAndres) throw new Error("No se encontró la fila de Andrés Vera");
+    await user.click(within(filaAndres).getByRole("button", { name: "Sacar" }));
+    await user.click(await screen.findByRole("button", { name: /Bruno Ríos/ }));
+
+    expect(await screen.findByText(/todavía no se pudo enviar/)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });
 
 // D1 (docs/plans/cierre-pendientes-todos-plan.md): antes NINGUNA carga de

@@ -17,13 +17,36 @@ import { ModalSustitucion } from "./ModalSustitucion";
 
 /** 3B-1 (docs/plans/cierre-backlog-todos-plan.md): distingue "no hay red"
  * de "el backend rechazó la request" — solo el primer caso debe encolarse
- * para reintentar solo, un 400/409 real (jugador ajeno al equipo, minuto
+ * para reintentar solo, un rechazo real (jugador ajeno al equipo, minuto
  * fuera de rango...) reintentado a ciegas nunca va a pasar y confundiría
  * más que un error inmediato. `fetch` tira `TypeError` cuando no llega a
  * conectar (a diferencia de un 4xx/5xx, que sí resuelve una Response) —
- * es la señal más confiable sin inventar un código de error propio. */
+ * es la señal más confiable sin inventar un código de error propio.
+ *
+ * Excepción nombrada: `evento_conflicto_concurrente` (ver
+ * `esConflictoConcurrencia` abajo) — un 409 real, pero SÍ vale la pena
+ * reintentarlo solo, a diferencia de los demás. */
 function esErrorDeRed(error: unknown): boolean {
   return error instanceof TypeError;
+}
+
+/** A1 (docs/plans/cierre-pendientes-todos-plan.md): 409 de
+ * `ConcurrencyConflictError` (backend/app/exceptions/errors.py) — otro
+ * operador está cargando un evento en el mismo partido AHORA. Se rutea
+ * por el ÚNICO mecanismo de recuperación que ya existe en esta pantalla
+ * (la cola de "evento pendiente" de 3B-1) en vez de sumar una segunda
+ * afordancia de reintento: un 409 sobre un evento YA pendiente dispararía
+ * las dos si hubiera dos. Lee `error.detail` (el código estable) ANTES de
+ * pasarlo por `apiErrorMessage` — que lo traduce a texto en español — para
+ * no reintroducir el substring-matching sobre prosa que ese mecanismo
+ * existe para evitar. */
+function esConflictoConcurrencia(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    "detail" in error &&
+    (error as { detail: unknown }).detail === "evento_conflicto_concurrente"
+  );
 }
 
 type EventoBody = {
@@ -367,24 +390,19 @@ export function MesaPanel({
   // cerrar sin elegir reemplazo no debe persistir nada, por eso esto vive
   // en un estado propio (no en el de CargaEvento) y solo se llama a
   // `onSubmit` cuando el operador confirma un elegible.
+  // A1 (docs/plans/cierre-pendientes-todos-plan.md): ModalSustitucion ya
+  // NO tiene su propia mutación — comparte `mutation`/`manejarSubmitEvento`
+  // con CargaEvento y con el flush de la cola offline, los tres caminos
+  // que terminan en el mismo POST /eventos-partido. Antes tenía la suya
+  // propia (`sustitucion`), con su propio manejo de error — eso es
+  // exactamente lo que impedía que el 409 de concurrencia tuviera un solo
+  // camino de recuperación (dos mutaciones, dos catch, dos UIs posibles).
   const [sustituyendoA, setSustituyendoA] = useState<PlantillaJugador | null>(null);
-  const sustitucion = useMutation({
-    mutationFn: async (body: EventoBody) => {
-      const { data, error } = await api.POST("/api/v1/eventos-partido", { body });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["eventos-partido", partidoId] });
-      setSustituyendoA(null);
-      setUltimaConfirmacion(describirEventoConfirmado(variables, data.minuto));
-    },
-  });
 
-  // D1: única fuente de la región aria-live de zona secundaria — "Guardando…"
-  // mientras cualquiera de las dos mutaciones está en curso, si no la
+  // D1: única fuente de la región aria-live de zona secundaria —
+  // "Guardando…" mientras la mutación compartida está en curso, si no la
   // última confirmación de éxito.
-  const estadoEnvio = mutation.isPending || sustitucion.isPending ? "Guardando…" : ultimaConfirmacion;
+  const estadoEnvio = mutation.isPending ? "Guardando…" : ultimaConfirmacion;
 
   /** Reemplaza el `onSubmit={(body) => mutation.mutate(body)}` directo
    * que tenía este panel: intenta la carga normal, y si falla
@@ -403,13 +421,14 @@ export function MesaPanel({
       await mutation.mutateAsync(body);
       return true;
     } catch (error) {
-      if (esErrorDeRed(error)) {
+      if (esErrorDeRed(error) || esConflictoConcurrencia(error)) {
         guardarEventoPendiente(partidoId, body);
         setPendiente(leerEventoPendiente(partidoId));
         return true;
       }
-      // No es de red: mutation.error ya queda seteado (mutateAsync
-      // relanza la excepción) y CargaEvento lo muestra — se queda abierto.
+      // Ni red ni conflicto de concurrencia: mutation.error ya queda
+      // seteado (mutateAsync relanza la excepción) y el caller lo
+      // muestra — se queda abierto.
       return false;
     }
   }
@@ -768,19 +787,26 @@ export function MesaPanel({
             jugadorSale={sustituyendoA}
             elegibles={elegibles}
             estadoTarjetasPorJugador={estadoTarjetasPorJugador}
-            confirmando={sustitucion.isPending}
-            error={sustitucion.isError ? apiErrorMessage(sustitucion.error) : null}
+            confirmando={mutation.isPending}
+            error={mutation.isError ? apiErrorMessage(mutation.error) : null}
             onCancelar={() => setSustituyendoA(null)}
             onIrAConvocatoria={onIrAConvocatoria}
-            onConfirmar={(entraId) =>
-              sustitucion.mutate({
+            onConfirmar={(entraId) => {
+              // A1: mismo camino que CargaEvento — red o 409 de
+              // concurrencia se encolan en la cola de "evento pendiente"
+              // (y el modal se cierra, igual que un envío exitoso: no hay
+              // nada más que el operador tenga que hacer con ESTE modal);
+              // un rechazo real lo deja abierto mostrando `error` arriba.
+              void manejarSubmitEvento({
                 partidos_id: partidoId,
                 jugador_id: sustituyendoA.jugador_id,
                 equipo_id: sustituyendoA.equipo_id,
                 eventos_id: eventoIdPorNombre.get("Cambio") as number,
                 jugador_id_entra: entraId,
-              })
-            }
+              }).then((exito) => {
+                if (exito) setSustituyendoA(null);
+              });
+            }}
           />
         );
       })()}
