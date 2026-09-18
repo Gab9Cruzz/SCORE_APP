@@ -567,18 +567,6 @@ export function MesaPanel({
             eventosRegistrados={eventosRegistrados}
             eventoIdPorNombre={eventoIdPorNombre}
             eventoNombrePorId={eventoNombrePorId}
-            // goles-por-marcador-slots-plan.md, Fase 1 (hallazgo 1): antes
-            // este componente calculaba su propia elegibilidad de Cambio
-            // sin distinguir titular/suplente en absoluto ("plantilla
-            // vigente — no distingue titular/suplente", el comentario que
-            // se retira más abajo) — ahora consume el mismo cálculo
-            // compartido que la alineación en vivo y ModalSustitucion.
-            // "en cancha" (Fase 3 §1, estado mutante), no solo titulares
-            // originales — un suplente que ya entró por un Cambio debe
-            // poder salir de nuevo sin recargar la página.
-            titularesJugadorIds={enCanchaJugadorIds}
-            suplentesJugadorIds={suplentesJugadorIds}
-            sinConvocatoria={sinConvocatoria}
             minutoActual={minutoActual}
             onSubmit={manejarSubmitEvento}
             submitting={mutation.isPending}
@@ -853,6 +841,14 @@ interface EventoPartidoRow {
   minuto: number;
 }
 
+// C2b (docs/plans/cierre-pendientes-todos-plan.md): "Cambio" ya NO es un
+// tipo elegible acá — el camino vivo es ModalSustitucion, disparado desde
+// "Sacar" en Alineación en vivo (con el fallback sin convocatoria de C2a).
+// Filtrado en vez de tocar `TIPOS`/`TipoEvento` (eventos.ts): ese tipo
+// sigue siendo válido en el resto del sistema (catálogo de eventos,
+// timeline, ModalResultadoDirecto), esto es solo la grilla de ESTE form.
+const TIPOS_CARGA_EVENTO = TIPOS.filter((t) => t !== "Cambio");
+
 function CargaEvento(props: {
   partidoId: number;
   equipoLocalId: number;
@@ -864,17 +860,6 @@ function CargaEvento(props: {
   eventosRegistrados: EventoPartidoRow[];
   eventoIdPorNombre: Map<string, number>;
   eventoNombrePorId: Map<number, string>;
-  /** goles-por-marcador-slots-plan.md, Fase 3 Eng (corrección 4): sets
-   * explícitos derivados de la convocatoria (`deriveTitularSuplente`) —
-   * ambos vacíos cuando no hay convocatoria guardada (`sinConvocatoria`).
-   * `titularesJugadorIds` en realidad recibe "en cancha AHORA"
-   * (`deriveEnCancha`, control-mesa-reactividad-playoffs-plan.md, Fase 3
-   * §1) — titulares vigentes MÁS suplentes que ya entraron por un Cambio
-   * registrado, para que "Sale" siga ofreciendo a un suplente recién
-   * ingresado. */
-  titularesJugadorIds: Set<number>;
-  suplentesJugadorIds: Set<number>;
-  sinConvocatoria: boolean;
   /** Área 3 (T3): emitido por <Cronometro> — `null` mientras no hay nada
    * que mostrar. El submit queda deshabilitado hasta que llega un valor
    * real (Sección 1 del plan: "deshabilitar botón hasta que Cronometro
@@ -892,41 +877,24 @@ function CargaEvento(props: {
   const [tipo, setTipo] = useState<TipoEvento | null>(null);
   const [equipoId, setEquipoId] = useState<number | null>(null);
   const [sale, setSale] = useState<number | null>(null);
-  const [entra, setEntra] = useState<number | null>(null);
 
   function reset() {
     setTipo(null);
     setEquipoId(null);
     setSale(null);
-    setEntra(null);
   }
 
   const plantillaEquipo = equipoId === props.equipoLocalId ? props.plantillaLocal : props.plantillaVisitante;
 
-  const { salidosOExpulsados, yaEntraron } = deriveHistorialElegibilidad(props.eventosRegistrados, props.eventoNombrePorId);
+  const { salidosOExpulsados } = deriveHistorialElegibilidad(props.eventosRegistrados, props.eventoNombrePorId);
 
-  // Lista general (Gol/Autogol/tarjetas): toda la plantilla convocada,
-  // menos quien ya salió/fue expulsado — sin distinción titular/suplente
-  // (no aplica acá: un suplente que ya ingresó también puede marcar un gol).
+  // Toda la plantilla convocada, menos quien ya salió/fue expulsado — sin
+  // distinción titular/suplente (no aplica: un suplente que ya ingresó
+  // también puede marcar un gol). Antes esta lista tenía un par
+  // `disponiblesParaSalirCambio`/`disponiblesParaEntrar` con la variante
+  // titular/suplente — retirado con "Cambio" en C2b, ModalSustitucion es
+  // el único camino que necesita esa distinción.
   const disponiblesParaSalir = plantillaEquipo.filter((j) => !salidosOExpulsados.has(j.jugador_id));
-
-  // Cambio (goles-por-marcador-slots-plan.md, Fase 1, hallazgo 1 — antes
-  // este componente no distinguía titular/suplente EN ABSOLUTO, a
-  // diferencia de la alineación en vivo, que sí lo hacía para "Sale"; era
-  // la inconsistencia DRY que el plan señaló). Con convocatoria guardada,
-  // "Sale" se restringe a titulares vigentes y "Entra" a suplentes
-  // vigentes — el filtrado estricto que pide el punto 3 del pedido. Sin
-  // convocatoria (`sinConvocatoria`), degrada con gracia a la plantilla
-  // completa (D4) — mismo comportamiento que tenía antes de este plan.
-  const disponiblesParaSalirCambio = props.sinConvocatoria
-    ? disponiblesParaSalir
-    : plantillaEquipo.filter((j) => props.titularesJugadorIds.has(j.jugador_id) && !salidosOExpulsados.has(j.jugador_id));
-  const disponiblesParaEntrar = plantillaEquipo.filter((j) => {
-    if (salidosOExpulsados.has(j.jugador_id) || yaEntraron.has(j.jugador_id) || j.jugador_id === sale) return false;
-    return props.sinConvocatoria || props.suplentesJugadorIds.has(j.jugador_id);
-  });
-
-  const jugadorSimple = tipo !== "Cambio" ? sale : null;
 
   async function handleConfirmar() {
     if (!tipo || !equipoId || sale === null || props.minutoActual === null) return;
@@ -940,19 +908,14 @@ function CargaEvento(props: {
       jugador_id: sale,
       equipo_id: equipoId,
       eventos_id: props.eventoIdPorNombre.get(tipo) as number,
-      jugador_id_entra: tipo === "Cambio" ? entra : null,
+      jugador_id_entra: null,
       // Sin `minuto`: el servidor lo calcula siempre para este camino (en
       // vivo) — ver el comentario de EventoBody.minuto.
     });
     if (exito) reset();
   }
 
-  const puedeConfirmar =
-    tipo !== null &&
-    equipoId !== null &&
-    sale !== null &&
-    props.minutoActual !== null &&
-    (tipo !== "Cambio" || entra !== null);
+  const puedeConfirmar = tipo !== null && equipoId !== null && sale !== null && props.minutoActual !== null;
 
   return (
     <section className="card carga-evento">
@@ -960,7 +923,7 @@ function CargaEvento(props: {
 
       {!tipo && (
         <div className="tap-grid">
-          {TIPOS.map((t) => (
+          {TIPOS_CARGA_EVENTO.map((t) => (
             <button key={t} type="button" className="tap-button" onClick={() => setTipo(t)}>
               <span className="tap-button__icon">{TIPO_ICONO[t]}</span>
               {t}
@@ -981,7 +944,7 @@ function CargaEvento(props: {
         </div>
       )}
 
-      {tipo && equipoId && tipo !== "Cambio" && sale === null && (
+      {tipo && equipoId && sale === null && (
         <div className="tap-grid">
           {disponiblesParaSalir.map((j) => (
             <button key={j.jugador_id} type="button" className="tap-button" onClick={() => setSale(j.jugador_id)}>
@@ -993,37 +956,7 @@ function CargaEvento(props: {
         </div>
       )}
 
-      {tipo === "Cambio" && equipoId && sale === null && (
-        <div className="tap-grid">
-          <p className="muted">
-            {props.sinConvocatoria
-              ? "¿Quién sale? (sin convocatoria guardada para este partido — mostrando la plantilla completa, sin distinguir titular/suplente)"
-              : "¿Quién sale? (en cancha)"}
-          </p>
-          {disponiblesParaSalirCambio.map((j) => (
-            <button key={j.jugador_id} type="button" className="tap-button" onClick={() => setSale(j.jugador_id)}>
-              {j.dorsal ? `#${j.dorsal} ` : ""}{j.jugador}
-            </button>
-          ))}
-          {disponiblesParaSalirCambio.length === 0 && <p>No hay nadie en cancha disponible para salir.</p>}
-          <button type="button" className="link-button" onClick={() => setEquipoId(null)}>← Cambiar equipo</button>
-        </div>
-      )}
-
-      {tipo === "Cambio" && equipoId && sale !== null && entra === null && (
-        <div className="tap-grid">
-          <p className="muted">{props.sinConvocatoria ? "¿Quién entra?" : "¿Quién entra? (solo suplentes)"}</p>
-          {disponiblesParaEntrar.map((j) => (
-            <button key={j.jugador_id} type="button" className="tap-button" onClick={() => setEntra(j.jugador_id)}>
-              {j.dorsal ? `#${j.dorsal} ` : ""}{j.jugador}
-            </button>
-          ))}
-          {disponiblesParaEntrar.length === 0 && <p>No hay suplentes disponibles en la plantilla.</p>}
-          <button type="button" className="link-button" onClick={() => setSale(null)}>← Elegir otro</button>
-        </div>
-      )}
-
-      {tipo && equipoId && (jugadorSimple !== null || (tipo === "Cambio" && entra !== null)) && (
+      {tipo && equipoId && sale !== null && (
         <div className="confirmar-evento">
           {/* Área 3 (T3): ya no se pide a mano — el minuto sale del
               cronómetro en vivo (mismo dato que va a calcular el servidor,

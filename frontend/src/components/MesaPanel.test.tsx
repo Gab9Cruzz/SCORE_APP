@@ -308,4 +308,24 @@ describe("MesaPanel — alineación en vivo sin convocatoria (C2a)", () => {
   });
 });
 
+// C2b (docs/plans/cierre-pendientes-todos-plan.md): retiro del camino
+// viejo de "Cambio" dentro de CargaEvento — ModalSustitucion (arriba) es
+// el único camino que queda para registrar un Cambio en vivo.
+describe("MesaPanel — CargaEvento sin la opción Cambio (C2b)", () => {
+  beforeEach(() => {
+    limpiarEventoPendiente(3);
+  });
+
+  it("la grilla de 'Cargar evento' no ofrece Cambio como tipo", async () => {
+    montarMesaPanel();
+    await screen.findByText("Cargar evento");
+
+    expect(screen.getByRole("button", { name: /Gol/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Autogol/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tarjeta Amarilla/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tarjeta Roja/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^🔄 Cambio$/ })).not.toBeInTheDocument();
+  });
+});
+
 // control-mesa-centralizacion-fixture-plan.md, ítem 1/2: RBAC scoping +
