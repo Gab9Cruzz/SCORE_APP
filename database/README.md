@@ -123,6 +123,24 @@ sean coherentes. Si volvés a cambiar el esquema, ese test es el que avisa.
    próxima instalación nueva y los tests van a describir otro esquema que
    producción.
 
+## Guardia de tres lugares para toda columna nueva
+
+Pitfall confirmado de este repo (docs/plans/cierre-pendientes-todos-plan.md):
+toda columna nueva va en **tres** lugares o revientan ~40 archivos de test
+con `UndefinedColumn`:
+
+1. **`01_schema.sql`** — el esquema "siempre al día" (punto 1 de arriba).
+2. **El script de migración `NN_...sql`**, idempotente (`IF NOT EXISTS` en
+   el `ALTER TABLE`) — `backend/tests/test_scripts_sql.py` corre cada script
+   DOS veces contra una base recién creada, así que una migración que
+   revienta en la segunda corrida está mal escrita.
+3. **`SCRIPTS_VIGENTES`** en `backend/tests/test_scripts_sql.py:36-48`.
+
+`backend/tests/conftest.py` arma la base de tests **solo** con
+`01_schema.sql`–`06_triggers.sql`, nunca con los `07+` — si una columna
+nueva solo vive en la migración y no en `01_schema.sql`, todo test que la
+use falla con `UndefinedColumn` aunque la migración esté perfecta.
+
 ## Restaurar un backup
 
 ```powershell

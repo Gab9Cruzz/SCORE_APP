@@ -8,7 +8,23 @@ FastAPI + PostgreSQL + React (Vite + TypeScript).
 
 ## Levantar todo
 
-Necesitás PostgreSQL corriendo. Dos terminales:
+### Con Docker (recomendado para el primer clon)
+
+```bash
+cd infrastructure
+JWT_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))") docker compose up --build
+```
+
+Esto levanta Postgres (esquema completo cargado solo, ver
+[`infrastructure/README.md`](infrastructure/README.md)) y la API en
+http://localhost:8000. Para el frontend, igual que abajo: `npm install` +
+`npm run dev` en `frontend/` (copiando `frontend/.env.example` a
+`frontend/.env` primero).
+
+### Manual (sin Docker)
+
+Necesitás PostgreSQL corriendo, con la base creada desde los scripts de
+[`database/`](database/README.md). Dos terminales:
 
 **Backend** → http://localhost:8000
 ```powershell
@@ -23,6 +39,7 @@ http://localhost:8000/health → `{"status":"ok"}`.
 **Frontend** → http://localhost:5173
 ```powershell
 cd frontend
+copy .env.example .env
 npm run dev
 ```
 
@@ -52,8 +69,9 @@ Los pedazos por separado: `python -m pytest` en `backend/`,
 | [`database/`](database/README.md) | El esquema, en SQL puro. Sin Alembic. **Leer ese README antes de tocar el esquema** — la numeración de los archivos no es cronológica y confundirla cuesta caro. |
 | `docs/plans/` | Un plan por módulo, con las decisiones y por qué se tomaron. |
 | `docs/designs/` | Design docs de UI. |
+| [`docs/queries/`](docs/queries/README.md) | Métricas ad hoc versionadas en SQL (no un dashboard) — cómo correrlas y contra qué base. |
 | `TODOS.md` | Lo deferido de cada plan, con el motivo. |
-| `infrastructure/` | `docker-compose.yml`. |
+| `infrastructure/` | `docker-compose.yml` — Postgres + API, esquema completo cargado solo. |
 
 ## Cómo se trabaja acá
 

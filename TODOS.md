@@ -9,35 +9,42 @@ retomarlo — acá solo queda lo que sigue abierto.
 
 - **Paginación real con cursor en `/equipos` y `/jugadores`** (3B-9). Cambia
   el contrato de API (rompe cualquier cliente que asuma offset) — requiere
-  su propio ciclo, no es un fix acotado.
+  su propio ciclo, no es un fix acotado. **Diferido con umbral numérico**
+  (revisión del plan de cierre, 2026-09-18) — se reabre con (a) >150 equipos
+  orgánicos o >150 jugadores orgánicos (75% del tope de página de 200), o
+  (b) p95 medido >800ms en `GET /jugadores` o `GET /equipos`, o (c) un
+  segundo cliente de la API que no sea este frontend. Hoy: 10 equipos y 37
+  jugadores orgánicos (separados de los datos sintéticos de
+  `backend/scripts/mock_estres_catalogo.py`, ver `docs/queries/README.md`).
 - **Editar el catálogo maestro de disciplinas desde la UI**, no solo por
-  migración SQL manual (EC-32 / 3B-11). Toca el `CHECK` de roles y cada
-  `require_roles(...)` del código — mismo orden de magnitud que la
-  paginación de arriba.
-- **Migrar `DetalleEquipo.tsx`/`ModalIndividual`** al `SelectorJugadorBuscable`
-  compartido y al hook de resolución de nombres — mejora recomendada dos
-  veces, nunca pedida explícitamente.
-- **Tests de concurrencia real** (2 conexiones DB genuinamente paralelas)
-  para el tope de titulares y el doble `Fin_Partido` (T23/T24). Los tests
-  actuales cubren el caso secuencial pero no 2 sesiones simultáneas contra
-  la misma fila — requiere infraestructura de test que el repo no tiene
-  todavía.
-- **Retirar el formulario de Cambio duplicado dentro de `CargaEvento`**
-  ahora que existe `ModalSustitucion` — quedó compartiendo la heurística de
-  elegibilidad en vez de duplicarla, pero el segundo camino de UI sigue
-  vivo. Retirarlo requiere revisar `MesaPanel.test.tsx` con cuidado.
-- **Wireframe de 3 zonas** del panel en vivo (Design Fase 2 del plan de Modo
-  en Vivo) — nunca se reorganizó el layout en franjas fijas
-  primaria/secundaria/terciaria.
-- **Row-locking en `EventoPartidoService.create`** (camino en vivo) para 2
-  tarjetas simultáneas del mismo jugador — riesgo bajo, gap de concurrencia
-  conocido y diferido.
+  migración SQL manual (EC-32 / 3B-11). **Diferido** — se reabre al SEGUNDO
+  pedido real de alta de una disciplina fuera del catálogo de 28 (el
+  primero se atiende con el script de migración que ya existe). Si se
+  reabre: gatear `POST`/`PUT /disciplinas` a `AdminGeneral` (el toggle de
+  `Estado` se queda en `TorneoAdmin`, son poderes distintos — no mezclar
+  dos niveles de rol en la misma ruta); `Slug` no se edita desde la UI
+  (lo consume el portal público); no se agrega un rol nuevo, `AdminGeneral`
+  ya alcanza.
+- **Tests de concurrencia real para el tope de titulares y el doble
+  `Fin_Partido`** (T23/T24). La infraestructura para escribirlos ya existe
+  (`sesiones_paralelas`, ver Resuelto 2026-09-18), pero estos dos casos
+  puntuales no se escribieron en este cierre — ninguno tenía una fase de
+  fix asignada en el plan, y el de titulares (T23) probablemente EXPONDRÍA
+  una carrera real y sin arreglar: `ConvocadoAPartidoService.agregar`
+  (`backend/app/services/convocado_a_partido.py`) cuenta titulares con un
+  `SELECT` sin lock antes del `INSERT` — dos altas simultáneas de titulares
+  DISTINTOS podrían superar el tope sin que ninguna falle. Necesita su
+  propio diseño de fix (mismo tipo de trabajo que el row-locking de
+  `EventoPartidoService`, ver Resuelto 2026-09-18), no solo el test.
 - **Filtrar por asignación los LISTADOS de sub-recursos** dentro de un
   torneo específico (equipos/jugadores/partidos) en `torneo-admin/*` —
   heredan protección de escritura pero no filtran el listado. Prioridad P3.
-- **Métricas/alertas de revocación de licencia** (contador otorgadas/
-  revocadas por día, alerta de pico de 403 post-revocación). Hoy solo queda
-  en `AUDITORIA`, sin dashboard ni alerta activa. Prioridad P3.
+  Si se reabre: el alcance NO se expresa como query param elegible por el
+  cliente (invierte el default seguro) — se deriva implícito del token vía
+  `torneo_ids_permitidos` (mismo patrón que ya usan `torneos`/`partidos`).
+  Un caso de alta/búsqueda que necesite ver filas no inscritas se expresa
+  como flag de capacidad con nombre honesto (`incluir_no_inscritos=true`),
+  nunca ampliando el techo de permisos del rol.
 
 ## Bloqueado — necesita una respuesta tuya
 
@@ -45,6 +52,100 @@ retomarlo — acá solo queda lo que sigue abierto.
    libre está parada porque falta elegir proveedor de correo (decisión de
    infraestructura). **Pospuesto explícitamente (2026-09-17)** hasta que el
    resto del proyecto esté más afinado.
+
+## Resuelto (2026-09-18)
+
+Plan: `docs/plans/cierre-pendientes-todos-plan.md`, revisado en las cuatro
+fases de `/autoplan` (CEO/eng/design/DX) antes de ejecutarse.
+
+- **Row-locking en `EventoPartidoService.create`** (camino en vivo) para 2
+  tarjetas simultáneas del mismo jugador. Reestructurado a UNA sola
+  transacción (antes commiteaba por evento, lo que liberaba el lock del
+  partido ANTES de contar las amarillas): `SELECT ... FOR UPDATE` con
+  `lock_timeout` leído de `Settings` (antes no existía — el default de
+  Postgres es esperar para siempre); contención real devuelve 409
+  (`ConcurrencyConflictError`, código estable `evento_conflicto_concurrente`
+  en `detail`) ruteado por la cola de "evento pendiente" que ya existía
+  para fallos de red, un solo camino de recuperación en la UI de mesa, no
+  una segunda afordancia. Deadlock cruzado se reintenta una vez (defensa en
+  profundidad). `anular()` toma el mismo lock cuando el evento objetivo es
+  una tarjeta — misma carrera, dirección inversa (anular la amarilla #1 en
+  paralelo con el insert de la #2). Espera larga sobre el lock se loguea
+  estructurado (`app.concurrencia`) con `partido_id`/`usuario_id`. 526
+  tests de backend en verde (520 + 6 nuevos, con la carrera simulada por
+  monkeypatch) — la prueba con conexiones REALES está en el ítem de abajo.
+- **Infraestructura de test de concurrencia real** — fixture
+  `sesiones_paralelas` (`backend/tests/conftest.py`): dos `AsyncSession`
+  independientes contra su propia base (`torneos_mvp_test_concurrencia`,
+  reconstruida entera antes de cada test), sin el savepoint envolvente del
+  harness normal, así que un `commit()` persiste de verdad — imposible de
+  probar con el harness compartido, que es justo la infraestructura de
+  test que faltaba. `@pytest.mark.concurrencia` (registrado en
+  `pytest.ini` con `--strict-markers`) — no corre en `pytest -q` por
+  default, `verificar.ps1 -Concurrencia` lo suma aparte. Con esto se
+  escribió la prueba REAL (no simulada) de la carrera de doble amarilla
+  (autogenera exactamente una roja) y de la contención de lock (409 +
+  log), ambas en `backend/tests/test_concurrencia_eventos.py`. **T23/T24
+  (tope de titulares, doble `Fin_Partido`) quedan pendientes** — ver
+  `## Pendiente`.
+- **Retirar el formulario de Cambio duplicado dentro de `CargaEvento`**.
+  `ModalSustitucion` ganó primero un punto de entrada sin convocatoria
+  (fallback a la plantilla completa del equipo, con caption "Sin
+  convocatoria guardada") para tener paridad real con el camino viejo
+  antes de retirarlo — sin eso, un partido sin convocatoria se quedaba sin
+  forma de cargar un Cambio en vivo, una regresión real. Recién con esa
+  paridad confirmada se sacó "Cambio" de la grilla de `CargaEvento` y el
+  código muerto que dependía de él. `MesaPanel.test.tsx` pasó de 5 a 13
+  tests (no había cobertura del camino viejo que migrar).
+- **Wireframe de 3 zonas** del panel en vivo. `MesaPanel` reorganizado en 3
+  franjas fijas (primaria: marcador+estado, `sticky` a 375px; secundaria:
+  cronómetro+carga de evento+alineación en vivo; terciaria: timeline),
+  activadas en grid recién a ≥1000px — mismo breakpoint que ya usaba el
+  drag-and-drop de `AlineacionEditor`, ninguno nuevo. Verificación visual y
+  manual, no automatizada (JSDOM no prueba `sticky` real ni grid areas).
+  De paso: confirmación de éxito `aria-live="polite"` tras cada carga de
+  evento (antes NINGUNA carga la tenía) y badge de estado de tarjetas por
+  jugador ("1A"/"2A"/"R", texto y forma además de color, visible en la
+  fila de "Sacar" y en los candidatos de `ModalSustitucion`).
+- **Migrar `DetalleEquipo.tsx` al `SelectorJugadorBuscable` compartido**.
+  El modal de búsqueda inline (debounce + query propios, reimplementados
+  desde el selector) se reemplazó por el compartido, que ya extraía ese
+  mismo patrón para Traspasos — el selector se queda haciendo solo
+  búsqueda, no ganó props nuevas; la confirmación de multimilitancia y el
+  alta inline de jugador se quedaron alrededor, en `DetalleEquipo`.
+  `ModalAgregarInscripcion.ModalIndividual`/`ModalEquipo` (torneo-dashboard)
+  **no se tocaron**: filtran client-side una lista ya cargada y capada
+  (sin `GET ?q=` al servidor), un patrón distinto al del selector —
+  migrarlos habría cambiado su comportamiento (multi-selección secuencial
+  sin cerrar el modal) sin remover duplicación real. `DetalleEquipo.test.tsx`
+  nuevo (no tenía test propio).
+- **Métricas de revocación de licencia** — **cerrado por falta de señal**
+  (mismo criterio que la Fase 3 del desempate, Resuelto 2026-09-17): la
+  consulta ad hoc corrió contra `torneos_mvp` durante la revisión del plan
+  y dio CERO en las dos mitades — contador (`AUDITORIA`: 287 filas, CERO
+  de la tabla `usuarios`; 3 usuarios con `Licencia_Activa=True` nunca
+  tocada) y pico de 403 (`ACCESOS`: CERO filas con
+  `Motivo='licencia_revocada'`). El `.sql` no se commiteó — no hay señal
+  que valga releer. **No es un "no" definitivo, es "todavía no hay
+  señal".** Se reabre con la primera fila de `usuarios` en `AUDITORIA` (la
+  primera licencia realmente otorgada o revocada). Si se reescribe la
+  consulta: `Tabla` se filtra en MINÚSCULA (`usuarios`) —
+  `app/core/auditoria.py` guarda `obj.__tablename__`, `Tabla='USUARIOS'`
+  da cero por casing, no por falta de datos. La alerta ACTIVA (mail/
+  webhook) sigue bloqueada por la misma decisión de proveedor de correo
+  que el ítem de `## Bloqueado`.
+- **DX: onboarding de un clon nuevo.** `frontend/.env.example` (faltaba —
+  sin él, un clon limpio hace login contra `undefined/api/v1/...` y el
+  fallo se ve como error de red, no de configuración).
+  `infrastructure/docker-compose.yml` gana el servicio `postgres` (imagen
+  oficial, carga el esquema completo desde `/database` vía
+  `docker-entrypoint-initdb.d` en la primera inicialización) — antes
+  asumía Postgres ya instalado en el host con `torneos_mvp` cargado a
+  mano, la suposición que rompía a la segunda persona que clonaba.
+  Nombrado como camino recomendado en el `README.md` raíz, manual como
+  alternativa. **No verificado end-to-end en esta sesión** (sin Docker
+  disponible acá) — probarlo en una máquina con Docker antes de confiar en
+  el TTHW.
 
 ## Resuelto (2026-09-17)
 
