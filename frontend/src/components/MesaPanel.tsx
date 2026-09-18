@@ -314,14 +314,36 @@ export function MesaPanel({
   const globalVisitante = marcador.visitante + (partidoQuery.data?.goles_previos_global_visitante ?? 0);
   const requiereDesempate = !!partidoQuery.data?.elegible_desempate && globalLocal === globalVisitante;
 
+  // D1 (docs/plans/cierre-pendientes-todos-plan.md) — un solo patrón de
+  // estado pending, global: mientras cualquiera de las dos mutaciones de
+  // evento está en curso, la región aria-live anuncia "Guardando…";
+  // al terminar, muestra la confirmación con el contenido del evento
+  // (antes no había NINGUNA confirmación de éxito — Design Fase 2, Pass 2,
+  // GAP CRÍTICO). `null` = nada que anunciar todavía.
+  const [ultimaConfirmacion, setUltimaConfirmacion] = useState<string | null>(null);
+
+  function nombreDorsalPorId(id: number): string {
+    const j = plantillaCompleta.find((p) => p.jugador_id === id);
+    return j ? `${j.dorsal != null ? `#${j.dorsal} ` : ""}${j.jugador}` : `#${id}`;
+  }
+
+  function describirEventoConfirmado(body: EventoBody, minuto: number): string {
+    const tipoNombre = eventoNombrePorId.get(body.eventos_id) ?? "Evento";
+    if (tipoNombre === "Cambio" && body.jugador_id_entra != null) {
+      return `Cambio registrado: sale ${nombreDorsalPorId(body.jugador_id)}, entra ${nombreDorsalPorId(body.jugador_id_entra)} (${minuto}')`;
+    }
+    return `${tipoNombre} registrado: ${nombreDorsalPorId(body.jugador_id)} (${minuto}')`;
+  }
+
   const mutation = useMutation({
     mutationFn: async (body: EventoBody) => {
       const { data, error } = await api.POST("/api/v1/eventos-partido", { body });
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["eventos-partido", partidoId] });
+      setUltimaConfirmacion(describirEventoConfirmado(variables, data.minuto));
     },
   });
 
@@ -344,11 +366,17 @@ export function MesaPanel({
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["eventos-partido", partidoId] });
       setSustituyendoA(null);
+      setUltimaConfirmacion(describirEventoConfirmado(variables, data.minuto));
     },
   });
+
+  // D1: única fuente de la región aria-live de zona secundaria — "Guardando…"
+  // mientras cualquiera de las dos mutaciones está en curso, si no la
+  // última confirmación de éxito.
+  const estadoEnvio = mutation.isPending || sustitucion.isPending ? "Guardando…" : ultimaConfirmacion;
 
   /** Reemplaza el `onSubmit={(body) => mutation.mutate(body)}` directo
    * que tenía este panel: intenta la carga normal, y si falla
@@ -466,60 +494,93 @@ export function MesaPanel({
     <div className="page mesa">
       {onVolver && <button type="button" className="link-button" onClick={onVolver}>← Volver a la lista</button>}
 
-      <div className="marcador">
-        <div className="marcador__equipo"><span>{nombreLocal}</span></div>
-        <div className="marcador__score">{marcador.local} - {marcador.visitante}</div>
-        <div className="marcador__equipo"><span>{nombreVisitante}</span></div>
-      </div>
-      <div className="marcador__estado">
-        <span className={`badge badge--${partido.estado.replace(" ", "-").toLowerCase()}`}>{partido.estado}</span>
-        <span className="muted">operando como {session?.username} ({session?.rol})</span>
-      </div>
+      {/* D1 (docs/plans/cierre-pendientes-todos-plan.md) — 3 zonas fijas:
+          primaria (marcador + estado, lo que el mesero mira sin tocar,
+          sticky a 375px), secundaria (cronómetro + carga de evento +
+          alineación en vivo, donde el pulgar trabaja) y terciaria
+          (timeline). Wireframe de referencia:
+          ~/.gstack/projects/Score-App/designs/mesa-panel-3-zonas-20260917/
+          wireframe-zonas.html (375px y ≥1000px). Puro layout — sin
+          cambios de comportamiento, `index.css` activa la grilla de 2
+          columnas recién en el mismo ≥1000px que ya usa el
+          drag-and-drop de AlineacionEditor (decisión activa del
+          2026-09-08), no un breakpoint nuevo. */}
+      <div className="mesa-zonas">
+        <div className="mesa-zona-primaria">
+          <div className="marcador">
+            <div className="marcador__equipo"><span>{nombreLocal}</span></div>
+            <div className="marcador__score">{marcador.local} - {marcador.visitante}</div>
+            <div className="marcador__equipo"><span>{nombreVisitante}</span></div>
+          </div>
+          <div className="marcador__estado">
+            <span className={`badge badge--${partido.estado.replace(" ", "-").toLowerCase()}`}>{partido.estado}</span>
+            <span className="muted">operando como {session?.username} ({session?.rol})</span>
+          </div>
 
-      {/* mostrarInicio={false} (H-10 del plan): el arranque del partido es UNA
-          sola acción y vive en la barra de "Gestionar Partido". Sin esto habría
-          dos botones ▶ en la misma pantalla con efectos distintos — el del
-          cronómetro dispara Inicio_Partido + Inicio_Periodo(1), el otro solo el
-          primero, y el operador se quedaría con el reloj parado en 00:00. */}
-      <Cronometro
-        partidoId={partidoId}
-        equipoLocalId={partido.equipos_id_local}
-        equipoVisitanteId={partido.equipos_id_visitante}
-        nombreLocal={nombreLocal}
-        nombreVisitante={nombreVisitante}
-        mostrarInicio={false}
-        onMinutoActual={setMinutoActual}
-        requiereDesempate={requiereDesempate}
-        metodoDesempateAplicable={partidoQuery.data?.metodo_desempate_aplicable}
-        esEliminacion={partido.ronda_nombre != null}
-        metodoDesempateEliminatoriaTorneo={torneoQuery.data?.metodo_desempate_eliminatoria}
-        esVuelta={partido.partido_ida_id != null}
-        globalLocal={globalLocal}
-        globalVisitante={globalVisitante}
-      />
+          {/* 3B-1 (docs/plans/cierre-backlog-todos-plan.md, offline-first en
+              Control de Mesa, alcance reducido): indicador de "sin conexión"
+              — informativo aunque no haya nada pendiente todavía, para que el
+              árbitro sepa POR QUÉ un evento nuevo se va a encolar en vez de
+              entrar directo. */}
+          {!online && (
+            <p className="muted mesa-offline-aviso">
+              🔌 Sin conexión — los eventos se guardan en este dispositivo y se envían solos al reconectar.
+            </p>
+          )}
+          {errorPendiente && <p className="error-text">{errorPendiente}</p>}
+        </div>
 
-      {/* 3A-8 (docs/plans/cierre-backlog-todos-plan.md, EC-C): antes, la
-          única protección contra cargar un evento en un partido que no
-          arrancó vivía en el filtro de la lista de ControlDeMesaPage — acá
-          en MesaPanel, embebido también en MisPartidos.tsx (Árbitro), no
-          había nada. El backend ya rechaza el POST (EventoPartidoService),
-          esto es la versión visible: mismo criterio que el guard del
-          service — solo 'En curso' habilita carga nueva. 'Finalizado'
-          sigue mostrando la timeline con corrección de minuto habilitada
-          más abajo (EC-15), no se toca acá. */}
-      {/* 3B-1 (docs/plans/cierre-backlog-todos-plan.md, offline-first en
-          Control de Mesa, alcance reducido): indicador de "sin conexión"
-          — informativo aunque no haya nada pendiente todavía, para que el
-          árbitro sepa POR QUÉ un evento nuevo se va a encolar en vez de
-          entrar directo. */}
-      {!online && (
-        <p className="muted mesa-offline-aviso">
-          🔌 Sin conexión — los eventos se guardan en este dispositivo y se envían solos al reconectar.
-        </p>
-      )}
-      {errorPendiente && <p className="error-text">{errorPendiente}</p>}
+        <div className="mesa-zona-secundaria">
+          {/* mostrarInicio={false} (H-10 del plan): el arranque del partido es UNA
+              sola acción y vive en la barra de "Gestionar Partido". Sin esto habría
+              dos botones ▶ en la misma pantalla con efectos distintos — el del
+              cronómetro dispara Inicio_Partido + Inicio_Periodo(1), el otro solo el
+              primero, y el operador se quedaría con el reloj parado en 00:00.
 
-      {partido.estado === "En curso" ? (
+              Cronómetro entero en zona secundaria, no partido entre zonas: es
+              un solo componente con controles fuertemente acoplados entre sí
+              (Pausa, Fin de Período, Fin de Partido, cierre forzado), no
+              seguro de separar sin un refactor propio fuera del alcance de
+              D1. La obligación de sticky nombra solo .marcador +
+              .marcador__estado, no Cronómetro completo. */}
+          <Cronometro
+            partidoId={partidoId}
+            equipoLocalId={partido.equipos_id_local}
+            equipoVisitanteId={partido.equipos_id_visitante}
+            nombreLocal={nombreLocal}
+            nombreVisitante={nombreVisitante}
+            mostrarInicio={false}
+            onMinutoActual={setMinutoActual}
+            requiereDesempate={requiereDesempate}
+            metodoDesempateAplicable={partidoQuery.data?.metodo_desempate_aplicable}
+            esEliminacion={partido.ronda_nombre != null}
+            metodoDesempateEliminatoriaTorneo={torneoQuery.data?.metodo_desempate_eliminatoria}
+            esVuelta={partido.partido_ida_id != null}
+            globalLocal={globalLocal}
+            globalVisitante={globalVisitante}
+          />
+
+          {/* D1: un solo patrón de estado pending para todas las fases
+              reorganizadas (obligación global, no una decisión por fase) —
+              control deshabilitado (ya lo hacía) + esta región aria-live
+              anunciando "Guardando…" y, después, la confirmación de éxito
+              con el contenido del evento. Antes no había NINGUNA
+              confirmación de éxito visible (Design Fase 2, Pass 2: "GAP
+              CRÍTICO"). */}
+          {estadoEnvio && (
+            <p className="mesa-confirmacion" aria-live="polite">{estadoEnvio}</p>
+          )}
+
+          {/* 3A-8 (docs/plans/cierre-backlog-todos-plan.md, EC-C): antes, la
+              única protección contra cargar un evento en un partido que no
+              arrancó vivía en el filtro de la lista de ControlDeMesaPage — acá
+              en MesaPanel, embebido también en MisPartidos.tsx (Árbitro), no
+              había nada. El backend ya rechaza el POST (EventoPartidoService),
+              esto es la versión visible: mismo criterio que el guard del
+              service — solo 'En curso' habilita carga nueva. 'Finalizado'
+              sigue mostrando la timeline con corrección de minuto habilitada
+              más abajo (EC-15), no se toca acá. */}
+          {partido.estado === "En curso" ? (
         pendiente ? (
           // Un solo slot de cola (ver colaOfflineEventos.ts) — mientras
           // haya algo pendiente, el form de carga se oculta en vez de
@@ -659,7 +720,9 @@ export function MesaPanel({
           </div>
         </section>
       )}
+        </div>
 
+        <div className="mesa-zona-terciaria">
       {sustituyendoA && (() => {
         const plantillaEquipoSaliente =
           sustituyendoA.equipo_id === partido.equipos_id_local ? plantillaLocalFiltrada : plantillaVisitanteFiltrada;
@@ -745,6 +808,8 @@ export function MesaPanel({
           </ul>
         )}
       </section>
+        </div>
+      </div>
     </div>
   );
 }

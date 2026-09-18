@@ -205,6 +205,32 @@ describe("MesaPanel — offline-first (3B-1, docs/plans/cierre-backlog-todos-pla
   });
 });
 
+// D1 (docs/plans/cierre-pendientes-todos-plan.md): antes NINGUNA carga de
+// evento mostraba confirmación de éxito (Design Fase 2, Pass 2, GAP
+// CRÍTICO — "la pantalla se ve muerta"). Región aria-live única para
+// "Guardando…" y, después, el contenido del evento confirmado.
+describe("MesaPanel — confirmación aria-live de éxito (D1)", () => {
+  beforeEach(() => {
+    limpiarEventoPendiente(3);
+  });
+
+  it("tras cargar un Gol con éxito, la región aria-live muestra la confirmación con jugador y minuto", async () => {
+    server.use(
+      http.post(EVENTOS_PARTIDO, async ({ request }) => {
+        const body = (await request.json()) as { minuto?: number };
+        return HttpResponse.json({ id: 1, estado: "Registrado", minuto: body.minuto ?? 12 }, { status: 201 });
+      }),
+    );
+    const user = userEvent.setup();
+    montarMesaPanel();
+    await screen.findByText("Cargar evento");
+
+    await cargarUnGol(user);
+
+    expect(await screen.findByText(/Gol registrado: #9 Andrés Vera/)).toBeInTheDocument();
+  });
+});
+
 // C2a (docs/plans/cierre-pendientes-todos-plan.md): sin convocatoria
 // guardada, `enCanchaJugadorIds` sale vacío por diseño (deriveTitularSuplente)
 // — antes eso dejaba "Alineación en vivo" siempre vacía, sin ningún

@@ -543,6 +543,14 @@ td:first-child {
   padding: 0.5rem 0;
   cursor: pointer;
   font-size: 0.9rem;
+  /* D1 (docs/plans/cierre-pendientes-todos-plan.md): 44px mínimo de
+     target táctil en zonas 1 y 2 — antes esto era un link de texto sin
+     alto mínimo ("Sacar" en la alineación en vivo, el botón primario a
+     375px, era el caso más visible). Un solo lugar: todo `.link-button`
+     dentro de `.mesa` queda cubierto, no solo "Sacar". */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .carga-evento {
@@ -557,6 +565,85 @@ td:first-child {
   border: 1px solid var(--warning);
   border-radius: var(--radius);
   padding: 0.5rem 0.75rem;
+}
+
+/* D1 — 3 zonas fijas de MesaPanel (docs/plans/cierre-pendientes-todos-
+ * plan.md). Wireframe de referencia: ~/.gstack/projects/Score-App/
+ * designs/mesa-panel-3-zonas-20260917/wireframe-zonas.html.
+ *
+ * Mobile-first: por default (<1000px) las 3 zonas son divs de bloque
+ * normales, apiladas en orden de documento — "móvil en una columna" sale
+ * gratis del flujo normal, sin grid. La grilla de 2 columnas recién se
+ * activa en el ÚNICO breakpoint nuevo permitido, ≥1000px — el mismo que
+ * ya activa el drag-and-drop de `.alineacion-fila__manija`
+ * (AlineacionEditor, decisión activa del 2026-09-08), no uno inventado
+ * para esto. Verificado explícitamente entre 640-799px (el archivo mezcla
+ * min-width en 800/1000 con max-width en 480/640, así que ese rango es
+ * donde una regla mal escrita podía colarse sin que nadie lo viera). */
+.mesa-zona-primaria {
+  /* Caso principal: 375px, un pulgar, al borde de la cancha (design doc
+     aprobado). Sticky sobre .marcador + .marcador__estado nombrados acá
+     adentro — sin esto, una grilla de 3 zonas que colapsa a una columna
+     en el breakpoint principal no cambia nada para el usuario principal:
+     el marcador se pierde apenas se scrollea a la zona 2 para cargar un
+     evento, igual que hoy. */
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg);
+  padding-top: 0.5rem;
+  margin-top: -0.5rem;
+}
+
+.mesa-zona-secundaria,
+.mesa-zona-terciaria {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+@media (min-width: 1000px) {
+  .mesa-zonas {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "primaria primaria" "secundaria terciaria";
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .mesa-zona-primaria {
+    grid-area: primaria;
+    /* Escritorio no es el caso principal (el design doc lo dice
+       explícito), y ahí sticky no aporta nada que el layout de 2
+       columnas no dé ya — se apaga para no arriesgar un comportamiento
+       no pedido en el breakpoint que no se puede verificar a ojo acá. */
+    position: static;
+    margin-top: 0;
+    padding-top: 0;
+  }
+
+  .mesa-zona-secundaria {
+    grid-area: secundaria;
+    margin-top: 0;
+  }
+
+  .mesa-zona-terciaria {
+    grid-area: terciaria;
+    margin-top: 0;
+  }
+}
+
+/* D1: confirmación de éxito / "Guardando…" — región aria-live única para
+ * toda la zona secundaria (una sola decisión de pending state, no una
+ * por fase). Antes NINGUNA carga de evento mostraba confirmación de
+ * éxito (Design Fase 2, Pass 2, GAP CRÍTICO: "pantalla se ve muerta"). */
+.mesa-confirmacion {
+  background: rgba(79, 209, 197, 0.12);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  color: var(--text);
 }
 
 .tap-grid {
@@ -1825,6 +1912,19 @@ td:first-child {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+}
+
+/* D1: fila de "Sacar" (docs/plans/cierre-pendientes-todos-plan.md) — sin
+   esta regla el <li> caía al bloque default (span y botón apilados, sin
+   alinear). min-height 44px en la FILA además del botón (`.mesa
+   .link-button` arriba): con el jugador a la izquierda y "Sacar" a la
+   derecha, toda la franja táctil cuenta, no solo el texto del botón. */
+.alineacion-lista li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  min-height: 44px;
 }
 
 .alineacion-fila {
