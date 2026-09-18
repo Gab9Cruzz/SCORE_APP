@@ -474,6 +474,11 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
         onMinutoActual={setMinutoActual}
         requiereDesempate={requiereDesempate}
         metodoDesempateAplicable={partidoQuery.data?.metodo_desempate_aplicable}
+        esEliminacion={partido.ronda_nombre != null}
+        metodoDesempateEliminatoriaTorneo={torneoQuery.data?.metodo_desempate_eliminatoria}
+        esVuelta={partido.partido_ida_id != null}
+        globalLocal={globalLocal}
+        globalVisitante={globalVisitante}
       />
 
       {/* 3A-8 (docs/plans/cierre-backlog-todos-plan.md, EC-C): antes, la
