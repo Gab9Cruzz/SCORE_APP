@@ -81,6 +81,15 @@ const CODIGOS_ERROR_TRADUCIDOS: Record<string, string> = {
   desempate_sin_metodo: "Falta indicar cómo se resolvió el empate.",
   desempate_en_ida_no_permitido: "El desempate se registra en la vuelta, no en la ida.",
   penales_no_aplican_a_corrido: "Este torneo no usa penales.",
+  // A1 (docs/plans/cierre-pendientes-todos-plan.md): 409 de
+  // ConcurrencyConflictError (backend/app/exceptions/errors.py) — otro
+  // operador está cargando un evento en el mismo partido AHORA
+  // (contención sobre el `SELECT ... FOR UPDATE`) o un deadlock cruzado
+  // sobrevivió al reintento único del servidor. Sin header nuevo: el
+  // call site discrimina leyendo `error.detail === "evento_conflicto_concurrente"`
+  // ANTES de pasarlo por este mapa (ver MesaPanel.tsx), nunca por el texto
+  // ya traducido.
+  evento_conflicto_concurrente: "Otro operador está cargando un evento en este partido — reintentá en un momento.",
 };
 
 /** Extrae un mensaje legible del error de FastAPI ({"detail": "..."} o

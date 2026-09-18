@@ -62,7 +62,13 @@ async def registrar_evento_partido(
     fecha, o si jugador_id_entra falta/sobra según el tipo de evento.
 
     Árbitro: el chequeo de "¿es tu partido?" vive en
-    EventoPartidoService.create() (D5), no acá."""
+    EventoPartidoService.create() (D5), no acá.
+
+    A1 (docs/plans/cierre-pendientes-todos-plan.md): puede devolver 409 con
+    `detail: "evento_conflicto_concurrente"` si otro request está cargando
+    un evento en el mismo partido en este momento — ver
+    ConcurrencyConflictError. Ejemplo:
+    `POST /api/v1/eventos-partido {"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1}`."""
     return await EventoPartidoService(session).create(data, usuario_actual)
 
 

@@ -41,6 +41,19 @@ class BaseRepository(Generic[ModelT]):
         return list(result.scalars().all())
 
     async def create(self, **datos: Any) -> ModelT:
+        """Commitea de inmediato — un caller que necesite insertar más de
+        una fila en la MISMA transacción (ej. un evento + una roja
+        automática, o varios eventos de un resultado directo) no puede usar
+        esto: tiene que armar el/los objeto(s) con `session.add()` +
+        `flush()` y commitear una sola vez al final, a mano (ver
+        `PartidoService.registrar_resultado_directo` y, desde A1 —
+        docs/plans/cierre-pendientes-todos-plan.md —,
+        `EventoPartidoService._crear_bajo_lock`, que dejó de usar este
+        método por esa misma razón: antes el commit acá adentro liberaba el
+        lock del partido antes de que el listener de doble amarilla
+        contara las tarjetas). El próximo que lea "create no commitea" en
+        otro repo no debería "arreglar" ESTE método para que se le parezca
+        — es a propósito que sea el caso simple."""
         obj = self.model(**datos)
         self.session.add(obj)
         await self.session.commit()

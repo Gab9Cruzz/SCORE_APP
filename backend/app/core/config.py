@@ -45,6 +45,20 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     api_v1_prefix: str = "/api/v1"
 
+    # A1 (docs/plans/cierre-pendientes-todos-plan.md) — concurrencia en el
+    # camino en vivo de eventos-partido. `evento_lock_timeout_ms`: cuánto
+    # espera el `SELECT ... FOR UPDATE` del partido antes de rendirse con
+    # 409 (Postgres por default espera para siempre, 0). `evento_lock_log_
+    # umbral_ms`: a partir de qué espera (haya terminado en éxito o en
+    # timeout) se loguea como posible contención — separado del timeout
+    # real para poder ver el problema venir antes de que empiece a fallar.
+    # `evento_concurrencia_reintentos`: reintentos de un deadlock cruzado
+    # (40P01) antes de rendirse con 409 — nunca de una contención genuina,
+    # que ya esperó lo que había que esperar.
+    evento_lock_timeout_ms: int = 3000
+    evento_lock_log_umbral_ms: int = 500
+    evento_concurrencia_reintentos: int = 1
+
     @property
     def cors_origins_list(self) -> list[str]:
         if self.cors_origins.strip() == "*":

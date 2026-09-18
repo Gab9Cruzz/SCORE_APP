@@ -5,6 +5,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.exceptions.errors import (
     AuthError,
+    ConcurrencyConflictError,
     ConflictError,
     DomainRuleError,
     ForbiddenError,
@@ -86,6 +87,15 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=status.HTTP_412_PRECONDITION_FAILED,
             content={"detail": exc.detail, "estado_actual": exc.estado_actual},
         )
+
+    # A1 (docs/plans/cierre-pendientes-todos-plan.md): mismo 409 que
+    # IntegrityError (abajo), pero `detail` lleva el código estable
+    # `evento_conflicto_concurrente` en vez de un mensaje de Postgres — el
+    # frontend discrimina por ESE código, no por status, para ofrecer el
+    # botón de reintento (ver docstring de ConcurrencyConflictError).
+    @app.exception_handler(ConcurrencyConflictError)
+    async def _concurrency_conflict(_: Request, exc: ConcurrencyConflictError) -> JSONResponse:
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": exc.detail})
 
     @app.exception_handler(RateLimitError)
     async def _rate_limit(_: Request, exc: RateLimitError) -> JSONResponse:

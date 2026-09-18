@@ -1,7 +1,14 @@
+import logging
+
+import pytest
 from httpx import AsyncClient
+from psycopg import errors as psycopg_errors
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.models.partido import Partido
+from app.repositories.partido import PartidoRepository
 
 
 async def _empezar_partido(client: AsyncClient, headers: dict[str, str], convocar_titulares, partido_id: int = 3) -> None:
@@ -250,3 +257,195 @@ async def test_segunda_amarilla_en_vivo_autogenera_roja(
     assert len(amarillas) == 2
     assert len(rojas) == 1
     assert rojas[0]["equipo_id"] == 3
+
+
+# --- A1 (docs/plans/cierre-pendientes-todos-plan.md) --------------------
+#
+# EventoPartidoService.create() se reestructuró a una sola transacción con
+# lock_timeout sobre el `SELECT ... FOR UPDATE` del partido, para cerrar la
+# carrera de la doble amarilla simultánea. La contención y el deadlock
+# REALES (dos conexiones genuinamente paralelas) se prueban en A3, sobre
+# la fixture de A2 — acá se simula el punto exacto donde Postgres los
+# levantaría (parcheando `PartidoRepository.get_or_404_bloqueado`), para
+# probar de forma determinista la clasificación del error, el reintento y
+# el mapeo a 409, sin depender de esa infraestructura todavía inexistente.
+
+
+async def test_fallo_en_roja_automatica_revierte_tambien_la_segunda_amarilla(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares, monkeypatch
+):
+    """REGRESIÓN obligatoria: antes de A1, `EventoPartidoService.create()`
+    commiteaba el evento con `self.repo.create()` y DESPUÉS procesaba la
+    roja automática con su propio `commit()` aparte — si el segundo commit
+    fallaba, la amarilla ya persistida quedaba escrita igual. Ahora todo es
+    una sola transacción: si falla el insert de la roja automática, la
+    segunda amarilla (que iba en la MISMA transacción) tampoco debe
+    persistir."""
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
+
+    resp1 = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 3, "minuto": 10},
+        headers=arbitro_headers,
+    )
+    assert resp1.status_code == 201, resp1.text
+
+    import app.services.evento_partido as evento_partido_module
+
+    async def _procesar_doble_amarilla_falla(*args, **kwargs):
+        raise RuntimeError("fallo forzado — test de atomicidad de A1")
+
+    monkeypatch.setattr(evento_partido_module, "procesar_doble_amarilla", _procesar_doble_amarilla_falla)
+
+    with pytest.raises(RuntimeError):
+        await client.post(
+            "/api/v1/eventos-partido",
+            json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 3, "minuto": 20},
+            headers=arbitro_headers,
+        )
+
+    monkeypatch.undo()
+    resp = await client.get("/api/v1/eventos-partido", params={"partidos_id": 3})
+    amarillas = [e for e in resp.json() if e["eventos_id"] == 3 and e["jugador_id"] == 5]
+    # Solo la primera amarilla (commiteada ANTES del monkeypatch) persiste
+    # — la segunda, que iba en la misma transacción que la roja fallida,
+    # se revierte junto con ella.
+    assert len(amarillas) == 1
+
+
+async def test_contencion_de_lock_devuelve_409_con_codigo_estable(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares, monkeypatch
+):
+    """LockNotAvailable/QueryCanceled (lock_timeout agotado) se mapean a
+    409 con el código estable `evento_conflicto_concurrente`, SIN
+    reintento — ya esperamos lo que había que esperar."""
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
+
+    async def _lock_agotado(self, id_):
+        raise OperationalError("SET LOCAL lock_timeout", {}, psycopg_errors.LockNotAvailable("lock timeout"))
+
+    monkeypatch.setattr(PartidoRepository, "get_or_404_bloqueado", _lock_agotado)
+
+    resp = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 30},
+        headers=arbitro_headers,
+    )
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"] == "evento_conflicto_concurrente"
+
+
+async def test_deadlock_se_reintenta_una_vez_y_no_duplica_el_evento(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares, monkeypatch
+):
+    """DeadlockDetected SÍ se reintenta una vez (defensa en profundidad) —
+    el intento completo se rehace desde el lock, así que un evento a medio
+    insertar en el intento fallido no debe sobrevivir ni duplicarse."""
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
+
+    original = PartidoRepository.get_or_404_bloqueado
+    llamadas = {"n": 0}
+
+    async def _falla_una_vez(self, id_):
+        llamadas["n"] += 1
+        if llamadas["n"] == 1:
+            raise OperationalError("FOR UPDATE", {}, psycopg_errors.DeadlockDetected("simulado"))
+        return await original(self, id_)
+
+    monkeypatch.setattr(PartidoRepository, "get_or_404_bloqueado", _falla_una_vez)
+
+    resp = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 30},
+        headers=arbitro_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    assert llamadas["n"] == 2
+
+    resp = await client.get("/api/v1/eventos-partido", params={"partidos_id": 3})
+    eventos = [e for e in resp.json() if e["jugador_id"] == 5]
+    assert len(eventos) == 1
+
+
+async def test_deadlock_persistente_agota_el_reintento_y_devuelve_409(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares, monkeypatch
+):
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
+
+    async def _siempre_falla(self, id_):
+        raise OperationalError("FOR UPDATE", {}, psycopg_errors.DeadlockDetected("simulado"))
+
+    monkeypatch.setattr(PartidoRepository, "get_or_404_bloqueado", _siempre_falla)
+
+    resp = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 30},
+        headers=arbitro_headers,
+    )
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"] == "evento_conflicto_concurrente"
+
+
+async def test_anular_toma_lock_solo_si_el_evento_es_una_tarjeta(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares, monkeypatch
+):
+    """`anular()` solo necesita el lock del partido cuando el evento
+    objetivo es una tarjeta (amarilla o roja) — es la columna que cuenta
+    `procesar_doble_amarilla`. Un gol no participa de esa carrera."""
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
+
+    resp_amarilla = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 3, "minuto": 10},
+        headers=arbitro_headers,
+    )
+    amarilla_id = resp_amarilla.json()["id"]
+
+    resp_gol = await client.post(
+        "/api/v1/eventos-partido",
+        json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 15},
+        headers=arbitro_headers,
+    )
+    gol_id = resp_gol.json()["id"]
+
+    original = PartidoRepository.get_or_404_bloqueado
+    llamadas: list[int] = []
+
+    async def _spy(self, id_):
+        llamadas.append(id_)
+        return await original(self, id_)
+
+    monkeypatch.setattr(PartidoRepository, "get_or_404_bloqueado", _spy)
+
+    resp = await client.post(f"/api/v1/eventos-partido/{gol_id}/anular", headers=arbitro_headers)
+    assert resp.status_code == 200, resp.text
+    assert llamadas == []
+
+    resp = await client.post(f"/api/v1/eventos-partido/{amarilla_id}/anular", headers=arbitro_headers)
+    assert resp.status_code == 200, resp.text
+    assert llamadas == [3]
+
+
+async def test_espera_larga_de_for_update_se_loguea_con_partido_y_usuario(
+    client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares, monkeypatch, caplog
+):
+    """El log de contención solo puede dispararse DESPUÉS de que la espera
+    termina — acá se fuerza bajando el umbral a 0 para que cualquier
+    espera (aunque sea rápida) lo dispare, sin depender de contención real
+    de dos conexiones (eso lo prueba A3)."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "evento_lock_log_umbral_ms", 0)
+
+    await _empezar_partido(client, arbitro_headers, convocar_titulares)
+
+    with caplog.at_level(logging.WARNING, logger="app.concurrencia"):
+        resp = await client.post(
+            "/api/v1/eventos-partido",
+            json={"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1, "minuto": 30},
+            headers=arbitro_headers,
+        )
+    assert resp.status_code == 201, resp.text
+    assert any(
+        "Espera larga por FOR UPDATE" in r.getMessage() and "Partido id=3" in r.getMessage()
+        for r in caplog.records
+    )

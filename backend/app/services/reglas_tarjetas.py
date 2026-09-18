@@ -36,13 +36,16 @@ async def procesar_doble_amarilla(
     amarilla).
 
     Devuelve un `EventoPartido` SIN PERSISTIR (ni `add`, ni `flush`, ni
-    `commit`) — a propósito: los dos callers tienen disciplinas de
-    transacción distintas (`EventoPartidoService.create` commitea por
-    evento vía `repo.create`; `PartidoService.registrar_resultado_directo`
-    arma todo con `session.add()`+`flush()` y commitea UNA sola vez al
-    final, por atomicidad — ver el docstring de ese método). Si esta
-    función persistiera ella misma, rompería esa atomicidad en el segundo
-    caller. Cada caller decide cómo guardarlo."""
+    `commit`) — a propósito: los dos callers arman todo con
+    `session.add()`+`flush()` y commitean UNA sola vez al final (A1,
+    docs/plans/cierre-pendientes-todos-plan.md, unificó a
+    `EventoPartidoService.create` con la disciplina que ya tenía
+    `PartidoService.registrar_resultado_directo` — antes divergían: éste
+    commiteaba una vez al final, aquél commiteaba por evento vía
+    `repo.create()`, lo que liberaba el lock del partido ANTES de que este
+    listener contara las amarillas). Si esta función persistiera ella
+    misma, rompería esa atomicidad en cualquiera de los dos. Cada caller
+    decide cómo guardarlo."""
     amarillas = await evento_partido_repo.list(
         limit=2,
         partidos_id=partido_id,

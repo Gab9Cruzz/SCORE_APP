@@ -86,6 +86,28 @@ class PreconditionFailedError(Exception):
         super().__init__(self.detail)
 
 
+class ConcurrencyConflictError(Exception):
+    """Dos requests compitieron por el mismo partido bloqueado con
+    `SELECT ... FOR UPDATE` (A1, docs/plans/cierre-pendientes-todos-plan.md)
+    y esta transacción no pudo completarse: se agotó `lock_timeout`
+    esperando el lock (contención genuina — otro operador está cargando un
+    evento en este partido AHORA), o Postgres detectó un deadlock cruzado
+    incluso después del reintento único.
+
+    409, con el código estable `evento_conflicto_concurrente` en `detail`
+    — nada de header nuevo (`X-Reintentable` se descartó): el interceptor
+    global de `client.ts` no tiene visibilidad de mutación por mutación, y
+    los ~40 call sites de `MesaPanel.tsx` desestructuran `{data, error}`
+    descartando `response`. El frontend discrimina leyendo `error.detail`
+    ANTES de traducirlo con `CODIGOS_ERROR_TRADUCIDOS`
+    (`frontend/src/api/client.ts`), nunca por substring-match sobre el
+    texto en español ya traducido."""
+
+    def __init__(self, detail: str = "evento_conflicto_concurrente"):
+        self.detail = detail
+        super().__init__(self.detail)
+
+
 class RateLimitError(Exception):
     """3B-14 (docs/plans/cierre-backlog-todos-plan.md): demasiados intentos
     de login fallidos en la ventana reciente. Distinta de AuthError (401)
