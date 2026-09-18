@@ -57,8 +57,25 @@ const INTERVALO_REINTENTO_MS = 15000;
  *
  * La convocatoria YA NO se edita acá — se mudó a `AlineacionEditor`, dentro de
  * la vista "Gestionar Partido". Este panel solo la CONSUME, para filtrar los
- * candidatos de `CargaEvento`. */
-export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver?: () => void }) {
+ * candidatos de `CargaEvento`.
+ *
+ * `onIrAConvocatoria` (C2a, docs/plans/cierre-pendientes-todos-plan.md):
+ * acción primaria del empty state de `ModalSustitucion` cuando no hay
+ * ningún elegible para entrar. `GestionarPartido` es hoy el único montaje
+ * real de este panel (`MisPartidos.tsx`, Árbitro, navega a esa misma
+ * ruta) y ya renderiza `AlineacionEditor` en la MISMA página — así que
+ * "ir a Convocatoria" es scrollear ahí, no una navegación con round trip
+ * que perdería el partido en curso. Opcional: sin la prop, el botón no
+ * se muestra (mismo criterio que `onVolver`). */
+export function MesaPanel({
+  partidoId,
+  onVolver,
+  onIrAConvocatoria,
+}: {
+  partidoId: number;
+  onVolver?: () => void;
+  onIrAConvocatoria?: () => void;
+}) {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const online = useOnlineStatus();
@@ -587,6 +604,16 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
       {partido.estado === "En curso" && (
         <section className="card alineacion-en-vivo">
           <h2>Alineación en vivo</h2>
+          {/* C2a (docs/plans/cierre-pendientes-todos-plan.md): sin
+              convocatoria guardada, `enCanchaJugadorIds` sale VACÍO por
+              diseño (deriveTitularSuplente, ver su docstring) — antes eso
+              dejaba esta lista siempre vacía y sin ningún "Sacar" posible,
+              el punto de entrada roto que D4 pretendía cubrir para
+              "resultado directo" pero que este camino en vivo no tenía.
+              El caption avisa que se cayó al fallback. */}
+          {sinConvocatoria && (
+            <p className="muted">Sin convocatoria guardada — mostrando plantilla completa.</p>
+          )}
           <div className="alineacion-en-vivo__equipos">
             {(
               [
@@ -606,20 +633,29 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
               // `titularesJugadorIds`: un suplente que ya entró por un
               // Cambio debe aparecer acá con botón "Sacar" para un cambio
               // posterior, sin esperar a recargar la página.
-              const titularesEquipo = plantillaEquipo.filter(
-                (j) => enCanchaJugadorIds.has(j.jugador_id) && !salidosOExpulsados.has(j.jugador_id),
-              );
+              //
+              // C2a: sin convocatoria, `enCanchaJugadorIds` no distingue
+              // nada (sale vacío) — el fallback ofrece la PLANTILLA
+              // COMPLETA del equipo (menos quien ya salió/fue expulsado),
+              // porque el sistema genuinamente no sabe quién es titular;
+              // mismo criterio de confianza en el operador que D4 ya usa
+              // para "resultado directo" sin alineación.
+              const candidatosSalida = sinConvocatoria
+                ? plantillaEquipo.filter((j) => !salidosOExpulsados.has(j.jugador_id))
+                : plantillaEquipo.filter(
+                    (j) => enCanchaJugadorIds.has(j.jugador_id) && !salidosOExpulsados.has(j.jugador_id),
+                  );
               return (
                 <div key={equipoId}>
                   <h3>{nombre}</h3>
                   {maximoCambios != null && (
                     <p className="muted">Cambios usados: {cambiosUsadosPorEquipo.get(equipoId) ?? 0}/{maximoCambios}</p>
                   )}
-                  {titularesEquipo.length === 0 ? (
+                  {candidatosSalida.length === 0 ? (
                     <p className="muted">Sin nadie en cancha marcado en la convocatoria.</p>
                   ) : (
                     <ul className="alineacion-lista">
-                      {titularesEquipo.map((j) => (
+                      {candidatosSalida.map((j) => (
                         <li key={j.jugador_id}>
                           <span>{j.dorsal != null ? `#${j.dorsal} ` : ""}{j.jugador}</span>
                           <button type="button" className="link-button" onClick={() => setSustituyendoA(j)}>
@@ -642,16 +678,26 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
         // Fix (goles-por-marcador-slots-plan.md, Fase 1, hallazgo 2): antes
         // `elegibles` era la plantilla completa (menos sale/salidos/ya
         // entraron) — un titular en cancha que nunca salió podía aparecer
-        // como candidato a "Entra". Este flujo solo se dispara tocando un
-        // titular en la lista de arriba, que YA exige convocatoria
-        // guardada (si no hay, la lista sale vacía) — así que acá siempre
-        // hay convocatoria y se puede filtrar estrictamente a suplentes.
-        const elegibles = plantillaEquipoSaliente.filter(
-          (j) =>
-            suplentesJugadorIds.has(j.jugador_id) &&
-            !salidosOExpulsados.has(j.jugador_id) &&
-            !yaEntraron.has(j.jugador_id),
-        );
+        // como candidato a "Entra". Este flujo se dispara tocando un
+        // titular EN LA LISTA DE ARRIBA — desde C2a esa lista puede venir
+        // del fallback sin convocatoria (`sinConvocatoria`), así que acá
+        // se replica el mismo fallback: sin convocatoria no hay
+        // `suplentesJugadorIds` que filtrar (sale vacío por diseño), así
+        // que los candidatos a "Entra" son la plantilla completa menos
+        // quien ya sale, salió o fue expulsado, o ya entró.
+        const elegibles = sinConvocatoria
+          ? plantillaEquipoSaliente.filter(
+              (j) =>
+                j.jugador_id !== sustituyendoA.jugador_id &&
+                !salidosOExpulsados.has(j.jugador_id) &&
+                !yaEntraron.has(j.jugador_id),
+            )
+          : plantillaEquipoSaliente.filter(
+              (j) =>
+                suplentesJugadorIds.has(j.jugador_id) &&
+                !salidosOExpulsados.has(j.jugador_id) &&
+                !yaEntraron.has(j.jugador_id),
+            );
         return (
           <ModalSustitucion
             jugadorSale={sustituyendoA}
@@ -659,6 +705,7 @@ export function MesaPanel({ partidoId, onVolver }: { partidoId: number; onVolver
             confirmando={sustitucion.isPending}
             error={sustitucion.isError ? apiErrorMessage(sustitucion.error) : null}
             onCancelar={() => setSustituyendoA(null)}
+            onIrAConvocatoria={onIrAConvocatoria}
             onConfirmar={(entraId) =>
               sustitucion.mutate({
                 partidos_id: partidoId,

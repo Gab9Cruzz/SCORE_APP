@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -79,7 +79,7 @@ function sembrarSesion(rol: string = "Arbitro", username: string = "arbitro_test
 
 }
 
-function montarMesaPanel() {
+function montarMesaPanel(props: { onIrAConvocatoria?: () => void } = {}) {
   server.use(
     http.get(PARTIDO_3, () => HttpResponse.json(PARTIDO_EN_CURSO)),
     http.get(EQUIPOS, () =>
@@ -113,7 +113,7 @@ function montarMesaPanel() {
   return render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <MesaPanel partidoId={3} />
+        <MesaPanel partidoId={3} onIrAConvocatoria={props.onIrAConvocatoria} />
       </AuthProvider>
     </QueryClientProvider>,
   );
@@ -202,6 +202,109 @@ describe("MesaPanel — offline-first (3B-1, docs/plans/cierre-backlog-todos-pla
     await user.click(screen.getByRole("button", { name: "Descartar" }));
 
     expect(await screen.findByText("Cargar evento")).toBeInTheDocument();
+  });
+});
+
+// C2a (docs/plans/cierre-pendientes-todos-plan.md): sin convocatoria
+// guardada, `enCanchaJugadorIds` sale vacío por diseño (deriveTitularSuplente)
+// — antes eso dejaba "Alineación en vivo" siempre vacía, sin ningún
+// "Sacar" posible: un partido sin convocatoria (D4, resultado directo)
+// arrancado en vivo no tenía forma de cargar un Cambio salvo por el
+// camino viejo de CargaEvento (retirado en C2b). Estos dos tests son el
+// test automatizado compañero del gate de C2a (obligación E10 de la
+// revisión eng): la lista de fallback renderiza con su caption, y un
+// Cambio enviado desde ella produce el mismo body de POST que el camino
+// con convocatoria. montarMesaPanel() ya mockea CONVOCADOS_3 en `[]`
+// (sin convocatoria) para TODO este archivo.
+describe("MesaPanel — alineación en vivo sin convocatoria (C2a)", () => {
+  beforeEach(() => {
+    limpiarEventoPendiente(3);
+  });
+
+  function plantillaDosJugadores() {
+    return HttpResponse.json([
+      { jugador_id: 5, jugador: "Andrés Vera", equipo_id: 1, equipo: "Tiburones FC", dorsal: 9, jugador_perfil_id: 50 },
+      { jugador_id: 6, jugador: "Bruno Ríos", equipo_id: 1, equipo: "Tiburones FC", dorsal: 10, jugador_perfil_id: 51 },
+    ]);
+  }
+
+  it("muestra la plantilla completa con el caption de fallback, no la lista vacía de siempre", async () => {
+    montarMesaPanel();
+    // Después de montar: montarMesaPanel() registra sus propios handlers
+    // por default (incluido PLANTILLA_1 con un solo jugador) y MSW
+    // resuelve por el ÚLTIMO handler registrado — un override de acá
+    // ANTES de montar quedaría tapado por el default.
+    server.use(http.get(PLANTILLA_1, plantillaDosJugadores));
+
+    expect(
+      await screen.findByText("Sin convocatoria guardada — mostrando plantilla completa."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Andrés Vera/)).toBeInTheDocument();
+    expect(screen.getByText(/Bruno Ríos/)).toBeInTheDocument();
+    // El otro equipo (Águilas del Sur, PLANTILLA_2) sí sigue vacío de
+    // verdad — ese es el caso legítimo del empty state, no el que C2a
+    // corrige (que era Tiburones FC con plantilla, mostrando "vacío" por
+    // filtrar contra una convocatoria que no existe).
+    const filaAguilas = screen.getByRole("heading", { name: "Águilas del Sur", level: 3 }).closest("div");
+    if (!filaAguilas) throw new Error("No se encontró la sección de Águilas del Sur");
+    expect(within(filaAguilas).getByText("Sin nadie en cancha marcado en la convocatoria.")).toBeInTheDocument();
+  });
+
+  it("un Cambio cargado desde ModalSustitucion sin convocatoria produce el mismo body que con convocatoria", async () => {
+    const user = userEvent.setup();
+    montarMesaPanel();
+    let bodyRecibido: unknown;
+    server.use(
+      http.get(PLANTILLA_1, plantillaDosJugadores),
+      http.get(EVENTOS, () =>
+        HttpResponse.json([
+          { id: 1, nombre: "Gol", estado: "Activo" },
+          { id: 3, nombre: "Tarjeta Roja", estado: "Activo" },
+          { id: 4, nombre: "Cambio", estado: "Activo" },
+        ]),
+      ),
+      http.post(EVENTOS_PARTIDO, async ({ request }) => {
+        bodyRecibido = await request.json();
+        return HttpResponse.json({ id: 1, estado: "Registrado" }, { status: 201 });
+      }),
+    );
+
+    await screen.findByText("Sin convocatoria guardada — mostrando plantilla completa.");
+    const filaAndres = screen.getByText(/Andrés Vera/).closest("li");
+    if (!filaAndres) throw new Error("No se encontró la fila de Andrés Vera");
+    await user.click(within(filaAndres).getByRole("button", { name: "Sacar" }));
+
+    await user.click(await screen.findByRole("button", { name: /Bruno Ríos/ }));
+
+    await waitFor(() =>
+      expect(bodyRecibido).toMatchObject({
+        partidos_id: 3,
+        jugador_id: 5,
+        equipo_id: 1,
+        eventos_id: 4,
+        jugador_id_entra: 6,
+      }),
+    );
+  });
+
+  it("ModalSustitucion sin ningún elegible ofrece 'Ir a Convocatoria', que scrollea al editor en la misma página", async () => {
+    // El default de montarMesaPanel() ya deja PLANTILLA_1 con un solo
+    // jugador — al "Sacar"lo no queda nadie más para "Entra", ni siquiera
+    // con el fallback de C2a.
+    const user = userEvent.setup();
+    // `onIrAConvocatoria` simula lo que GestionarPartido conecta de
+    // verdad (scroll a #convocatoria-editor en la misma página) — acá
+    // solo se prueba que MesaPanel/ModalSustitucion lo invocan.
+    let scrolleoAConvocatoria = false;
+    montarMesaPanel({ onIrAConvocatoria: () => { scrolleoAConvocatoria = true; } });
+
+    const filaAndres = await screen.findByText(/Andrés Vera/);
+    const li = filaAndres.closest("li");
+    if (!li) throw new Error("No se encontró la fila de Andrés Vera");
+    await user.click(within(li).getByRole("button", { name: "Sacar" }));
+
+    await user.click(await screen.findByRole("button", { name: "Ir a Convocatoria" }));
+    expect(scrolleoAConvocatoria).toBe(true);
   });
 });
 

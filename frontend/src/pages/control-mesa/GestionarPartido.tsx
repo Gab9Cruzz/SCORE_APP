@@ -456,7 +456,7 @@ export function GestionarPartidoPage() {
         <p className="muted">El torneo está cerrado — la alineación quedó bloqueada.</p>
       ) : (
         <>
-          <div className="selector-equipo" role="tablist">
+          <div id="convocatoria-editor" className="selector-equipo" role="tablist">
             {(["local", "visitante"] as const).map((lado) => {
               const equipoId = lado === "local" ? partido.equipos_id_local : partido.equipos_id_visitante;
               const n = titularesDe(equipoId);
@@ -617,8 +617,20 @@ export function GestionarPartidoPage() {
 
       {/* Panel en vivo: marcador, cronómetro, carga de eventos y timeline.
           Sin su propio botón de "volver" ni de inicio: la navegación y el
-          arranque los maneja esta página. */}
-      {enCurso && <MesaPanel partidoId={id} />}
+          arranque los maneja esta página.
+
+          `onIrAConvocatoria` (C2a): esta página ya renderiza el editor de
+          convocatoria arriba (`#convocatoria-editor`) en la MISMA vista —
+          "ir a Convocatoria" desde el empty state de ModalSustitucion es
+          un scroll, no una navegación que perdería el partido en curso. */}
+      {enCurso && (
+        <MesaPanel
+          partidoId={id}
+          onIrAConvocatoria={() =>
+            document.getElementById("convocatoria-editor")?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
+        />
+      )}
 
       {resultadoDirectoAbierto && partido.equipos_id_local != null && partido.equipos_id_visitante != null && (
         <ModalResultadoDirecto

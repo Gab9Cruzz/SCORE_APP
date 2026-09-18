@@ -21,8 +21,14 @@ export function ModalSustitucion(props: {
   onCancelar: () => void;
   confirmando: boolean;
   error: string | null;
+  /** C2a (docs/plans/cierre-pendientes-todos-plan.md): acción primaria del
+   * empty state — antes era instrucción sin salida ("sumá un suplente
+   * desde la convocatoria", sin forma de llegar ahí). Opcional: sin la
+   * prop, el botón no se muestra (mismo criterio que `onCancelar` siendo
+   * siempre requerido pero esto no). */
+  onIrAConvocatoria?: () => void;
 }) {
-  const { jugadorSale, elegibles, onConfirmar, onCancelar, confirmando, error } = props;
+  const { jugadorSale, elegibles, onConfirmar, onCancelar, confirmando, error, onIrAConvocatoria } = props;
 
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-sustitucion-titulo">
@@ -39,10 +45,19 @@ export function ModalSustitucion(props: {
           // salida — el operador solo puede cancelar acá (la alta tardía de
           // un suplente vive en "Gestionar Partido › Convocatoria", fuera
           // del alcance directo de este panel de eventos).
-          <p className="muted">
-            No hay suplentes disponibles para entrar (todos ya entraron o fueron expulsados). Sumá un
-            suplente desde la convocatoria del partido si llegó alguien tarde.
-          </p>
+          <>
+            <p className="muted">
+              No hay suplentes disponibles para entrar (todos ya entraron o fueron expulsados). Sumá un
+              suplente desde la convocatoria del partido si llegó alguien tarde.
+            </p>
+            {onIrAConvocatoria && (
+              <div className="confirmar-evento__acciones">
+                <button type="button" onClick={onIrAConvocatoria}>
+                  Ir a Convocatoria
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="tap-grid">
             {elegibles.map((j) => (
