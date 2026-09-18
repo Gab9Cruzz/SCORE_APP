@@ -11,7 +11,8 @@ import {
   limpiarEventoPendiente,
 } from "../lib/colaOfflineEventos";
 import { Cronometro } from "./Cronometro";
-import { deriveEnCancha, deriveHistorialElegibilidad, deriveTitularSuplente, TIPOS, TIPO_ICONO, type PlantillaJugador, type TipoEvento } from "./eventos";
+import { BadgeTarjeta } from "./BadgeTarjeta";
+import { deriveEnCancha, deriveEstadoTarjetasPorJugador, deriveHistorialElegibilidad, deriveTitularSuplente, TIPOS, TIPO_ICONO, type PlantillaJugador, type TipoEvento } from "./eventos";
 import { ModalSustitucion } from "./ModalSustitucion";
 
 /** 3B-1 (docs/plans/cierre-backlog-todos-plan.md): distingue "no hay red"
@@ -281,6 +282,13 @@ export function MesaPanel({
   const enCanchaJugadorIds = useMemo(
     () => deriveEnCancha(titularesJugadorIds, salidosOExpulsados, yaEntraron),
     [titularesJugadorIds, salidosOExpulsados, yaEntraron],
+  );
+  // exp.1 (docs/plans/cierre-pendientes-todos-plan.md): badge de estado
+  // de tarjetas por jugador, derivado de eventos YA persistidos (ver
+  // docstring de deriveEstadoTarjetasPorJugador).
+  const estadoTarjetasPorJugador = useMemo(
+    () => deriveEstadoTarjetasPorJugador(eventosRegistrados, eventoNombrePorId),
+    [eventosRegistrados, eventoNombrePorId],
   );
 
   // Marcador calculado como vw_goles_acreditados: Gol suma al equipo del
@@ -704,14 +712,20 @@ export function MesaPanel({
                     <p className="muted">Sin nadie en cancha marcado en la convocatoria.</p>
                   ) : (
                     <ul className="alineacion-lista">
-                      {candidatosSalida.map((j) => (
-                        <li key={j.jugador_id}>
-                          <span>{j.dorsal != null ? `#${j.dorsal} ` : ""}{j.jugador}</span>
-                          <button type="button" className="link-button" onClick={() => setSustituyendoA(j)}>
-                            Sacar
-                          </button>
-                        </li>
-                      ))}
+                      {candidatosSalida.map((j) => {
+                        const estadoTarjeta = estadoTarjetasPorJugador.get(j.jugador_id);
+                        return (
+                          <li key={j.jugador_id}>
+                            <span>
+                              {j.dorsal != null ? `#${j.dorsal} ` : ""}{j.jugador}
+                              {estadoTarjeta && <BadgeTarjeta estado={estadoTarjeta} />}
+                            </span>
+                            <button type="button" className="link-button" onClick={() => setSustituyendoA(j)}>
+                              Sacar
+                            </button>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
@@ -753,6 +767,7 @@ export function MesaPanel({
           <ModalSustitucion
             jugadorSale={sustituyendoA}
             elegibles={elegibles}
+            estadoTarjetasPorJugador={estadoTarjetasPorJugador}
             confirmando={sustitucion.isPending}
             error={sustitucion.isError ? apiErrorMessage(sustitucion.error) : null}
             onCancelar={() => setSustituyendoA(null)}

@@ -231,6 +231,75 @@ describe("MesaPanel — confirmación aria-live de éxito (D1)", () => {
   });
 });
 
+// exp.1 (docs/plans/cierre-pendientes-todos-plan.md): badge de estado de
+// tarjetas por jugador, derivado de eventos YA persistidos — visible en
+// la fila de "Sacar" de Alineación en vivo y en los candidatos de
+// ModalSustitucion.
+describe("MesaPanel — badge de estado de tarjetas (exp.1)", () => {
+  beforeEach(() => {
+    limpiarEventoPendiente(3);
+  });
+
+  it("un jugador con una amarilla registrada muestra el badge '1A' junto a su nombre", async () => {
+    montarMesaPanel();
+    server.use(
+      http.get(EVENTOS, () =>
+        HttpResponse.json([
+          { id: 1, nombre: "Gol", estado: "Activo" },
+          { id: 3, nombre: "Tarjeta Roja", estado: "Activo" },
+          { id: 5, nombre: "Tarjeta Amarilla", estado: "Activo" },
+        ]),
+      ),
+      http.get(EVENTOS_PARTIDO, () =>
+        HttpResponse.json([
+          { id: 1, partidos_id: 3, jugador_id: 5, equipo_id: 1, eventos_id: 5, jugador_id_entra: null, estado: "Registrado", minuto: 10 },
+        ]),
+      ),
+    );
+
+    const seccionAlineacion = (await screen.findByRole("heading", { name: "Alineación en vivo" })).closest("section");
+    if (!seccionAlineacion) throw new Error("No se encontró la sección de Alineación en vivo");
+    const fila = within(seccionAlineacion).getByText(/Andrés Vera/).closest("li");
+    if (!fila) throw new Error("No se encontró la fila de Andrés Vera");
+    const badge = within(fila).getByText("1A");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAccessibleName("1 amarilla");
+  });
+
+  it("un candidato a 'Entra' con amarilla registrada muestra su badge en el tap-button de ModalSustitucion", async () => {
+    const user = userEvent.setup();
+    montarMesaPanel();
+    server.use(
+      http.get(PLANTILLA_1, () =>
+        HttpResponse.json([
+          { jugador_id: 5, jugador: "Andrés Vera", equipo_id: 1, equipo: "Tiburones FC", dorsal: 9, jugador_perfil_id: 50 },
+          { jugador_id: 6, jugador: "Bruno Ríos", equipo_id: 1, equipo: "Tiburones FC", dorsal: 10, jugador_perfil_id: 51 },
+        ]),
+      ),
+      http.get(EVENTOS, () =>
+        HttpResponse.json([
+          { id: 1, nombre: "Gol", estado: "Activo" },
+          { id: 3, nombre: "Tarjeta Roja", estado: "Activo" },
+          { id: 5, nombre: "Tarjeta Amarilla", estado: "Activo" },
+        ]),
+      ),
+      http.get(EVENTOS_PARTIDO, () =>
+        HttpResponse.json([
+          { id: 1, partidos_id: 3, jugador_id: 6, equipo_id: 1, eventos_id: 5, jugador_id_entra: null, estado: "Registrado", minuto: 10 },
+        ]),
+      ),
+    );
+
+    const filaAndres = (await screen.findByText(/Andrés Vera/)).closest("li");
+    if (!filaAndres) throw new Error("No se encontró la fila de Andrés Vera");
+    await user.click(within(filaAndres).getByRole("button", { name: "Sacar" }));
+
+    const dialogo = await screen.findByRole("dialog");
+    const candidato = within(dialogo).getByRole("button", { name: /Bruno Ríos/ });
+    expect(within(candidato).getByText("1A")).toBeInTheDocument();
+  });
+});
+
 // C2a (docs/plans/cierre-pendientes-todos-plan.md): sin convocatoria
 // guardada, `enCanchaJugadorIds` sale vacío por diseño (deriveTitularSuplente)
 // — antes eso dejaba "Alineación en vivo" siempre vacía, sin ningún

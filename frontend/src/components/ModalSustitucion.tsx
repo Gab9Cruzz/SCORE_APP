@@ -1,4 +1,5 @@
-import type { PlantillaJugador } from "./eventos";
+import { BadgeTarjeta } from "./BadgeTarjeta";
+import type { EstadoTarjeta, PlantillaJugador } from "./eventos";
 
 /** Modal contextual de sustitución (modo-vivo-sustituciones-cierre-plan.md,
  * Área 3, T4) — se abre al tocar un titular en la alineación en vivo de
@@ -27,8 +28,14 @@ export function ModalSustitucion(props: {
    * prop, el botón no se muestra (mismo criterio que `onCancelar` siendo
    * siempre requerido pero esto no). */
   onIrAConvocatoria?: () => void;
+  /** exp.1 (docs/plans/cierre-pendientes-todos-plan.md): badge de estado
+   * de tarjetas por jugador — se pinta también en los candidatos a
+   * "Entra", no solo en la fila de "Sacar" de MesaPanel. Opcional: sin la
+   * prop (o sin entrada para un jugador puntual), no se muestra badge. */
+  estadoTarjetasPorJugador?: Map<number, EstadoTarjeta>;
 }) {
-  const { jugadorSale, elegibles, onConfirmar, onCancelar, confirmando, error, onIrAConvocatoria } = props;
+  const { jugadorSale, elegibles, onConfirmar, onCancelar, confirmando, error, onIrAConvocatoria, estadoTarjetasPorJugador } =
+    props;
 
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-sustitucion-titulo">
@@ -60,18 +67,22 @@ export function ModalSustitucion(props: {
           </>
         ) : (
           <div className="tap-grid">
-            {elegibles.map((j) => (
-              <button
-                key={j.jugador_id}
-                type="button"
-                className="tap-button"
-                disabled={confirmando}
-                onClick={() => onConfirmar(j.jugador_id)}
-              >
-                {j.dorsal != null ? `#${j.dorsal} ` : ""}
-                {j.jugador}
-              </button>
-            ))}
+            {elegibles.map((j) => {
+              const estadoTarjeta = estadoTarjetasPorJugador?.get(j.jugador_id);
+              return (
+                <button
+                  key={j.jugador_id}
+                  type="button"
+                  className="tap-button"
+                  disabled={confirmando}
+                  onClick={() => onConfirmar(j.jugador_id)}
+                >
+                  {j.dorsal != null ? `#${j.dorsal} ` : ""}
+                  {j.jugador}
+                  {estadoTarjeta && <BadgeTarjeta estado={estadoTarjeta} />}
+                </button>
+              );
+            })}
           </div>
         )}
 

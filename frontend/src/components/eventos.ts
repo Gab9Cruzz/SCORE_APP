@@ -126,3 +126,40 @@ export function deriveEnCancha(
   for (const id of salidosOExpulsados) enCancha.delete(id);
   return enCancha;
 }
+
+/** exp.1 (docs/plans/cierre-pendientes-todos-plan.md) — estado de
+ * tarjetas por jugador: "1A" (una amarilla), "2A" (dos, caso raro porque
+ * la segunda ya autogenera una roja — igual se puede ver en la ventana
+ * entre el insert de la 2ª amarilla y el refetch) o "R" (roja, propia o
+ * automática por doble amarilla). Se deriva de `eventosRegistrados` YA
+ * PERSISTIDOS en el servidor (`MesaPanel.tsx`, no del batch local sin
+ * guardar de `ModalResultadoDirecto` — corrección de la revisión 3 del
+ * plan: ese modal deriva estado local de un `otrosEventos` sin guardar,
+ * un problema distinto). Roja siempre gana sobre amarilla: un jugador
+ * expulsado no necesita ver "1A", ya no vuelve a jugar. */
+export type EstadoTarjeta = "1A" | "2A" | "R";
+
+export function deriveEstadoTarjetasPorJugador(
+  eventosRegistrados: EventoRegistradoMinimo[],
+  eventoNombrePorId: Map<number, string>,
+): Map<number, EstadoTarjeta> {
+  const amarillasPorJugador = new Map<number, number>();
+  const rojaPorJugador = new Set<number>();
+  for (const e of eventosRegistrados) {
+    const nombreTipo = eventoNombrePorId.get(e.eventos_id);
+    if (nombreTipo === "Tarjeta Amarilla") {
+      amarillasPorJugador.set(e.jugador_id, (amarillasPorJugador.get(e.jugador_id) ?? 0) + 1);
+    } else if (nombreTipo === "Tarjeta Roja") {
+      rojaPorJugador.add(e.jugador_id);
+    }
+  }
+  const estado = new Map<number, EstadoTarjeta>();
+  for (const jugadorId of rojaPorJugador) {
+    estado.set(jugadorId, "R");
+  }
+  for (const [jugadorId, cantidad] of amarillasPorJugador) {
+    if (estado.has(jugadorId)) continue; // roja ya gana
+    estado.set(jugadorId, cantidad >= 2 ? "2A" : "1A");
+  }
+  return estado;
+}

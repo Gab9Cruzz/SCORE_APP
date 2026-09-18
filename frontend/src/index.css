@@ -1914,6 +1914,35 @@ td:first-child {
   gap: 0.4rem;
 }
 
+/* exp.1 (docs/plans/cierre-pendientes-todos-plan.md) — badge de estado de
+   tarjetas: texto Y forma además de color. Rectangular (como una tarjeta
+   real) para amarilla, circular para roja — dos formas distintas, no solo
+   dos colores, así que sigue siendo legible en escala de grises (el texto
+   "1A"/"2A"/"R" ya alcanza por sí solo). */
+.badge-tarjeta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.15rem 0.3rem;
+  min-width: 1.4rem;
+  margin-left: 0.35rem;
+}
+
+.badge-tarjeta--amarilla {
+  background: var(--warning);
+  color: #2b2100;
+  border-radius: 2px;
+}
+
+.badge-tarjeta--roja {
+  background: var(--danger);
+  color: #2b0000;
+  border-radius: 50%;
+}
+
 /* D1: fila de "Sacar" (docs/plans/cierre-pendientes-todos-plan.md) — sin
    esta regla el <li> caía al bloque default (span y botón apilados, sin
    alinear). min-height 44px en la FILA además del botón (`.mesa
