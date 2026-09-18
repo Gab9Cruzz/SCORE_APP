@@ -17,6 +17,7 @@ from app.repositories.torneo_grupo import TorneoGrupoRepository
 from app.schemas.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoCreate, ConfiguracionTiempoTorneoOut
 from app.schemas.torneo import TorneoCreate, TorneoOut, TorneoUpdate
 from app.services.desempate import validar_metodo_desempate_eliminatoria
+from app.services.reglamento_torneo import validar_maximo_titulares, validar_minimo_para_iniciar
 
 # Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md,
 # requerimiento #4) — Decisión G1: Liga/Eliminación son 1 sola FASE;
@@ -171,9 +172,14 @@ class TorneoService:
 
         # Después de resolver el grupo: en una edición nueva la modalidad se
         # HEREDA de la edición de referencia, así que recién acá se sabe contra
-        # qué tamano_equipo hay que validar el mínimo.
-        await self._validar_minimo_para_iniciar(datos.get("minimo_jugadores_para_iniciar"), datos["modalidad_id"])
-        await self._validar_maximo_titulares(datos.get("maximo_titulares_permitido"), datos["modalidad_id"])
+        # qué tamano_equipo hay que validar el mínimo/máximo (Motor de
+        # reglamento genérico, ReglamentoTorneo) — una sola consulta de
+        # modalidad para los dos, y solo si alguno de los dos vino.
+        minimo, maximo = datos.get("minimo_jugadores_para_iniciar"), datos.get("maximo_titulares_permitido")
+        if minimo is not None or maximo is not None:
+            modalidad = await self.modalidad_repo.get_or_404(datos["modalidad_id"])
+            validar_minimo_para_iniciar(minimo, modalidad.tamano_equipo, modalidad.nombre)
+            validar_maximo_titulares(maximo, modalidad.tamano_equipo, modalidad.nombre)
         # Desempate de eliminatoria: tiempo extra y penales (D5/§7) — guarda
         # 1 de 2 (S7/F2): el INSERT es estructuralmente inguardable desde el
         # trigger (CONFIGURACION_TIEMPO_TORNEO todavía no existe en un
@@ -195,28 +201,6 @@ class TorneoService:
             return
         self.session.add(AsignacionTorneoAdmin(usuario_id=usuario_actual.id, torneo_id=torneo.id, estado="Activo"))
         await self.session.commit()
-
-    async def _validar_minimo_para_iniciar(self, minimo: int | None, modalidad_id: int) -> None:
-        """Tope superior de Torneo.minimo_jugadores_para_iniciar
-        (gestionar-partido-alineaciones-plan.md, D1).
-
-        El piso (>= 1) lo cubre chk_torneo_minimo_iniciar; el techo cruza
-        tablas (TORNEO -> MODALIDAD), así que no se puede expresar como CHECK y
-        vive acá — mismo criterio que _validar_parametros_formato: 400 con un
-        mensaje que dice el número real, no el 409 genérico de un constraint.
-
-        `None` es válido y significa "exigir el equipo completo": no hay nada
-        que validar contra la modalidad en ese caso.
-        """
-        if minimo is None:
-            return
-        modalidad = await self.modalidad_repo.get_or_404(modalidad_id)
-        if minimo > modalidad.tamano_equipo:
-            raise DomainRuleError(
-                f"El mínimo para iniciar ({minimo}) no puede ser mayor que el tamaño del equipo "
-                f"de la modalidad {modalidad.nombre} ({modalidad.tamano_equipo}). "
-                "Dejalo vacío para exigir el equipo completo."
-            )
 
     def _validar_parametros_formato(
         self,
@@ -270,25 +254,6 @@ class TorneoService:
         modalidad = await self.modalidad_repo.get_or_404(modalidad_id)
         return "Corrido" if modalidad.tamano_equipo == 1 else "Periodos"
 
-    async def _validar_maximo_titulares(self, maximo: int | None, modalidad_id: int) -> None:
-        """Tope SUPERIOR de Torneo.maximo_titulares_permitido
-        (modo-vivo-sustituciones-cierre-plan.md, Área 1, T18) — mismo
-        criterio exacto que _validar_minimo_para_iniciar: el piso (>= 1) lo
-        cubre chk_torneo_maximo_titulares, el techo cruza tablas y vive acá.
-
-        `None` es válido y significa "usar Modalidad.tamano_equipo": nada
-        que validar contra la modalidad en ese caso.
-        """
-        if maximo is None:
-            return
-        modalidad = await self.modalidad_repo.get_or_404(modalidad_id)
-        if maximo > modalidad.tamano_equipo:
-            raise DomainRuleError(
-                f"El máximo de titulares ({maximo}) no puede ser mayor que el tamaño del equipo "
-                f"de la modalidad {modalidad.nombre} ({modalidad.tamano_equipo}). "
-                "Dejalo vacío para usar el tamaño de la modalidad."
-            )
-
     async def _crear_fase_inicial(self, torneo: Torneo) -> None:
         fase = Fase(
             torneo_id=torneo.id,
@@ -331,14 +296,18 @@ class TorneoService:
                 payload.get("clasificados_por_grupo", torneo_actual.clasificados_por_grupo),
             )
 
-        if "minimo_jugadores_para_iniciar" in payload:
-            await self._validar_minimo_para_iniciar(
-                payload["minimo_jugadores_para_iniciar"], torneo_actual.modalidad_id
-            )
-        if "maximo_titulares_permitido" in payload:
-            await self._validar_maximo_titulares(
-                payload["maximo_titulares_permitido"], torneo_actual.modalidad_id
-            )
+        # ReglamentoTorneo: una sola consulta de modalidad para los dos
+        # validadores, solo si alguno de los dos vino en el payload.
+        if "minimo_jugadores_para_iniciar" in payload or "maximo_titulares_permitido" in payload:
+            modalidad = await self.modalidad_repo.get_or_404(torneo_actual.modalidad_id)
+            if "minimo_jugadores_para_iniciar" in payload:
+                validar_minimo_para_iniciar(
+                    payload["minimo_jugadores_para_iniciar"], modalidad.tamano_equipo, modalidad.nombre
+                )
+            if "maximo_titulares_permitido" in payload:
+                validar_maximo_titulares(
+                    payload["maximo_titulares_permitido"], modalidad.tamano_equipo, modalidad.nombre
+                )
 
         # Desempate de eliminatoria: tiempo extra y penales (D5/§7) — C7/D-D3
         # vuelven editable este campo acá, así que las dos direcciones de la

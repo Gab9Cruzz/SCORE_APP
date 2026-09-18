@@ -21,9 +21,9 @@ from app.services.desempate import (
     completar_metodo_manual,
     es_escape_manual_sobre_metodo_configurado,
     resolver_desempate_resultado_directo,
-    resolver_metodo_desempate_aplicable,
 )
 from app.services.permisos import verificar_arbitro_asignado
+from app.services.reglamento_torneo import ReglamentoTorneo
 from app.services.reglas_cambio import validar_reglas_cambio
 from app.services.reglas_tarjetas import procesar_doble_amarilla
 
@@ -247,8 +247,8 @@ class PartidoService:
         if partido.fase_id is not None:
             fase = await self.fase_repo.get(partido.fase_id)
             if fase is not None and fase.tipo == "Eliminacion":
-                partido.metodo_desempate_aplicable = resolver_metodo_desempate_aplicable(
-                    torneo.metodo_desempate_eliminatoria, partido.ronda_nombre
+                partido.metodo_desempate_aplicable = ReglamentoTorneo.desde(torneo).resolver_desempate_aplicable(
+                    partido.ronda_nombre
                 )
 
         self.session.add(HitoPartido(partido_id=id_, tipo_hito="Inicio_Partido", registrado_por=usuario_actual.id))

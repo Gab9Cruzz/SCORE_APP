@@ -17,6 +17,7 @@ from app.repositories.partido import PartidoRepository
 from app.repositories.torneo import TorneoRepository
 from app.schemas.convocado_a_partido import ConvocadoAgregarRequest, ConvocatoriaSetRequest
 from app.services.permisos import verificar_arbitro_asignado
+from app.services.reglamento_torneo import ReglamentoTorneo
 
 
 class ConvocadoAPartidoService:
@@ -135,14 +136,12 @@ class ConvocadoAPartidoService:
 
     async def _maximo_titulares(self, torneo_id: int) -> int:
         """Tope SUPERIOR de titulares por equipo (modo-vivo-sustituciones-
-        cierre-plan.md, Área 1, T2/T18) — espejo exacto de
-        `HitoPartidoService._maximo_permitido`, pero resuelto desde acá
-        (este service no comparte instancia con HitoPartidoService).
-        `Torneo.maximo_titulares_permitido` en NULL = usar
-        `Modalidad.tamano_equipo`."""
+        cierre-plan.md, Área 1, T2/T18) — delega en ReglamentoTorneo, el
+        mismo cálculo que usa HitoPartidoService._maximo_permitido (antes
+        una copia independiente acá)."""
         torneo = await self.torneo_repo.get_or_404(torneo_id)
         modalidad = await self.modalidad_repo.get_or_404(torneo.modalidad_id)
-        return torneo.maximo_titulares_permitido or modalidad.tamano_equipo
+        return ReglamentoTorneo.desde(torneo).maximo_titulares(modalidad.tamano_equipo)
 
     async def _validar_tope_titulares(self, partido, titulares_nuevos: dict[int, int]) -> None:
         """`titulares_nuevos`: equipo_id -> cuántos titulares tendría ESE

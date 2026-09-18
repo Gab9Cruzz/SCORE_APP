@@ -34,9 +34,9 @@ from app.services.desempate import (
     completar_metodo_manual,
     derivar_ganador_desde_penales,
     es_escape_manual_sobre_metodo_configurado,
-    resolver_metodo_desempate_aplicable,
 )
 from app.services.permisos import verificar_arbitro_asignado
+from app.services.reglamento_torneo import ReglamentoTorneo
 
 # Área 4 (T6/T17): ventana de deshacer del cierre forzado, real y
 # autoritativa en el SERVIDOR (Eng Fase 3, corrección de diseño — ver
@@ -169,28 +169,17 @@ class HitoPartidoService:
     @staticmethod
     def _minimo_requerido(torneo: Torneo, modalidad: Modalidad) -> int:
         """Cuántos titulares por equipo exige "Empezar Partido"
-        (gestionar-partido-alineaciones-plan.md, D1).
-
-        `Torneo.minimo_jugadores_para_iniciar` en NULL significa "exigir el
-        equipo completo", que es el comportamiento previo a esta columna — por
-        eso la migración no necesita backfill: una base que no configura nada se
-        comporta exactamente igual que antes.
-
-        Un `or` alcanza porque chk_torneo_minimo_iniciar prohíbe el 0, así que
-        no hay valor falsy legítimo que se confunda con NULL.
-        """
-        return torneo.minimo_jugadores_para_iniciar or modalidad.tamano_equipo
+        (gestionar-partido-alineaciones-plan.md, D1) — delega en
+        ReglamentoTorneo, único lugar que resuelve este fallback ahora
+        (antes duplicado acá y en ConvocadoAPartidoService)."""
+        return ReglamentoTorneo.desde(torneo).minimo_titulares(modalidad.tamano_equipo)
 
     @staticmethod
     def _maximo_permitido(torneo: Torneo, modalidad: Modalidad) -> int:
         """Tope SUPERIOR de titulares por equipo (modo-vivo-sustituciones-
-        cierre-plan.md, Área 1, T2/T18) — espejo exacto de
-        `_minimo_requerido`. `Torneo.maximo_titulares_permitido` en NULL
-        significa "usar el tamaño de la modalidad", que es también el
-        techo que valida TorneoService al guardar ese campo — por eso un
-        `or` alcanza acá (no hay 0 legítimo, chk_torneo_maximo_titulares lo
-        prohíbe)."""
-        return torneo.maximo_titulares_permitido or modalidad.tamano_equipo
+        cierre-plan.md, Área 1, T2/T18) — espejo de `_minimo_requerido`,
+        mismo motivo para delegar en ReglamentoTorneo."""
+        return ReglamentoTorneo.desde(torneo).maximo_titulares(modalidad.tamano_equipo)
 
     async def _contar_titulares(self, partido: Partido, torneo: Torneo) -> tuple[int, list[dict]]:
         """Cuántos titulares válidos tiene cada equipo y cuántos hacen falta.
@@ -294,9 +283,7 @@ class HitoPartidoService:
         fase = await self.fase_repo.get(partido.fase_id)
         if fase is None or fase.tipo != "Eliminacion":
             return partido
-        metodo_aplicable = resolver_metodo_desempate_aplicable(
-            torneo.metodo_desempate_eliminatoria, partido.ronda_nombre
-        )
+        metodo_aplicable = ReglamentoTorneo.desde(torneo).resolver_desempate_aplicable(partido.ronda_nombre)
         return await self.partido_repo.save_changes(partido, metodo_desempate_aplicable=metodo_aplicable)
 
     async def preflight_inicio(self, partido_id: int) -> PreflightInicioOut:
