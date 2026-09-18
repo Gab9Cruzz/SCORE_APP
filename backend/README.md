@@ -138,3 +138,60 @@ pytest
 `tests/conftest.py` crea (o recrea) una base `torneos_mvp_test` aplicando los
 mismos `.sql` de `/database`, y corre cada test dentro de una transacción
 que se revierte al final — nunca toca `torneos_mvp`.
+
+### Tests de concurrencia real (A2, docs/plans/cierre-pendientes-todos-plan.md)
+
+`pytest` por default corre con `-m "not concurrencia"` (ver `verificar.ps1`):
+el harness de arriba envuelve cada test en una transacción con savepoints,
+así que un `session.commit()` dentro de un repositorio **no persiste de
+verdad** — imposible para probar algo como un `SELECT ... FOR UPDATE` con dos
+conexiones genuinamente paralelas. Para eso existe el fixture
+`sesiones_paralelas`: dos `AsyncSession` independientes contra su propia base
+(`torneos_mvp_test_concurrencia`, reconstruida entera antes de cada test),
+donde un `commit()` sí persiste. Correlos con `pytest -m concurrencia` o
+`.\verificar.ps1 -Concurrencia` desde la raíz del repo.
+
+Test de ejemplo, copiable entero — dos sesiones intentan lockear la misma
+fila con `FOR UPDATE`, la segunda espera y recibe el resultado de la primera:
+
+```python
+import asyncio
+
+import pytest
+
+from app.repositories.partido import PartidoRepository
+
+
+@pytest.mark.concurrencia
+async def test_dos_sesiones_lockean_la_misma_fila_en_serie(sesiones_paralelas):
+    sesion_a, sesion_b = sesiones_paralelas
+
+    partido_a = await PartidoRepository(sesion_a).get_or_404_bloqueado(3)
+    partido_a.jornada = 99
+    # Con el lock tomado por sesion_a, sesion_b tiene que ESPERAR acá —
+    # esto es lo que un test contra la base compartida no puede probar.
+    async with asyncio.timeout(5):
+        partido_b_fut = asyncio.ensure_future(
+            PartidoRepository(sesion_b).get_or_404_bloqueado(3)
+        )
+        await asyncio.sleep(0.2)
+        assert not partido_b_fut.done()  # sesion_b sigue esperando
+
+        await sesion_a.commit()  # libera el lock
+        partido_b = await partido_b_fut
+
+    assert partido_b.jornada == 99  # ve el commit de sesion_a
+    await sesion_b.commit()
+```
+
+Riesgo conocido: si las dos sesiones toman un lock en orden cruzado, el test
+puede colgarse en vez de fallar — envolvé la mitad contenciosa en
+`asyncio.wait_for`/`asyncio.timeout` explícito, como el ejemplo de arriba,
+para que un deadlock salga como fallo con mensaje.
+
+### Regla de nombres de parámetros de query
+
+Sustantivos de dominio en español (`disciplina_id`, `estado`, `alcance`),
+primitivas de paginación/búsqueda en inglés (`skip`, `limit`, `q`) — el repo
+ya mezcla los dos por convención, no por descuido; el próximo parámetro
+sigue la misma regla en vez de litigarla de nuevo.

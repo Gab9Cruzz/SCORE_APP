@@ -1,10 +1,25 @@
-"""Infra de tests.
+"""Infra de tests — DOS harness distintos, para dos problemas distintos.
 
-Reconstruye una base torneos_mvp_test corriendo los mismos .sql de /database
-(una vez por sesión) y envuelve cada test en una transacción con savepoints
-que se revierte al final (join_transaction_mode="create_savepoint") — así
-un `session.commit()` dentro de un repositorio no persiste nada de verdad.
-Nunca toca torneos_mvp.
+**`db_session`** (el que usa casi todo el archivo): una base
+`torneos_mvp_test`, reconstruida una vez por sesión de pytest corriendo los
+mismos .sql de /database, con cada test envuelto en una transacción con
+savepoints que se revierte al final (`join_transaction_mode=
+"create_savepoint"`) — un `session.commit()` dentro de un repositorio NO
+persiste nada de verdad, así que los ~520 tests que dependen del seed de
+`05_seed.sql` quedan intocables por construcción, sin importar el orden en
+que corran. Nunca toca `torneos_mvp`. Usalo para todo lo que no necesite
+dos conexiones genuinamente paralelas.
+
+**`sesiones_paralelas`** (A2, docs/plans/cierre-pendientes-todos-plan.md):
+para lo que `db_session` no puede — dos transacciones DB REALES y
+simultáneas (ej. probar un `SELECT ... FOR UPDATE`). Corre contra su PROPIA
+base, `torneos_mvp_test_concurrencia`, reconstruida ENTERA antes de cada
+test que la use — no hay savepoint que la salve, así que un `commit()` ahí
+persiste de verdad y un `TRUNCATE` no se revierte solo. Marcá esos tests con
+`@pytest.mark.concurrencia` (registrado en pytest.ini) — quedan afuera de
+`pytest -q` por default (ver verificar.ps1, switch `-Concurrencia`) porque
+son más lentos y reconstruyen una base entera por test. Ver
+`backend/README.md` para un test de ejemplo copiable entero.
 """
 import asyncio
 import pathlib
@@ -64,26 +79,62 @@ async def _connect(database: str) -> asyncpg.Connection:
     )
 
 
-async def _recreate_test_database() -> None:
+class NombreDeBaseNoEsDeTestError(Exception):
+    """A1/A2 (docs/plans/cierre-pendientes-todos-plan.md) — `_recrear_base`
+    se niega a operar (`pg_terminate_backend` + `DROP DATABASE`) sobre un
+    nombre que no matchea el patrón test-only. Sin esto, un
+    `TEST_DATABASE_URL` mal apuntado (ej. a `torneos_mvp`, la base de
+    desarrollo) mataría sus conexiones vivas y la borraría."""
+
+
+def _verificar_nombre_de_base_de_test(nombre: str) -> None:
+    if not (nombre.endswith("_test") or nombre.endswith("_test_concurrencia")):
+        raise NombreDeBaseNoEsDeTestError(
+            f"'{nombre}' no matchea el patrón test-only (%_test / %_test_concurrencia) — "
+            "me niego a hacerle pg_terminate_backend + DROP DATABASE."
+        )
+
+
+async def _recrear_base(nombre_base: str) -> None:
+    """DROP + CREATE + corre los .sql de /database sobre `nombre_base`.
+    Usado tanto por `torneos_mvp_test` (session-scoped, ver
+    `_test_db_ready`) como por `torneos_mvp_test_concurrencia` (A2,
+    function-scoped, ver `sesiones_paralelas`) — un solo lugar que sabe
+    reconstruir una base de test desde cero.
+
+    El guard va PRIMERO, antes de `_connect` siquiera — no solo antes del
+    `DROP DATABASE` (SUPERSEDE de una versión anterior de esta obligación,
+    corrección de la revisión 3 del plan): `pg_terminate_backend` YA es
+    destructivo (mata conexiones vivas) y corre ANTES del DROP; un guard
+    atado solo al DROP lo dejaría sin protección."""
+    _verificar_nombre_de_base_de_test(nombre_base)
     maint = await _connect("postgres")
     try:
         await maint.execute(
             "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
             "WHERE datname = $1 AND pid <> pg_backend_pid()",
-            TEST_DB_NAME,
+            nombre_base,
         )
-        await maint.execute(f'DROP DATABASE IF EXISTS "{TEST_DB_NAME}"')
-        await maint.execute(f'CREATE DATABASE "{TEST_DB_NAME}"')
+        await maint.execute(f'DROP DATABASE IF EXISTS "{nombre_base}"')
+        await maint.execute(f'CREATE DATABASE "{nombre_base}"')
     finally:
         await maint.close()
 
-    test_conn = await _connect(TEST_DB_NAME)
+    test_conn = await _connect(nombre_base)
     try:
         for filename in SQL_FILES:
             sql = (DATABASE_DIR / filename).read_text(encoding="utf-8")
             await test_conn.execute(sql)
     finally:
         await test_conn.close()
+
+
+async def _recreate_test_database() -> None:
+    await _recrear_base(TEST_DB_NAME)
+
+
+TEST_DB_CONCURRENCIA_NAME = f"{TEST_DB_NAME}_concurrencia"
+TEST_DATABASE_URL_CONCURRENCIA = TEST_DATABASE_URL.rsplit("/", 1)[0] + "/" + TEST_DB_CONCURRENCIA_NAME
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -123,6 +174,45 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
         await session.close()
         await trans.rollback()
         await connection.close()
+
+
+@pytest_asyncio.fixture
+async def sesiones_paralelas() -> AsyncGenerator[tuple[AsyncSession, AsyncSession], None]:
+    """A2 (docs/plans/cierre-pendientes-todos-plan.md) — dos `AsyncSession`
+    INDEPENDIENTES, cada una con su propia conexión al pool, contra su
+    PROPIA base (`torneos_mvp_test_concurrencia`) — sin el savepoint
+    envolvente de `db_session`: un `commit()` acá persiste de verdad.
+
+    Reconstruye la base ENTERA antes de CADA test que use este fixture
+    (function-scoped, no module-scoped). Con el puñado de tests que la
+    usan hoy, reconstruir cada vez es más simple y más robusto que un
+    `TRUNCATE` acotado a mano por tabla — elimina por completo el riesgo
+    de que un test deje basura para el siguiente (el mismo riesgo de
+    "verde según el orden de pytest" que motivó que esta base sea propia
+    y no la compartida). Si la cantidad de tests de este marker crece lo
+    suficiente para que el costo de reconstruir moleste, ahí vale la pena
+    revisar a un `TRUNCATE` selectivo con scope de módulo — no antes.
+
+    Marcá el test con `@pytest.mark.concurrencia` (registrado en
+    `pytest.ini`) — corren aparte de `pytest -q` por default, ver
+    `verificar.ps1` (`-Concurrencia`).
+
+    Riesgo conocido: si las dos sesiones toman un lock en orden cruzado,
+    el test puede quedarse colgado en vez de fallar — envolvé la mitad
+    contenciosa en `asyncio.wait_for(..., timeout=N)` explícito, para que
+    un deadlock salga como fallo con mensaje, no como una corrida
+    colgada."""
+    await _recrear_base(TEST_DB_CONCURRENCIA_NAME)
+    eng = create_async_engine(TEST_DATABASE_URL_CONCURRENCIA, future=True, pool_pre_ping=True)
+    session_factory = async_sessionmaker(bind=eng, expire_on_commit=False)
+    sesion_a = session_factory()
+    sesion_b = session_factory()
+    try:
+        yield sesion_a, sesion_b
+    finally:
+        await sesion_a.close()
+        await sesion_b.close()
+        await eng.dispose()
 
 
 @pytest_asyncio.fixture
