@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../api/client";
 import { useCatalogo } from "../../hooks/useCatalogo";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
 import { iconoDisciplina } from "../../components/iconosDisciplina";
+import { SelectorJugadorBuscable, type JugadorBuscadoRow } from "../../components/admin/SelectorJugadorBuscable";
 
 interface EquipoDetalle {
   id: number;
@@ -179,9 +180,21 @@ export function DetalleEquipoPage() {
 
 const JUGADOR_VACIO = { cedula: "", nombre: "", correo_electronico: "" };
 
-/** Flujo 2 del plan: buscador con debounce (GET /jugadores?q=) + alerta
- * de multimilitancia (Nivel 1 del algoritmo, no bloqueante) antes de
- * confirmar. Sin conflicto, agrega directo sin modal. */
+/** Flujo 2 del plan: búsqueda server-side (C1, docs/plans/cierre-
+ * pendientes-todos-plan.md — delegada a `SelectorJugadorBuscable`, en vez
+ * de la reimplementación propia que tenía este modal) + alerta de
+ * multimilitancia (Nivel 1 del algoritmo, no bloqueante) antes de
+ * confirmar. Sin conflicto, agrega directo sin frenar en la confirmación.
+ *
+ * Secuencia (Fase 2 del plan, obligación de diseño): un solo modal, DOS
+ * paneles — el selector queda montado y visible pero INERTE (atenuado, no
+ * enfocable, `inert`) mientras la confirmación de conflicto se renderiza
+ * debajo de la fila elegida, con "Volver a buscar" a un toque que reactiva
+ * el selector y descarta la elección. `SelectorJugadorBuscable` se queda
+ * haciendo solo la búsqueda — la confirmación de conflicto y el alta
+ * inline de jugador nuevo se quedan acá alrededor, no se absorben como
+ * props del selector compartido (si no, su único otro consumidor,
+ * TraspasosDelTorneo, hereda comportamiento que no le sirve). */
 function ModalBuscarAgregarJugador(props: {
   equipoId: number;
   equipoNombre: string;
@@ -189,33 +202,18 @@ function ModalBuscarAgregarJugador(props: {
   onClose: () => void;
 }) {
   const { equipoId, onAgregado, onClose } = props;
-  const [texto, setTexto] = useState("");
-  const [textoDebounced, setTextoDebounced] = useState("");
+  const [elegido, setElegido] = useState<JugadorBuscadoRow | null>(null);
   const [creando, setCreando] = useState(false);
   const [nuevoJugador, setNuevoJugador] = useState(JUGADOR_VACIO);
   const [confirmando, setConfirmando] = useState<{
-    jugador: JugadorRow;
+    jugador: JugadorBuscadoRow;
     conflicto: { conflicto: boolean; equipos: string[]; mensaje?: string | null };
   } | null>(null);
 
-  // Debounce 300ms (Flujo 2 del plan).
-  useDebouncedEffect(texto, 300, setTextoDebounced);
-
-  const resultadosQuery = useQuery({
-    queryKey: ["jugadores-buscar", textoDebounced],
-    queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/jugadores", {
-        params: { query: { q: textoDebounced, limit: 20 } },
-      });
-      if (error) throw error;
-      return data as JugadorRow[];
-    },
-    enabled: textoDebounced.trim() !== "",
-  });
-
   const crearJugador = useResourceCrud<JugadorRow>({ resourceKey: "jugadores", basePath: "/api/v1/jugadores" });
 
-  async function elegirJugador(jugador: JugadorRow) {
+  async function elegirJugador(jugador: JugadorBuscadoRow) {
+    setElegido(jugador);
     const { data, error } = await api.GET("/api/v1/equipos/{equipo_id}/plantilla-base/verificar", {
       params: { path: { equipo_id: equipoId }, query: { jugador_id: jugador.id } },
     });
@@ -228,124 +226,101 @@ function ModalBuscarAgregarJugador(props: {
     }
   }
 
-  const pareceCedula = /^\d+$/.test(texto.trim());
-  const puedeCrear = nuevoJugador.cedula.trim() !== "" && nuevoJugador.nombre.trim() !== "" && nuevoJugador.correo_electronico.trim() !== "";
-
-  if (confirmando) {
-    // Flujo 2: modal bloqueante, texto literal — el admin tiene que
-    // leerlo completo, no un warning que se pueda ignorar sin leer.
-    return (
-      <div className="modal-overlay" role="dialog" aria-label="Advertencia de multimilitancia">
-        <div className="modal-panel">
-          <p>
-            ⚠️ {confirmando.jugador.nombre} ya está inscrito en {confirmando.conflicto.equipos.join(", ")}.
-          </p>
-          <p>{confirmando.conflicto.mensaje}</p>
-          <div className="resource-form__actions">
-            <button type="button" className="link-button" onClick={() => setConfirmando(null)}>
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onAgregado({ jugador_id: confirmando.jugador.id, dorsal: null });
-                onClose();
-              }}
-            >
-              Agregar igual
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  function volverABuscar() {
+    setElegido(null);
+    setConfirmando(null);
   }
+
+  const puedeCrear = nuevoJugador.cedula.trim() !== "" && nuevoJugador.nombre.trim() !== "" && nuevoJugador.correo_electronico.trim() !== "";
 
   return (
     <div className="modal-overlay" role="dialog" aria-label="Buscar o agregar jugador">
       <div className="modal-panel">
         <h2>Buscar por nombre o cédula — {props.equipoNombre}</h2>
-        <input
-          aria-label="Buscar jugador"
-          placeholder="Nombre o cédula..."
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          autoFocus
-        />
 
-        {textoDebounced.trim() !== "" && !resultadosQuery.isLoading && (resultadosQuery.data ?? []).length === 0 && (
-          <p className="muted">Ningún jugador coincide con "{textoDebounced}".</p>
-        )}
-        {(resultadosQuery.data ?? []).map((j) => (
-          <div key={j.id} className="modal-panel__equipo-fila">
-            <span>
-              {j.nombre} — {j.cedula}
-            </span>
-            <button type="button" onClick={() => elegirJugador(j)}>
-              Agregar
-            </button>
-          </div>
-        ))}
+        <div className={confirmando ? "is-inerte" : undefined} inert={confirmando != null}>
+          <SelectorJugadorBuscable elegido={elegido} onElegir={elegirJugador} onCambiar={volverABuscar} />
+        </div>
 
-        <p className="modal-panel__separador">— o —</p>
-        {!creando ? (
-          <button
-            type="button"
-            onClick={() => {
-              setCreando(true);
-              setNuevoJugador({
-                ...JUGADOR_VACIO,
-                cedula: pareceCedula ? texto.trim() : "",
-                nombre: pareceCedula ? "" : texto.trim(),
-              });
-            }}
-          >
-            + Crear jugador nuevo
-          </button>
-        ) : (
-          <div className="resource-form">
-            <label>
-              Cédula
-              <input
-                value={nuevoJugador.cedula}
-                onChange={(e) => setNuevoJugador((j) => ({ ...j, cedula: e.target.value }))}
-              />
-            </label>
-            <label>
-              Nombre
-              <input
-                value={nuevoJugador.nombre}
-                onChange={(e) => setNuevoJugador((j) => ({ ...j, nombre: e.target.value }))}
-              />
-            </label>
-            <label>
-              Correo
-              <input
-                value={nuevoJugador.correo_electronico}
-                onChange={(e) => setNuevoJugador((j) => ({ ...j, correo_electronico: e.target.value }))}
-              />
-            </label>
-            {crearJugador.create.isError && (
-              <p className="error-text">{apiErrorMessage(crearJugador.create.error)}</p>
-            )}
+        {confirmando && (
+          // Flujo 2: texto literal — el admin tiene que leerlo completo,
+          // no un warning que se pueda ignorar sin leer.
+          <div className="resource-form" aria-label="Advertencia de multimilitancia">
+            <p>
+              ⚠️ {confirmando.jugador.nombre} ya está inscrito en {confirmando.conflicto.equipos.join(", ")}.
+            </p>
+            <p>{confirmando.conflicto.mensaje}</p>
             <div className="resource-form__actions">
+              <button type="button" className="link-button" onClick={volverABuscar}>
+                Volver a buscar
+              </button>
               <button
                 type="button"
-                disabled={!puedeCrear || crearJugador.create.isPending}
-                onClick={() =>
-                  crearJugador.create.mutate(
-                    {
-                      nombre: nuevoJugador.nombre.trim(),
-                      cedula: nuevoJugador.cedula.trim(),
-                      correo_electronico: nuevoJugador.correo_electronico.trim(),
-                    } as never,
-                    { onSuccess: (jugador) => elegirJugador(jugador as JugadorRow) },
-                  )
-                }
+                onClick={() => {
+                  onAgregado({ jugador_id: confirmando.jugador.id, dorsal: null });
+                  onClose();
+                }}
               >
-                {crearJugador.create.isPending ? "Creando..." : "Crear y agregar"}
+                Agregar igual
               </button>
             </div>
           </div>
+        )}
+
+        {elegido == null && (
+          <>
+            <p className="modal-panel__separador">— o —</p>
+            {!creando ? (
+              <button type="button" onClick={() => setCreando(true)}>
+                + Crear jugador nuevo
+              </button>
+            ) : (
+              <div className="resource-form">
+                <label>
+                  Cédula
+                  <input
+                    value={nuevoJugador.cedula}
+                    onChange={(e) => setNuevoJugador((j) => ({ ...j, cedula: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  Nombre
+                  <input
+                    value={nuevoJugador.nombre}
+                    onChange={(e) => setNuevoJugador((j) => ({ ...j, nombre: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  Correo
+                  <input
+                    value={nuevoJugador.correo_electronico}
+                    onChange={(e) => setNuevoJugador((j) => ({ ...j, correo_electronico: e.target.value }))}
+                  />
+                </label>
+                {crearJugador.create.isError && (
+                  <p className="error-text">{apiErrorMessage(crearJugador.create.error)}</p>
+                )}
+                <div className="resource-form__actions">
+                  <button
+                    type="button"
+                    disabled={!puedeCrear || crearJugador.create.isPending}
+                    onClick={() =>
+                      crearJugador.create.mutate(
+                        {
+                          nombre: nuevoJugador.nombre.trim(),
+                          cedula: nuevoJugador.cedula.trim(),
+                          correo_electronico: nuevoJugador.correo_electronico.trim(),
+                        } as never,
+                        { onSuccess: (jugador) => elegirJugador(jugador as JugadorRow) },
+                      )
+                    }
+                  >
+                    {crearJugador.create.isPending ? "Creando..." : "Crear y agregar"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         <div className="resource-form__actions">
@@ -356,14 +331,4 @@ function ModalBuscarAgregarJugador(props: {
       </div>
     </div>
   );
-}
-
-/** Debounce mínimo sin librería extra — sincroniza `setter(value)` 300ms
- * después de que el usuario deja de tipear (Flujo 2 del plan). */
-function useDebouncedEffect(value: string, delayMs: number, setter: (v: string) => void) {
-  useEffect(() => {
-    const id = setTimeout(() => setter(value), delayMs);
-    return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
 }

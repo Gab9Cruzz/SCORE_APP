@@ -1631,6 +1631,14 @@ td:first-child {
   font-weight: 600;
 }
 
+/* C1 (docs/plans/cierre-pendientes-todos-plan.md, DetalleEquipo): el
+   selector queda montado y visible pero inerte mientras se confirma un
+   conflicto de multimilitancia debajo — `inert` ya bloquea foco/clicks,
+   esto solo da la señal visual de que no es interactivo ahora mismo. */
+.is-inerte {
+  opacity: 0.5;
+}
+
 .campo-derivado {
   display: flex;
   flex-direction: column;
