@@ -1,3 +1,5 @@
+from typing import Sequence
+
 from sqlalchemy import func, select, text
 
 from app.models.inscripcion_torneo import InscripcionTorneo
@@ -7,6 +9,29 @@ from app.repositories.base import BaseRepository
 class InscripcionTorneoRepository(BaseRepository[InscripcionTorneo]):
     model = InscripcionTorneo
     nombre_recurso = "Inscripción"
+
+    async def list(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        torneo_id: int | None = None,
+        equipo_id: int | None = None,
+        torneo_ids_permitidos: Sequence[int] | None = None,
+    ) -> list[InscripcionTorneo]:
+        """Override de `BaseRepository.list` (P3, TODOS.md): el filtro por
+        asignación necesita `.in_()`, que el genérico por igualdad de la
+        base no sabe hacer — mismo motivo que `TorneoRepository.list`/
+        `PartidoRepository.list` ya tienen el suyo propio."""
+        stmt = select(InscripcionTorneo)
+        if torneo_id is not None:
+            stmt = stmt.where(InscripcionTorneo.torneo_id == torneo_id)
+        if equipo_id is not None:
+            stmt = stmt.where(InscripcionTorneo.equipo_id == equipo_id)
+        if torneo_ids_permitidos is not None:
+            stmt = stmt.where(InscripcionTorneo.torneo_id.in_(torneo_ids_permitidos))
+        stmt = stmt.order_by(InscripcionTorneo.id).offset(skip).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     async def lock_cupo_inscripcion(self, inscripcion_torneo_id: int) -> None:
         """EC-6 (cupo de la modalidad, Pareja/Individual tamano_equipo<=2):

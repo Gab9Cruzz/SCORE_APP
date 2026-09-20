@@ -23,6 +23,44 @@ async def test_listar_inscripciones_es_publico(client: AsyncClient):
     assert len(resp.json()) == 3  # 05_seed.sql inscribe a los 3 equipos
 
 
+# --- Recorte por asignación del LISTADO (P3, TODOS.md — revisión de cierre
+# 2026-09-18): las escrituras ya estaban protegidas por
+# require_torneo_access_de, pero el GET no filtraba. Mismo criterio que
+# GET /torneos?solo_mios/GET /partidos?solo_mios, salvo que acá es forzado
+# (no un query param que el cliente pueda desactivar) — un TorneoAdmin no
+# tiene ningún caso de uso legítimo para ver inscripciones de un torneo que
+# no le asignaron. ---
+
+
+async def test_torneo_admin_con_asignacion_ve_las_inscripciones_de_su_torneo(
+    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]
+):
+    resp = await client.get(
+        "/api/v1/inscripciones", params={"torneo_id": 1}, headers=torneo_admin_con_torneo_headers
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()) == 3
+
+
+async def test_torneo_admin_sin_asignacion_no_ve_inscripciones_ajenas(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    resp = await client.get("/api/v1/inscripciones", params={"torneo_id": 1}, headers=torneo_admin_headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_admin_general_y_anonimo_ven_todo_sin_recorte(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    resp_anonimo = await client.get("/api/v1/inscripciones", params={"torneo_id": 1})
+    resp_admin_general = await client.get(
+        "/api/v1/inscripciones", params={"torneo_id": 1}, headers=admin_general_headers
+    )
+    assert len(resp_anonimo.json()) == 3
+    assert len(resp_admin_general.json()) == 3
+
+
 # --- require_torneo_access_de (rbac-licencias-torneos-plan.md, Fase 2) ---
 
 

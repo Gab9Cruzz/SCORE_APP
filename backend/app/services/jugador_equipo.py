@@ -27,6 +27,7 @@ class JugadorEquipoService:
         inscripcion_torneo_id: int | None = None,
         jugador_perfil_id: int | None = None,
         torneo_id: int | None = None,
+        torneo_ids_permitidos: list[int] | None = None,
     ) -> list[JugadorEquipo]:
         # torneo_id necesita un join (no vive directo en la fila, ver
         # JugadorEquipoRepository.listar_por_torneo) — no se puede combinar
@@ -35,13 +36,20 @@ class JugadorEquipoService:
         # otros dos filtros SÍ se combinan con torneo_id en la misma
         # consulta (bug corregido en fixes-datos-traspasos-control-mesa-
         # plan.md: antes se descartaban en cuanto torneo_id venía seteado).
-        if torneo_id is not None:
+        #
+        # `torneo_ids_permitidos` (P3, TODOS.md) fuerza esta misma rama
+        # aunque no venga `torneo_id`: un TorneoAdmin que pida solo
+        # `inscripcion_torneo_id`/`jugador_perfil_id` también tiene que
+        # quedar recortado a sus torneos asignados, no solo cuando filtra
+        # por `torneo_id` explícito.
+        if torneo_id is not None or torneo_ids_permitidos is not None:
             return await self.repo.listar_por_torneo(
                 torneo_id,
                 skip=skip,
                 limit=limit,
                 jugador_perfil_id=jugador_perfil_id,
                 inscripcion_torneo_id=inscripcion_torneo_id,
+                torneo_ids_permitidos=torneo_ids_permitidos,
             )
         return await self.repo.list(
             skip=skip,

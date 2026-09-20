@@ -3,8 +3,10 @@ from datetime import date
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles, require_torneo_access_de
+from app.api.deps import get_current_user_optional, require_roles, require_torneo_access_de
 from app.db.session import get_db
+from app.models.usuario import Usuario
+from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
 from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.repositories.jugador_equipo import JugadorEquipoRepository
 from app.schemas.jugador_equipo import (
@@ -37,12 +39,25 @@ async def listar_plantilla(
     jugador_perfil_id: int | None = None,
     torneo_id: int | None = None,
     session: AsyncSession = Depends(get_db),
+    usuario: Usuario | None = Depends(get_current_user_optional),
 ) -> list[JugadorEquipoOut]:
     """`torneo_id` filtra a los vínculos de ESE torneo (todos sus equipos) —
     lo usa el dashboard scoped por torneo (torneos-admin-plan.md, D-Eng-3).
-    Antes de esto el GET devolvía el sistema completo sin filtrar."""
+    Antes de esto el GET devolvía el sistema completo sin filtrar.
+
+    Recorte por asignación (P3, TODOS.md) — mismo criterio que
+    `GET /inscripciones`: un TorneoAdmin queda forzado a sus torneos
+    asignados incluso si pide solo `inscripcion_torneo_id`/
+    `jugador_perfil_id` sin `torneo_id` explícito. Sin auth, AdminGeneral o
+    Arbitro: sin recorte."""
+    torneo_ids_permitidos: list[int] | None = None
+    if usuario is not None and usuario.rol == "TorneoAdmin":
+        torneo_ids_permitidos = await AsignacionTorneoAdminRepository(session).listar_torneo_ids_activos(usuario.id)
     return await JugadorEquipoService(session).list(
-        inscripcion_torneo_id=inscripcion_torneo_id, jugador_perfil_id=jugador_perfil_id, torneo_id=torneo_id
+        inscripcion_torneo_id=inscripcion_torneo_id,
+        jugador_perfil_id=jugador_perfil_id,
+        torneo_id=torneo_id,
+        torneo_ids_permitidos=torneo_ids_permitidos,
     )
 
 

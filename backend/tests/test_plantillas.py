@@ -79,6 +79,45 @@ async def test_filtrar_plantilla_por_torneo_y_jugador_perfil_combinados(client: 
     assert filas[0]["jugador_perfil_id"] == 1
     assert filas[0]["inscripcion_torneo_id"] == 1
 
+
+# --- Recorte por asignación del LISTADO (P3, TODOS.md — revisión de cierre
+# 2026-09-18) — mismo criterio que test_inscripciones.py. Forzado para
+# TorneoAdmin incluso SIN `torneo_id` explícito (solo
+# `inscripcion_torneo_id`), que es justo el caso que rompía antes de que
+# `JugadorEquipoRepository.listar_por_torneo` aceptara `torneo_id=None`. ---
+
+
+async def test_torneo_admin_con_asignacion_ve_la_plantilla_de_su_torneo(
+    client: AsyncClient, torneo_admin_con_torneo_headers: dict[str, str]
+):
+    resp = await client.get(
+        "/api/v1/plantillas", params={"torneo_id": 1}, headers=torneo_admin_con_torneo_headers
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()) == 3
+
+
+async def test_torneo_admin_sin_asignacion_no_ve_plantilla_ajena_por_torneo(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    resp = await client.get("/api/v1/plantillas", params={"torneo_id": 1}, headers=torneo_admin_headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_torneo_admin_sin_asignacion_no_ve_plantilla_ajena_por_inscripcion(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    """Sin `torneo_id` en la query — el recorte tiene que aplicarse igual
+    (ver JugadorEquipoService.list, rama forzada por torneo_ids_permitidos)."""
+    resp = await client.get(
+        "/api/v1/plantillas",
+        params={"inscripcion_torneo_id": INSCRIPCION_TIBURONES_ID},
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json() == []
+
     # Combinado con inscripcion_torneo_id también filtra correctamente —
     # jugador_perfil_id=1 NO está en la inscripción de Águilas del Sur.
     resp = await client.get(

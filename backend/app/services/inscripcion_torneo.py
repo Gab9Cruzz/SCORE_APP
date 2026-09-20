@@ -48,9 +48,20 @@ class InscripcionTorneoService:
         return await self.repo.get_or_404(id_)
 
     async def list(
-        self, skip: int = 0, limit: int = 100, torneo_id: int | None = None, equipo_id: int | None = None
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        torneo_id: int | None = None,
+        equipo_id: int | None = None,
+        torneo_ids_permitidos: list[int] | None = None,
     ) -> list[InscripcionTorneo]:
-        return await self.repo.list(skip=skip, limit=limit, torneo_id=torneo_id, equipo_id=equipo_id)
+        return await self.repo.list(
+            skip=skip,
+            limit=limit,
+            torneo_id=torneo_id,
+            equipo_id=equipo_id,
+            torneo_ids_permitidos=torneo_ids_permitidos,
+        )
 
     async def create(self, data: InscripcionTorneoCreate) -> InscripcionTorneoOut:
         if data.equipo_id is not None:

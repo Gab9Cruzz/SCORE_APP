@@ -1,3 +1,5 @@
+from typing import Sequence
+
 from sqlalchemy import func, select, text
 
 from app.models.inscripcion_torneo import InscripcionTorneo
@@ -32,11 +34,12 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
 
     async def listar_por_torneo(
         self,
-        torneo_id: int,
+        torneo_id: int | None,
         skip: int = 0,
         limit: int = 100,
         jugador_perfil_id: int | None = None,
         inscripcion_torneo_id: int | None = None,
+        torneo_ids_permitidos: Sequence[int] | None = None,
     ) -> list[JugadorEquipo]:
         """Torneo_ID no vive directo en esta tabla (Fase 1) — mismo join que
         get_activo_en_torneo. Usado por el dashboard scoped de
@@ -51,12 +54,22 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
         torneo_id=Y devolvía TODO el roster del torneo, no solo lo del
         perfil pedido (bug real, encontrado en producción: Traspasos
         mostraba siempre el mismo equipo de origen — el primero de la
-        lista sin filtrar — para cualquier jugador)."""
-        stmt = (
-            select(JugadorEquipo)
-            .join(InscripcionTorneo, InscripcionTorneo.id == JugadorEquipo.inscripcion_torneo_id)
-            .where(InscripcionTorneo.torneo_id == torneo_id)
+        lista sin filtrar — para cualquier jugador).
+
+        `torneo_ids_permitidos` (P3, TODOS.md): `torneo_id` es opcional acá
+        justamente para este caso — un TorneoAdmin puede pedir
+        `?inscripcion_torneo_id=X` o `?jugador_perfil_id=X` SIN pasar
+        `torneo_id`, y aun así tiene que quedar recortado a sus torneos
+        asignados. `JugadorEquipoService.list` fuerza este método (en vez
+        del `list` genérico de la base) cada vez que hay un scope que
+        aplicar, con o sin `torneo_id` explícito."""
+        stmt = select(JugadorEquipo).join(
+            InscripcionTorneo, InscripcionTorneo.id == JugadorEquipo.inscripcion_torneo_id
         )
+        if torneo_id is not None:
+            stmt = stmt.where(InscripcionTorneo.torneo_id == torneo_id)
+        if torneo_ids_permitidos is not None:
+            stmt = stmt.where(InscripcionTorneo.torneo_id.in_(torneo_ids_permitidos))
         if jugador_perfil_id is not None:
             stmt = stmt.where(JugadorEquipo.jugador_perfil_id == jugador_perfil_id)
         if inscripcion_torneo_id is not None:

@@ -146,6 +146,41 @@ async def test_filtrar_traspasos_por_torneo(client: AsyncClient, admin_general_h
     assert resp.json() == []
 
 
+# --- Recorte por asignación del LISTADO (P3, TODOS.md — revisión de cierre
+# 2026-09-18) — mismo criterio que test_inscripciones.py/test_plantillas.py. ---
+
+
+async def test_torneo_admin_sin_asignacion_no_ve_traspasos_ajenos(
+    client: AsyncClient, admin_general_headers: dict[str, str], torneo_admin_headers: dict[str, str]
+):
+    perfil_id = await _perfil_de_carlos(client)
+    resp = await client.post(
+        "/api/v1/traspasos",
+        json={
+            "jugador_perfil_id": perfil_id,
+            "inscripcion_origen_id": INSCRIPCION_TIBURONES,
+            "inscripcion_destino_id": INSCRIPCION_AGUILAS,
+            "dorsal_nuevo": 57,
+            "motivo": "Prueba recorte por asignación",
+        },
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+    resp = await client.get("/api/v1/traspasos", params={"torneo_id": 1}, headers=torneo_admin_headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+    # Sin `torneo_id` en la query, filtrando solo por `jugador_perfil_id` —
+    # el recorte tiene que aplicarse igual (TraspasoService.list, rama
+    # forzada por torneo_ids_permitidos).
+    resp = await client.get(
+        "/api/v1/traspasos", params={"jugador_perfil_id": perfil_id}, headers=torneo_admin_headers
+    )
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 async def test_traspaso_desde_libre_sin_origen(client: AsyncClient, admin_general_headers: dict[str, str]):
     resp = await client.post(
         "/api/v1/jugadores",

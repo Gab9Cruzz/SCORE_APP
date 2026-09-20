@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles, require_torneo_access_de
+from app.api.deps import get_current_user_optional, require_roles, require_torneo_access_de
 from app.db.session import get_db
+from app.models.usuario import Usuario
+from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
 from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.schemas.inscripcion_torneo import (
     InscripcionTorneoCreate,
@@ -31,8 +33,25 @@ async def listar_inscripciones(
     torneo_id: int | None = None,
     equipo_id: int | None = None,
     session: AsyncSession = Depends(get_db),
+    usuario: Usuario | None = Depends(get_current_user_optional),
 ) -> list[InscripcionTorneoOut]:
-    return await InscripcionTorneoService(session).list(torneo_id=torneo_id, equipo_id=equipo_id)
+    """Sin auth (anónimo/Público) o con AdminGeneral/Arbitro: sin recorte,
+    igual que siempre — este listado alimenta pantallas públicas (equipos
+    inscriptos de un torneo). Un TorneoAdmin SÍ queda recortado a sus
+    torneos asignados, siempre, sin flag opt-in que el cliente pueda
+    desactivar (TODOS.md, P3: "el alcance NO se expresa como query param
+    elegible por el cliente — se deriva implícito del token vía
+    torneo_ids_permitidos, mismo patrón que torneos/partidos"). A
+    diferencia de `GET /torneos`/`GET /partidos` (que exponen `solo_mios`
+    como opt-in), acá el recorte es forzado: el listado de sub-recursos de
+    UN torneo específico no tiene un caso de uso legítimo en el que un
+    TorneoAdmin necesite ver los de un torneo que no le asignaron."""
+    torneo_ids_permitidos: list[int] | None = None
+    if usuario is not None and usuario.rol == "TorneoAdmin":
+        torneo_ids_permitidos = await AsignacionTorneoAdminRepository(session).listar_torneo_ids_activos(usuario.id)
+    return await InscripcionTorneoService(session).list(
+        torneo_id=torneo_id, equipo_id=equipo_id, torneo_ids_permitidos=torneo_ids_permitidos
+    )
 
 
 @router.get("/{inscripcion_id}", response_model=InscripcionTorneoOut)
