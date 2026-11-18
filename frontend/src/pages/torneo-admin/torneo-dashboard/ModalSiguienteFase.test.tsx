@@ -124,8 +124,10 @@ describe("ModalSiguienteFase — selector de formato de eliminatoria (paso 2b)",
     expect(radioMixto).toBeChecked();
   });
 
-  it("envía formato_eliminatoria y clasificados_por_grupo elegidos", async () => {
-    let cuerpoEnviado: { clasificados_por_grupo?: number; formato_eliminatoria?: string } | undefined;
+  it("envía formato_eliminatoria, clasificados_por_grupo y método de desempate elegidos", async () => {
+    let cuerpoEnviado:
+      | { clasificados_por_grupo?: number; formato_eliminatoria?: string; metodo_desempate_eliminatoria?: string }
+      | undefined;
     server.use(
       http.post(PLAYOFFS_URL, async ({ request }) => {
         cuerpoEnviado = (await request.json()) as never;
@@ -139,7 +141,13 @@ describe("ModalSiguienteFase — selector de formato de eliminatoria (paso 2b)",
     await user.click(screen.getByRole("button", { name: "Generar Playoffs" }));
 
     await waitFor(() =>
-      expect(cuerpoEnviado).toEqual({ clasificados_por_grupo: 2, formato_eliminatoria: "Ida_Vuelta" }),
+      // Cronómetro por periodos (default de renderModal): el desempate se
+      // envía; con "Corrido" el componente lo omite.
+      expect(cuerpoEnviado).toEqual({
+        clasificados_por_grupo: 2,
+        formato_eliminatoria: "Ida_Vuelta",
+        metodo_desempate_eliminatoria: "Manual",
+      }),
     );
   });
 });
