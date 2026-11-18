@@ -124,7 +124,11 @@ async def test_nunca_se_guarda_la_password_probada(client: AsyncClient, db_sessi
     assert secreto not in valores
 
 
-async def test_se_registra_ip_y_user_agent(client: AsyncClient, db_session: AsyncSession):
+async def test_se_registra_ip_y_user_agent(
+    client: AsyncClient, db_session: AsyncSession, proxy_de_confianza_local: None
+):
+    """Con la conexión llegando desde un proxy de confianza (TASK-004), la
+    bitácora anota el cliente original de X-Forwarded-For."""
     await client.post(
         "/api/v1/auth/login",
         data={"username": "con_headers", "password": "x"},

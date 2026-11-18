@@ -95,8 +95,11 @@ class AccesoRepository(BaseRepository[Acceso]):
         todos por los fallos de uno.
 
         `username` compara EXACTO (no ilike como `listar`, pensado para un
-        humano buscando en la bitácora) — acá es el mismo string que
-        UsuarioService.login recibió, no una búsqueda."""
+        humano buscando en la bitácora): UsuarioService.login lo normaliza
+        antes de contar y de registrar (TASK-004), así que es el mismo valor.
+
+        `ip=None` cuenta los fallos de la cuenta desde cualquier IP: es el
+        tope por cuenta de TASK-004 (`login_rate_limit_intentos_cuenta`)."""
         stmt = select(func.count()).select_from(Acceso).where(
             Acceso.username == username,
             Acceso.motivo == "credenciales",

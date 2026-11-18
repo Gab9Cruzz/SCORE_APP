@@ -41,6 +41,16 @@ class Settings(BaseSettings):
     # que accesos_retencion_dias).
     login_rate_limit_intentos: int = 5
     login_rate_limit_ventana_minutos: int = 15
+    # TASK-004 (SEC-01): tope por cuenta, sin importar la IP, en la misma
+    # ventana. Más alto que el de (usuario, IP) para que nadie pueda
+    # bloquear una cuenta ajena con unos pocos intentos, pero frena un
+    # ataque repartido entre muchas IPs. 0 lo apaga.
+    login_rate_limit_intentos_cuenta: int = 20
+
+    # TASK-004 (SEC-01): IPs de los proxies cuyo X-Forwarded-For se acepta,
+    # separadas por coma. Vacío (default) = la app está expuesta directo y
+    # la cabecera se ignora: la puede inventar cualquiera.
+    trusted_proxies: str = ""
 
     cors_origins: str = "*"
     api_v1_prefix: str = "/api/v1"
@@ -64,6 +74,10 @@ class Settings(BaseSettings):
         if self.cors_origins.strip() == "*":
             return ["*"]
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def trusted_proxies_list(self) -> list[str]:
+        return [p.strip() for p in self.trusted_proxies.split(",") if p.strip()]
 
 
 @lru_cache

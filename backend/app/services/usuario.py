@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from functools import lru_cache
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +14,15 @@ from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminReposi
 from app.repositories.usuario import UsuarioRepository
 from app.schemas.auth import Token
 from app.schemas.usuario import UsuarioCreate, UsuarioUpdate
+
+
+@lru_cache
+def _hash_de_relleno() -> str:
+    """Hash contra el que se verifica cuando la cuenta no existe, para que
+    ese caso tarde lo mismo que una contraseña incorrecta (bcrypt es lo
+    caro). Sin esto la diferencia de tiempos revela qué usuarios existen
+    (TASK-004, SEC-13). Se calcula una vez, en el primer login fallido."""
+    return hash_password("hash-de-relleno-para-igualar-tiempos")
 
 
 class UsuarioService:
@@ -133,11 +143,28 @@ class UsuarioService:
         un intento ya bloqueado, y para que el mensaje/motivo sea idéntico
         exista o no la cuenta — no filtra más de lo que 'credenciales' ya
         filtra."""
+        # TASK-004 (SEC-01): el mismo valor para contar, buscar la cuenta y
+        # registrar el acceso. Antes el contador usaba el texto tal como
+        # llegaba y la búsqueda lo normalizaba: 'admin', 'ADMIN' y 'admin '
+        # eran la misma cuenta con contadores separados. El recorte a 50 es
+        # el de la columna ACCESOS.Username (ver _registrar_acceso): contar
+        # con otro largo que el guardado no encontraría nunca las filas.
+        username = username.strip().lower()[:50]
+
         settings = get_settings()
         if settings.login_rate_limit_intentos > 0 and settings.login_rate_limit_ventana_minutos > 0:
             desde = datetime.now() - timedelta(minutes=settings.login_rate_limit_ventana_minutos)
             fallos = await self.acceso_repo.contar_fallos_credenciales_recientes(username, ip, desde)
-            if fallos >= settings.login_rate_limit_intentos:
+            # Tope por cuenta, sin importar la IP (TASK-004): frena un ataque
+            # repartido entre muchas IPs, que por (usuario, IP) nunca llega
+            # al umbral.
+            tope_cuenta = settings.login_rate_limit_intentos_cuenta
+            fallos_cuenta = (
+                await self.acceso_repo.contar_fallos_credenciales_recientes(username, None, desde)
+                if tope_cuenta > 0
+                else 0
+            )
+            if fallos >= settings.login_rate_limit_intentos or (tope_cuenta > 0 and fallos_cuenta >= tope_cuenta):
                 await self._registrar_acceso(
                     usuario_id=None,
                     username=username,
@@ -153,7 +180,10 @@ class UsuarioService:
 
         usuario = await self.repo.get_by_username(username)
 
-        if usuario is None or not verify_password(password, usuario.password_hash):
+        # Con la cuenta inexistente también se verifica un hash: ver
+        # _hash_de_relleno.
+        hash_a_verificar = usuario.password_hash if usuario is not None else _hash_de_relleno()
+        if not verify_password(password, hash_a_verificar) or usuario is None:
             # usuario_id queda en None cuando el username no existe; cuando
             # existe pero la contraseña no coincide, SÍ se anota el id — es
             # lo que permite ver "3 fallos seguidos contra la cuenta X".

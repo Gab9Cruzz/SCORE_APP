@@ -35,6 +35,7 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import asyncpg
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.engine import make_url
@@ -235,6 +236,20 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def proxy_de_confianza_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ASGITransport presenta cada petición como 127.0.0.1. Marcarlo como
+    proxy de confianza hace que `ip_del_cliente` acepte X-Forwarded-For,
+    que es como las pruebas eligen "desde qué IP" llega un intento."""
+    monkeypatch.setattr(get_settings(), "trusted_proxies", "127.0.0.1")
+
+
+@pytest.fixture
+def sin_proxies(monkeypatch: pytest.MonkeyPatch) -> None:
+    """El valor por defecto: ningún proxy de confianza."""
+    monkeypatch.setattr(get_settings(), "trusted_proxies", "")
 
 
 async def _crear_usuario(session: AsyncSession, username: str, password: str, rol: str) -> Usuario:
