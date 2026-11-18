@@ -60,6 +60,12 @@ producción, y frena en el primer fallo. No necesita el servidor levantado
 Los pedazos por separado: `python -m pytest` en `backend/`,
 `npm run verify` en `frontend/`.
 
+Lo mismo corre en GitHub Actions en cada push y PR
+(`.github/workflows/ci.yml`), más una comprobación de contrato: regenera
+`frontend/src/api/schema.d.ts` desde la API y falla si difiere del
+commiteado. Si cambiás un endpoint, corré `npm run gen:api` y commiteá el
+resultado.
+
 ## Dónde está cada cosa
 
 | | |

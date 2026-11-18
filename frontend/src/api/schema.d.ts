@@ -1044,7 +1044,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar Inscripciones */
+        /**
+         * Listar Inscripciones
+         * @description Sin auth (anónimo/Público) o con AdminGeneral/Arbitro: sin recorte,
+         *     igual que siempre — este listado alimenta pantallas públicas (equipos
+         *     inscriptos de un torneo). Un TorneoAdmin SÍ queda recortado a sus
+         *     torneos asignados, siempre, sin flag opt-in que el cliente pueda
+         *     desactivar (TODOS.md, P3: "el alcance NO se expresa como query param
+         *     elegible por el cliente — se deriva implícito del token vía
+         *     torneo_ids_permitidos, mismo patrón que torneos/partidos"). A
+         *     diferencia de `GET /torneos`/`GET /partidos` (que exponen `solo_mios`
+         *     como opt-in), acá el recorte es forzado: el listado de sub-recursos de
+         *     UN torneo específico no tiene un caso de uso legítimo en el que un
+         *     TorneoAdmin necesite ver los de un torneo que no le asignaron.
+         */
         get: operations["listar_inscripciones_api_v1_inscripciones_get"];
         put?: never;
         /**
@@ -1096,6 +1109,12 @@ export interface paths {
          * @description `torneo_id` filtra a los vínculos de ESE torneo (todos sus equipos) —
          *     lo usa el dashboard scoped por torneo (torneos-admin-plan.md, D-Eng-3).
          *     Antes de esto el GET devolvía el sistema completo sin filtrar.
+         *
+         *     Recorte por asignación (P3, TODOS.md) — mismo criterio que
+         *     `GET /inscripciones`: un TorneoAdmin queda forzado a sus torneos
+         *     asignados incluso si pide solo `inscripcion_torneo_id`/
+         *     `jugador_perfil_id` sin `torneo_id` explícito. Sin auth, AdminGeneral o
+         *     Arbitro: sin recorte.
          */
         get: operations["listar_plantilla_api_v1_plantillas_get"];
         put?: never;
@@ -1204,6 +1223,10 @@ export interface paths {
          * @description `torneo_id` filtra por el torneo del equipo DESTINO (ver
          *     TraspasoRepository.listar_por_torneo) — dashboard scoped por torneo
          *     (torneos-admin-plan.md, D-Eng-3).
+         *
+         *     Recorte por asignación (P3, TODOS.md) — mismo criterio que
+         *     `GET /inscripciones`/`GET /plantillas`: un TorneoAdmin queda forzado a
+         *     sus torneos asignados, con o sin `torneo_id` explícito.
          */
         get: operations["listar_traspasos_api_v1_traspasos_get"];
         put?: never;
@@ -1278,6 +1301,12 @@ export interface paths {
          *
          *     Árbitro: el chequeo de "¿es tu partido?" vive en
          *     EventoPartidoService.create() (D5), no acá.
+         *
+         *     A1 (docs/plans/cierre-pendientes-todos-plan.md): puede devolver 409 con
+         *     `detail: "evento_conflicto_concurrente"` si otro request está cargando
+         *     un evento en el mismo partido en este momento — ver
+         *     ConcurrencyConflictError. Ejemplo:
+         *     `POST /api/v1/eventos-partido {"partidos_id": 3, "jugador_id": 5, "equipo_id": 3, "eventos_id": 1}`.
          */
         post: operations["registrar_evento_partido_api_v1_eventos_partido_post"];
         delete?: never;

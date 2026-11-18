@@ -1,0 +1,113 @@
+# CI mínima (TASK-003, docs/audit/11_BACKLOG_IMPLEMENTACION.md).
+# Lo mismo que verificar.ps1, en un entorno fijo y en cada cambio:
+#   backend   -> pytest (normal y concurrencia) contra un PostgreSQL 16 de servicio
+#   frontend  -> npm run verify (oxlint, tsc, vitest, vite build)
+#   contrato  -> regenera src/api/schema.d.ts desde la API y falla si cambió
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Valores solo para CI: la base es efímera y no hay datos reales.
+env:
+  DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/torneos_mvp
+  TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/torneos_mvp_test
+  JWT_SECRET_KEY: ci-only-secret-not-used-anywhere-else
+  ADMIN_USERNAME: admin
+  ADMIN_PASSWORD: ci-only-admin-password
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Ruff (informativo, no bloquea todavía)
+        continue-on-error: true
+        run: ruff check .
+      - name: pytest
+        run: python -m pytest -q -m "not concurrencia"
+      - name: pytest — concurrencia
+        run: python -m pytest -q -m concurrencia
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run verify
+
+  contrato:
+    # /openapi.json no toca la base: la API arranca sin PostgreSQL (el
+    # bootstrap del Admin corre en segundo plano y solo registra el fallo).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Arrancar la API
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/health > /dev/null && exit 0
+            sleep 1
+          done
+          cat ../uvicorn.log
+          exit 1
+      - name: Regenerar el cliente y comparar
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run gen:api
+          git diff --exit-code src/api/schema.d.ts || {
+            echo "::error::src/api/schema.d.ts está desactualizado: corré 'npm run gen:api' con el backend en marcha y commiteá el resultado."
+            exit 1
+          }

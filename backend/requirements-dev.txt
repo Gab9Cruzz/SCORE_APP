@@ -1,0 +1,4 @@
+# Dependencias de la app y de los tests, más las herramientas de desarrollo.
+-r requirements.txt
+
+ruff==0.17.5

@@ -53,6 +53,16 @@ retomarlo — acá solo queda lo que sigue abierto.
    infraestructura). **Pospuesto explícitamente (2026-09-17)** hasta que el
    resto del proyecto esté más afinado.
 
+## Resuelto (2026-11-18)
+
+- **CI en GitHub Actions** (`.github/workflows/ci.yml`, TASK-003 de
+  `docs/audit/11_BACKLOG_IMPLEMENTACION.md`). Estaba descartado como
+  "infraestructura nueva"; se reabrió con evidencia nueva: la suite de
+  frontend estuvo entera en rojo con Node 26 (`QA-01`) y una aserción
+  quedó desactualizada (`QA-02`) sin que nadie lo notara. Corre backend
+  (con PostgreSQL 16), frontend y el contrato de `schema.d.ts` en cada
+  push y PR. `verificar.ps1` sigue siendo la verificación local.
+
 ## Resuelto (2026-09-18)
 
 Plan: `docs/plans/cierre-pendientes-todos-plan.md`, revisado en las cuatro
@@ -235,7 +245,6 @@ fases de `/autoplan` (CEO/eng/design/DX) antes de ejecutarse.
 - Iconos SVG propios por disciplina (hoy son emoji).
 - `UNIQUE (Nombre, Disciplina_ID)` en `EQUIPOS` — rompería datos existentes.
 - Importación masiva desde CSV/Excel para el registro por lote.
-- Mover `verificar.ps1` a CI (GitHub Actions) — infraestructura nueva.
 - Registrar el logout — requeriría una lista de tokens revocados (JWT es
   sin estado del lado del servidor hoy).
 - Muerte súbita / gol de oro en el alargue — ninguna competencia real de
