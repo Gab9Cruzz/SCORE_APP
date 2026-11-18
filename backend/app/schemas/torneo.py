@@ -143,12 +143,23 @@ class TorneoCreate(TorneoBase):
 
 
 class TorneoUpdate(BaseModel):
+    # TASK-010 (FUN-04): un campo desconocido es un error, no se ignora.
+    # `estado` ya no está: el estado de un torneo solo cambia por sus
+    # endpoints (cerrar, reabrir, DELETE), que son los que validan la fase,
+    # calculan el podio y liberan o restauran plantillas. Con un PATCH se
+    # podía dejar 'Finalizado' sin nada de eso.
+    model_config = ConfigDict(extra="forbid")
+
     nombre: str | None = None
+    # TorneoService.update rechaza cambiarlas si el torneo ya tiene equipos
+    # inscriptos o partidos (necesita consultar la base).
     disciplina_id: int | None = None
     modalidad_id: int | None = None
+    # Que fecha_fin no quede antes de fecha_inicio se valida en
+    # TorneoService.update: con un PATCH parcial hay que combinar lo que
+    # llega con lo guardado.
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
-    estado: EstadoTorneo | None = None
     # EC-55: cambiar Formato con PARTIDOS ya creados se rechaza en
     # TorneoService.update, no acá (necesita consultar la base).
     formato: FormatoTorneo | None = None

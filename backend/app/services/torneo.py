@@ -7,6 +7,7 @@ from app.exceptions.errors import DomainRuleError
 from app.models.asignacion_torneo_admin import AsignacionTorneoAdmin
 from app.models.configuracion_tiempo_torneo import ConfiguracionTiempoTorneo
 from app.models.fase import Fase
+from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.partido import Partido
 from app.models.torneo import Torneo
 from app.models.torneo_grupo import TorneoGrupo
@@ -281,6 +282,34 @@ class TorneoService:
     async def update(self, id_: int, data: TorneoUpdate) -> TorneoOut:
         payload = data.model_dump(exclude_unset=True, exclude={"config_tiempo"})
         torneo_actual = await self.repo.get_or_404(id_)
+
+        # TASK-010 (FUN-04): mismo criterio que el bloqueo de Formato de
+        # abajo y que EC-38 en equipos. Con equipos inscriptos o partidos, el
+        # torneo quedaría con equipos y plantillas de otra disciplina.
+        campos_de_disciplina = [
+            campo
+            for campo in ("disciplina_id", "modalidad_id")
+            if campo in payload and payload[campo] != getattr(torneo_actual, campo)
+        ]
+        if campos_de_disciplina:
+            inscripcion = await self.session.execute(
+                select(InscripcionTorneo.id).where(InscripcionTorneo.torneo_id == id_).limit(1)
+            )
+            partido = await self.session.execute(select(Partido.id).where(Partido.torneo_id == id_).limit(1))
+            if inscripcion.first() is not None or partido.first() is not None:
+                que = "la disciplina" if "disciplina_id" in campos_de_disciplina else "la modalidad"
+                raise DomainRuleError(
+                    f"No se puede cambiar {que} de un torneo que ya tiene equipos inscriptos o partidos."
+                )
+
+        # TASK-010 (DB-02): combina lo recibido con lo guardado. TorneoCreate
+        # ya lo valida, pero un PATCH que manda solo una de las dos fechas
+        # no tenía contra qué compararla.
+        if "fecha_inicio" in payload or "fecha_fin" in payload:
+            inicio = payload.get("fecha_inicio") or torneo_actual.fecha_inicio
+            fin = payload.get("fecha_fin") or torneo_actual.fecha_fin
+            if inicio is not None and fin is not None and fin < inicio:
+                raise DomainRuleError("La fecha de fin no puede ser anterior a la fecha de inicio.")
 
         if "formato" in payload and payload["formato"] != torneo_actual.formato:
             # EC-55: cambiar Formato con PARTIDOS ya creados se bloquea —

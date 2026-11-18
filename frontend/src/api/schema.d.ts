@@ -3706,8 +3706,6 @@ export interface components {
             fecha_inicio?: string | null;
             /** Fecha Fin */
             fecha_fin?: string | null;
-            /** Estado */
-            estado?: ("Activo" | "Inactivo" | "Finalizado") | null;
             /** Formato */
             formato?: ("Liga" | "Eliminacion" | "Grupos_Playoffs") | null;
             /** Ida Vuelta */

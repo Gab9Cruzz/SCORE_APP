@@ -564,3 +564,152 @@ async def test_formato_eliminatoria_default_unico_no_cambia_comportamiento(
     )
     assert resp.status_code == 201, resp.text
     assert resp.json()["formato_eliminatoria"] == "Unico"
+
+
+# --- TASK-010 (FUN-04, DB-02): el PATCH de torneo no puede dejarlo
+# incoherente. El estado solo cambia por sus endpoints (cerrar, reabrir,
+# baja), la disciplina/modalidad no cambia con equipos inscriptos o
+# partidos, y las fechas no quedan invertidas. ---
+
+
+async def _disciplina_y_modalidad_nuevas(db_session, sufijo: str) -> tuple[int, int]:
+    from app.models.disciplina import Disciplina
+    from app.models.modalidad import Modalidad
+
+    d = Disciplina(nombre=f"Básquet PATCH {sufijo}")
+    db_session.add(d)
+    await db_session.flush()
+    m = Modalidad(disciplina_id=d.id, nombre=f"5x5 PATCH {sufijo}", tamano_equipo=5)
+    db_session.add(m)
+    await db_session.commit()
+    return d.id, m.id
+
+
+async def _torneo_vacio(client: AsyncClient, headers: dict[str, str], nombre: str) -> dict:
+    resp = await client.post(
+        "/api/v1/torneos",
+        json={
+            "torneo_grupo_nombre": nombre,
+            "disciplina_id": DISCIPLINA_FUTBOL_ID,
+            "modalidad_id": MODALIDAD_FUTBOL_11_ID,
+            "fecha_inicio": "2026-05-01",
+            "fecha_fin": "2026-06-01",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def test_patch_con_estado_devuelve_422(client: AsyncClient, admin_general_headers: dict[str, str]):
+    """PR-008: un PATCH ya no puede finalizar un torneo sin pasar por el
+    cierre (que valida la fase y calcula el podio)."""
+    resp = await client.patch(
+        "/api/v1/torneos/1", json={"estado": "Finalizado"}, headers=admin_general_headers
+    )
+    assert resp.status_code == 422, resp.text
+
+    resp = await client.get("/api/v1/torneos/1")
+    assert resp.json()["estado"] != "Finalizado"
+
+
+async def test_patch_con_campo_desconocido_devuelve_422(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    resp = await client.patch(
+        "/api/v1/torneos/1", json={"campo_que_no_existe": 1}, headers=admin_general_headers
+    )
+    assert resp.status_code == 422, resp.text
+
+
+async def test_patch_cambiar_disciplina_con_inscripciones_devuelve_400(
+    client: AsyncClient, db_session, admin_general_headers: dict[str, str]
+):
+    """PR-009: el torneo 1 (05_seed.sql) tiene equipos inscriptos y partidos."""
+    disciplina_id, modalidad_id = await _disciplina_y_modalidad_nuevas(db_session, "con inscripciones")
+    resp = await client.patch(
+        "/api/v1/torneos/1",
+        json={"disciplina_id": disciplina_id, "modalidad_id": modalidad_id},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 400, resp.text
+    assert "disciplina" in resp.json()["detail"].lower()
+
+
+async def test_patch_cambiar_modalidad_con_inscripciones_devuelve_400(
+    client: AsyncClient, db_session, admin_general_headers: dict[str, str]
+):
+    from app.models.modalidad import Modalidad
+
+    otra = Modalidad(disciplina_id=DISCIPLINA_FUTBOL_ID, nombre="Fútbol 7 PATCH", tamano_equipo=7)
+    db_session.add(otra)
+    await db_session.commit()
+
+    resp = await client.patch(
+        "/api/v1/torneos/1", json={"modalidad_id": otra.id}, headers=admin_general_headers
+    )
+    assert resp.status_code == 400, resp.text
+    assert "modalidad" in resp.json()["detail"].lower()
+
+
+async def test_patch_misma_disciplina_con_inscripciones_se_acepta(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    """Reenviar el valor actual (un formulario que manda todo) no es un cambio."""
+    resp = await client.patch(
+        "/api/v1/torneos/1",
+        json={"disciplina_id": DISCIPLINA_FUTBOL_ID, "modalidad_id": MODALIDAD_FUTBOL_11_ID},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+
+async def test_patch_cambiar_disciplina_sin_inscripciones_se_acepta(
+    client: AsyncClient, db_session, admin_general_headers: dict[str, str]
+):
+    torneo = await _torneo_vacio(client, admin_general_headers, "Torneo PATCH Disciplina Libre")
+    disciplina_id, modalidad_id = await _disciplina_y_modalidad_nuevas(db_session, "sin inscripciones")
+    resp = await client.patch(
+        f"/api/v1/torneos/{torneo['id']}",
+        json={"disciplina_id": disciplina_id, "modalidad_id": modalidad_id},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["disciplina_id"] == disciplina_id
+
+
+async def test_patch_fecha_fin_anterior_a_la_guardada_de_inicio_falla(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    """PR-010: la comparación combina lo recibido con lo guardado. El
+    torneo 1 empieza el 2026-01-10."""
+    resp = await client.patch(
+        "/api/v1/torneos/1", json={"fecha_fin": "2026-01-01"}, headers=admin_general_headers
+    )
+    assert resp.status_code in (400, 422), resp.text
+
+
+async def test_patch_fecha_inicio_posterior_a_la_guardada_de_fin_falla(
+    client: AsyncClient, admin_general_headers: dict[str, str]
+):
+    resp = await client.patch(
+        "/api/v1/torneos/1", json={"fecha_inicio": "2026-12-01"}, headers=admin_general_headers
+    )
+    assert resp.status_code in (400, 422), resp.text
+
+
+async def test_patch_ambas_fechas_invertidas_falla(client: AsyncClient, admin_general_headers: dict[str, str]):
+    resp = await client.patch(
+        "/api/v1/torneos/1",
+        json={"fecha_inicio": "2026-04-01", "fecha_fin": "2026-03-01"},
+        headers=admin_general_headers,
+    )
+    assert resp.status_code in (400, 422), resp.text
+
+
+async def test_patch_fechas_coherentes_se_acepta(client: AsyncClient, admin_general_headers: dict[str, str]):
+    resp = await client.patch(
+        "/api/v1/torneos/1", json={"fecha_fin": "2026-04-15"}, headers=admin_general_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["fecha_fin"] == "2026-04-15"
