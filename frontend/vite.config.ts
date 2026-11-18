@@ -8,10 +8,11 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
-    // Esta fase (T1) solo monta la infra — los primeros tests reales
-    // llegan en T7/T13/T17. Sin esto, "vitest run" sale con código 1
-    // cuando no encuentra ningún archivo *.test.*, que es exactamente
-    // el estado entre T1 y T7.
-    passWithNoTests: true,
+    // Desde Node 25, `localStorage`/`sessionStorage` nativos están activos
+    // por defecto y, sin `--localstorage-file`, valen `undefined`. Como
+    // quedan en `globalThis`, tapan los de jsdom y toda la suite falla en
+    // `localStorage.clear()` (docs/audit QA-01). Apagarlos en los workers
+    // deja visibles los de jsdom. Node 22 y 24 aceptan el flag sin efecto.
+    execArgv: ['--no-experimental-webstorage'],
   },
 })

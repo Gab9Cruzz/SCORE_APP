@@ -5,6 +5,13 @@ tipado generado desde el OpenAPI del backend (`openapi-typescript` +
 `openapi-fetch`). Ver el design doc en `../docs/designs/frontend-inicial-dashboard-mesa-en-vivo.md`
 para el porqué de estas decisiones.
 
+## Versión de Node
+
+Node **26** (LTS), fijado en `.nvmrc` (`nvm use`). `package.json` admite
+`>=22`. Vitest arranca sus workers con `--no-experimental-webstorage`
+(`vite.config.ts`): desde Node 25 el `localStorage` nativo tapa al de jsdom
+y rompe toda la suite.
+
 ## Correr en desarrollo
 
 1. Backend corriendo en `http://127.0.0.1:8000` (ver `../backend/README` /
