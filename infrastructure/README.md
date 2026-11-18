@@ -21,17 +21,22 @@ API en http://localhost:8000/docs. Postgres queda expuesto en
 `localhost:5432` (usuario `postgres`, clave `1234`, base `torneos_mvp`) por
 si querés conectarte con un cliente SQL aparte.
 
-`JWT_SECRET_KEY` es obligatorio — no tiene default (a propósito: un default
-hardcodeado acá terminaría siendo un secreto público). Exportalo antes de
-levantar el compose (o creá un `.env` en esta carpeta — docker compose lo
-lee solo). `ADMIN_PASSWORD` sí tiene default (`admin1234`) para desarrollo,
-pero conviene cambiarlo del mismo modo antes de cualquier entorno real:
+`JWT_SECRET_KEY` y `ADMIN_PASSWORD` son obligatorios — no tienen default
+(a propósito: un default hardcodeado acá terminaría siendo un secreto
+público). Exportalos antes de levantar el compose (o creá un `.env` en esta
+carpeta — docker compose lo lee solo):
 
 ```bash
 JWT_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))") \
 ADMIN_PASSWORD=una-clave-real \
 docker compose up --build
 ```
+
+Con `ENTORNO=produccion` la API se niega a arrancar si `JWT_SECRET_KEY`
+tiene menos de 32 caracteres o es el de ejemplo, si `ADMIN_PASSWORD` es un
+valor de ejemplo o tiene menos de 12, o si `CORS_ORIGINS` es `*` (en ese
+caso, pasá los orígenes del frontend separados por coma). El error dice
+qué variable corregir. Por defecto el compose usa `ENTORNO=desarrollo`.
 
 Para reiniciar la base desde cero (ej. después de cambiar el esquema en
 `/database`), `docker compose down -v` borra el volumen `postgres-data` —

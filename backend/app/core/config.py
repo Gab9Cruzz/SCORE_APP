@@ -1,11 +1,25 @@
 """Configuración de la aplicación, leída de variables de entorno (.env)."""
 from functools import lru_cache
+from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Valores que aparecen en el repositorio (defaults, .env.example, compose):
+# son públicos, así que en producción equivalen a no tener secreto.
+_JWT_DE_EJEMPLO = {"change-me-please-do-not-use-in-production"}
+_ADMIN_PASSWORD_DE_EJEMPLO = {"admin1234", "change-me-please"}
+_JWT_LARGO_MINIMO = 32
+_ADMIN_PASSWORD_LARGO_MINIMO = 12
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # TASK-005 (SEC-02, OPS-04): en "produccion" la app se niega a arrancar
+    # con secretos de ejemplo (ver _exigir_secretos_propios_en_produccion).
+    # "desarrollo" no valida nada, como hasta ahora.
+    entorno: Literal["desarrollo", "produccion"] = "desarrollo"
 
     database_url: str
     test_database_url: str | None = None
@@ -68,6 +82,33 @@ class Settings(BaseSettings):
     evento_lock_timeout_ms: int = 3000
     evento_lock_log_umbral_ms: int = 500
     evento_concurrencia_reintentos: int = 1
+
+    @model_validator(mode="after")
+    def _exigir_secretos_propios_en_produccion(self) -> "Settings":
+        """Junta todos los problemas en un solo error para que quien
+        despliega los corrija de una vez, cada uno con el nombre de la
+        variable de entorno que lo arregla."""
+        if self.entorno != "produccion":
+            return self
+        problemas: list[str] = []
+        if self.jwt_secret_key in _JWT_DE_EJEMPLO or len(self.jwt_secret_key) < _JWT_LARGO_MINIMO:
+            problemas.append(
+                f"JWT_SECRET_KEY: usá un valor propio de {_JWT_LARGO_MINIMO} caracteres o más "
+                '(python -c "import secrets; print(secrets.token_hex(32))").'
+            )
+        if (
+            self.admin_password in _ADMIN_PASSWORD_DE_EJEMPLO
+            or len(self.admin_password) < _ADMIN_PASSWORD_LARGO_MINIMO
+        ):
+            problemas.append(
+                f"ADMIN_PASSWORD: no puede ser un valor de ejemplo y necesita "
+                f"{_ADMIN_PASSWORD_LARGO_MINIMO} caracteres o más."
+            )
+        if self.cors_origins.strip() == "*":
+            problemas.append("CORS_ORIGINS: listá los orígenes del frontend en vez de '*'.")
+        if problemas:
+            raise ValueError("Configuración insegura para ENTORNO=produccion. " + " ".join(problemas))
+        return self
 
     @property
     def cors_origins_list(self) -> list[str]:

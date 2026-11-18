@@ -48,9 +48,12 @@ services:
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: "120"
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin1234}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Falta ADMIN_PASSWORD. Elegí la clave del primer usuario Admin y exportala antes de levantar el compose (ver README de esta carpeta)}
       ADMIN_NOMBRE: Administrador
-      CORS_ORIGINS: "*"
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      # TASK-005: con ENTORNO=produccion la API no arranca con secretos de
+      # ejemplo ni con CORS_ORIGINS="*".
+      ENTORNO: ${ENTORNO:-desarrollo}
       API_V1_PREFIX: /api/v1
     extra_hosts:
       - "host.docker.internal:host-gateway"

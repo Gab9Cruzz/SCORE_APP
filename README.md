@@ -12,7 +12,7 @@ FastAPI + PostgreSQL + React (Vite + TypeScript).
 
 ```bash
 cd infrastructure
-JWT_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))") docker compose up --build
+JWT_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))") ADMIN_PASSWORD=elegi-una-clave docker compose up --build
 ```
 
 Esto levanta Postgres (esquema completo cargado solo, ver
