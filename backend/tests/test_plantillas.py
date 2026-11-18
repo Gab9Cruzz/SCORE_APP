@@ -94,7 +94,13 @@ async def test_torneo_admin_con_asignacion_ve_la_plantilla_de_su_torneo(
         "/api/v1/plantillas", params={"torneo_id": 1}, headers=torneo_admin_con_torneo_headers
     )
     assert resp.status_code == 200
-    assert len(resp.json()) == 3
+    # Con asignación el recorte no quita nada: ve el mismo roster que el
+    # listado anónimo (05_seed.sql: 6 jugadores, 2 por cada uno de los 3
+    # equipos inscriptos en el torneo 1).
+    sin_recorte = await client.get("/api/v1/plantillas", params={"torneo_id": 1})
+    ids = sorted(f["id"] for f in resp.json())
+    assert ids == sorted(f["id"] for f in sin_recorte.json())
+    assert len(ids) == 6
 
 
 async def test_torneo_admin_sin_asignacion_no_ve_plantilla_ajena_por_torneo(
