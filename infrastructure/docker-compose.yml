@@ -1,16 +1,13 @@
 # DX-2 (docs/plans/cierre-pendientes-todos-plan.md): "postgres" es un
 # servicio del compose, no un supuesto de que ya lo tenés instalado en el
-# host con torneos_mvp cargado — esa suposición era justo lo que rompía a
-# la segunda persona que clonaba el repo. El volumen `../database` se monta
-# como `docker-entrypoint-initdb.d`: la imagen oficial de Postgres corre
-# TODOS los .sql ahí adentro, en orden alfabético, en la PRIMERA inicialización
-# (volumen de datos vacío) — como los archivos van 01_.. 33_.. zero-padded,
-# alfabético == numérico, y eso carga el esquema completo (no solo
-# 01_schema.sql–06_triggers.sql: la API real necesita las migraciones 07-33
-# para funcionar — RBAC/licencias, catálogo de disciplinas, portal público,
-# etc. — así que este compose carga TODO, a diferencia del harness de tests
-# de backend/tests/conftest.py, que a propósito se queda en 01-06 porque
-# solo necesita el baseline).
+# host con torneos_mvp cargado.
+#
+# TASK-006 (OPS-01): en la primera inicialización (volumen de datos vacío)
+# la imagen corre initdb/00_init.sh, que carga 01–06 (el esquema final) y
+# 11 (catálogo de disciplinas) desde /database. Las migraciones 07+ NO se
+# corren: son historia ya incorporada a 01–06, y montar database/ entera
+# como docker-entrypoint-initdb.d abortaba la inicialización en la 08.
+# Los datos de demostración son opcionales: ver README de esta carpeta.
 #
 # Alternativa "Postgres en el host" sigue funcionando: comentá el servicio
 # `postgres` de abajo y volvé a `host.docker.internal` en `DATABASE_URL`.
@@ -24,7 +21,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ../database:/docker-entrypoint-initdb.d:ro
+      - ../database:/database:ro
+      - ./initdb:/docker-entrypoint-initdb.d:ro
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]

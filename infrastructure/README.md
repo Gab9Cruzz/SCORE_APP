@@ -40,7 +40,23 @@ qué variable corregir. Por defecto el compose usa `ENTORNO=desarrollo`.
 
 Para reiniciar la base desde cero (ej. después de cambiar el esquema en
 `/database`), `docker compose down -v` borra el volumen `postgres-data` —
-la próxima `up` la recrea corriendo los `.sql` de nuevo.
+la próxima `up` la recrea corriendo `initdb/00_init.sh` de nuevo.
+
+## Qué carga la primera inicialización
+
+`initdb/00_init.sh` carga `01`–`06` (el esquema final y los datos mínimos)
+y `11_catalogo_disciplinas.sql`. **No** corre las migraciones `07`+: son
+historia ya incorporada a `01`–`06` y varias no aplican sobre el esquema
+actual (ver `database/README.md`).
+
+### Datos de demostración (opcional)
+
+Con el compose levantado:
+
+```bash
+docker compose exec -T postgres psql -U postgres -d torneos_mvp -v ON_ERROR_STOP=1 -1 -f /database/10_demo_torneos_admin.sql
+docker compose exec -T postgres psql -U postgres -d torneos_mvp -v ON_ERROR_STOP=1 -1 -f /database/seed_portal_demo.sql
+```
 
 ## Postgres en el host, en vez del contenedor
 

@@ -12,10 +12,12 @@ FastAPI + PostgreSQL + React (Vite + TypeScript).
 
 ```bash
 cd infrastructure
-JWT_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))") ADMIN_PASSWORD=elegi-una-clave docker compose up --build
+JWT_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))") \
+ADMIN_PASSWORD=elegi-una-clave \
+docker compose up --build
 ```
 
-Esto levanta Postgres (esquema completo cargado solo, ver
+Esto levanta Postgres (esquema y catálogo de disciplinas cargados solos, ver
 [`infrastructure/README.md`](infrastructure/README.md)) y la API en
 http://localhost:8000. Para el frontend, igual que abajo: `npm install` +
 `npm run dev` en `frontend/` (copiando `frontend/.env.example` a
@@ -77,7 +79,7 @@ resultado.
 | `docs/designs/` | Design docs de UI. |
 | [`docs/queries/`](docs/queries/README.md) | Métricas ad hoc versionadas en SQL (no un dashboard) — cómo correrlas y contra qué base. |
 | `TODOS.md` | Lo deferido de cada plan, con el motivo. |
-| `infrastructure/` | `docker-compose.yml` — Postgres + API, esquema completo cargado solo. |
+| `infrastructure/` | `docker-compose.yml` — Postgres + API; `initdb/` carga el esquema y el catálogo la primera vez. |
 
 ## Cómo se trabaja acá
 

@@ -154,8 +154,12 @@ fases de `/autoplan` (CEO/eng/design/DX) antes de ejecutarse.
   mano, la suposición que rompía a la segunda persona que clonaba.
   Nombrado como camino recomendado en el `README.md` raíz, manual como
   alternativa. **No verificado end-to-end en esta sesión** (sin Docker
-  disponible acá) — probarlo en una máquina con Docker antes de confiar en
-  el TTHW.
+  disponible acá). *Actualización 2026-11-18 (TASK-006):* no funcionaba —
+  montar `database/` entera corría las migraciones históricas y la 08
+  abortaba la inicialización. Ahora `infrastructure/initdb/00_init.sh` carga
+  solo `01`–`06` + `11`; la secuencia se verificó contra PostgreSQL 17
+  local, pero el `docker compose up` en sí sigue sin probarse por falta de
+  Docker.
 
 ## Resuelto (2026-09-17)
 
