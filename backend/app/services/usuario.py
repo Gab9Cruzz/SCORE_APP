@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -232,3 +234,4 @@ class UsuarioService:
             ip=ip[:45] if ip else None,
             user_agent=user_agent[:255] if user_agent else None,
         )
+

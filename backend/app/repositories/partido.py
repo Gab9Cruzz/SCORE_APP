@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
 
 from sqlalchemy import and_, not_, select
@@ -78,3 +80,4 @@ class PartidoRepository(BaseRepository[Partido]):
         stmt = stmt.order_by(Partido.id).offset(skip).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+

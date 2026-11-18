@@ -427,7 +427,6 @@ export function ModalResultadoDirecto(props: {
   // bracket (Eliminación) — mismo dato que ya usa MesaPanel.tsx para el
   // flujo en vivo, sin pedir un endpoint nuevo.
   const esEliminacion = partido.ronda_nombre != null;
-  const marcadorEmpatado = marcadorLocal === marcadorVisitante;
   // Desempate de eliminatoria: tiempo extra y penales (docs/plans/
   // desempate-tiempo-extra-penales-plan.md, Fase 1, SPEC-REVIEW S12/D-Q2)
   // — reemplaza `esEliminacion && !esCorrido && marcadorEmpatado` (que ya

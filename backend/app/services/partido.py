@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
 
 from sqlalchemy import text
@@ -429,3 +431,4 @@ class PartidoService:
                 salida.goles_previos_global_visitante = fila.previos_visitante
 
         return salida
+

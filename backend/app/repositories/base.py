@@ -5,6 +5,8 @@ El comentario en 02_constraints.sql es explícito: la API usa borrado lógico
 DELETE CASCADE y arrastrarían inscripciones, partidos y eventos. Por eso este
 repositorio no tiene un método `delete`, solo `soft_delete`.
 """
+from __future__ import annotations
+
 from typing import Any, Generic, TypeVar
 
 from sqlalchemy import select
@@ -91,3 +93,4 @@ class BaseRepository(Generic[ModelT]):
         # normales (ej. Torneo -> 'Finalizado') que no son una baja.
         obj._auditoria_accion = "eliminar"  # type: ignore[attr-defined]
         return await self.save_changes(obj, estado=estado_inactivo)
+

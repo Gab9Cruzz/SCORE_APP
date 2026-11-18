@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.modalidad import Modalidad
@@ -23,3 +25,4 @@ class ModalidadService:
 
     async def update(self, id_: int, data: ModalidadUpdate) -> Modalidad:
         return await self.repo.update(id_, **data.model_dump(exclude_unset=True))
+

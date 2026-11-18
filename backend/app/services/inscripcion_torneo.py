@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import date
 
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -291,3 +293,4 @@ class InscripcionTorneoService:
 
     async def update(self, id_: int, data: InscripcionTorneoUpdate) -> InscripcionTorneo:
         return await self.repo.update(id_, **data.model_dump(exclude_unset=True))
+

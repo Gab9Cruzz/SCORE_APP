@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -377,3 +379,4 @@ class TorneoService:
         salida = TorneoOut.model_validate(torneo)
         salida.config_tiempo = ConfiguracionTiempoTorneoOut.model_validate(config) if config else None
         return salida
+

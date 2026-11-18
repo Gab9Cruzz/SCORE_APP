@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
@@ -31,3 +33,4 @@ class JugadorPerfilDisciplinaService:
 
     async def update(self, id_: int, data: JugadorPerfilDisciplinaUpdate) -> JugadorPerfilDisciplina:
         return await self.repo.update(id_, **data.model_dump(exclude_unset=True))
+

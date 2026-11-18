@@ -73,6 +73,8 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
       return data as {
         clasificados_por_grupo: number | null;
         formato_eliminatoria: "Unico" | "Ida_Vuelta" | "Mixto";
+        metodo_desempate_eliminatoria: "Manual" | "Penales_Directo";
+        config_tiempo?: { tipo_cronometro: "Periodos" | "Corrido" } | null;
         fecha_inicio: string;
       };
     },

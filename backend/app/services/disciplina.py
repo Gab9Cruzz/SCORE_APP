@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.disciplina import Disciplina
@@ -45,3 +47,4 @@ class DisciplinaService:
 
     async def update(self, id_: int, data: DisciplinaUpdate) -> Disciplina:
         return await self.repo.update(id_, **data.model_dump(exclude_unset=True))
+

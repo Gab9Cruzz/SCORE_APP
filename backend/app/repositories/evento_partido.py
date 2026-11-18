@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 
 from sqlalchemy import select
@@ -30,3 +32,4 @@ class EventoPartidoRepository(BaseRepository[EventoPartido]):
         stmt = stmt.order_by(self.model.minuto, self.model.id).offset(skip).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+

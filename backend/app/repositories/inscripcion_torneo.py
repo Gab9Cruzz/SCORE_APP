@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Sequence
 
 from sqlalchemy import func, select, text
@@ -64,3 +66,4 @@ class InscripcionTorneoRepository(BaseRepository[InscripcionTorneo]):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one()
+

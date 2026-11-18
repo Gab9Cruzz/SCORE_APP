@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import ConflictError
@@ -48,3 +50,4 @@ class JugadorService:
                 "Dalo de baja del roster (o esperá a que termine el torneo) antes de desactivarlo."
             )
         return await self.repo.soft_delete(id_, estado_inactivo="Inactivo")
+

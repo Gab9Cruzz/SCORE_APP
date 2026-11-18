@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 
 from sqlalchemy import select
@@ -27,3 +29,4 @@ class DisciplinaRepository(BaseRepository[Disciplina]):
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+

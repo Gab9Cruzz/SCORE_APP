@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.evento import Evento
@@ -23,3 +25,4 @@ class EventoService:
 
     async def soft_delete(self, id_: int) -> Evento:
         return await self.repo.soft_delete(id_, estado_inactivo="Inactivo")
+

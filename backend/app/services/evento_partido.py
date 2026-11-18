@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import time
 from datetime import datetime
@@ -338,3 +340,4 @@ class EventoPartidoService:
             partido = await self.partido_repo.get_or_404(evento.partidos_id)
         verificar_arbitro_asignado(partido, usuario_actual)
         return await self.repo.save_changes(evento, estado="Anulado")
+

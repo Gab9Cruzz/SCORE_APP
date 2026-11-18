@@ -1,4 +1,6 @@
 """Traspasos (equipos-jugadores-plan.md, Fase 2, Etapa C)."""
+from __future__ import annotations
+
 from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -229,3 +231,4 @@ class TraspasoService:
         await self.session.commit()
         await self.session.refresh(traspaso)
         return await self._a_salida(traspaso)
+

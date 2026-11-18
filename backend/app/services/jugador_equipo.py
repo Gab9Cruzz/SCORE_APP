@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import DomainRuleError
@@ -93,3 +95,4 @@ class JugadorEquipoService:
     async def dar_de_baja(self, id_: int, fecha_fin) -> JugadorEquipo:
         """Cierra la vigencia de un jugador en el equipo (libera el dorsal)."""
         return await self.repo.update(id_, fecha_fin=fecha_fin, estado="Inactivo")
+

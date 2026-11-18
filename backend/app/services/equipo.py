@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import DomainRuleError
@@ -96,3 +98,4 @@ class EquipoService:
         salida = EquipoOut.model_validate(equipo)
         salida.plantilla_total = plantilla_total
         return salida
+
