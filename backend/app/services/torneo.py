@@ -368,10 +368,8 @@ class TorneoService:
         # depende de que sea alcanzable — por eso se escriben a mano y se sacan
         # del payload antes de delegar. `exclude_unset` en el model_dump de
         # arriba es lo que distingue "ausente" de "presente y null".
-        for campo in ("minimo_jugadores_para_iniciar", "maximo_titulares_permitido", "maximo_cambios_por_equipo"):
-            if campo in payload:
-                setattr(torneo_actual, campo, payload.pop(campo))
-
+        # TASK-020: save_changes ya escribe los `None` explícitos, así que
+        # estos campos ya no necesitan escribirse a mano (C3 del plan).
         torneo = await self.repo.save_changes(torneo_actual, **payload)
 
         config = config_actual

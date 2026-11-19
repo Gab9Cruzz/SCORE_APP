@@ -46,6 +46,12 @@ from app.services.reglamento_torneo import ReglamentoTorneo
 VENTANA_DESHACER_SEGUNDOS = 5
 
 
+def _sin_nulos(**campos):
+    """TASK-020: save_changes escribe los None; acá un None significa "no
+    vino", no "borrar"."""
+    return {k: v for k, v in campos.items() if v is not None}
+
+
 class HitoPartidoService:
     """Motor de Tiempos + Control de Mesa en vivo
     (gestion-avanzada-equipos-control-mesa-plan.md, Fase 3). La secuencia
@@ -284,6 +290,8 @@ class HitoPartidoService:
         if fase is None or fase.tipo != "Eliminacion":
             return partido
         metodo_aplicable = ReglamentoTorneo.desde(torneo).resolver_desempate_aplicable(partido.ronda_nombre)
+        if metodo_aplicable is None:
+            return partido
         return await self.partido_repo.save_changes(partido, metodo_desempate_aplicable=metodo_aplicable)
 
     async def preflight_inicio(self, partido_id: int) -> PreflightInicioOut:
@@ -447,10 +455,12 @@ class HitoPartidoService:
                 )
             partido = await self.partido_repo.save_changes(
                 partido,
-                ganador_desempate_id=ganador_desempate_id,
-                metodo_desempate=metodo_desempate,
-                penales_local=data.penales_local,
-                penales_visitante=data.penales_visitante,
+                **_sin_nulos(
+                    ganador_desempate_id=ganador_desempate_id,
+                    metodo_desempate=metodo_desempate,
+                    penales_local=data.penales_local,
+                    penales_visitante=data.penales_visitante,
+                ),
             )
 
         hito = await self.repo.create(
@@ -538,10 +548,12 @@ class HitoPartidoService:
                 )
             partido = await self.partido_repo.save_changes(
                 partido,
-                ganador_desempate_id=ganador_desempate_id,
-                metodo_desempate=metodo_desempate,
-                penales_local=data.penales_local,
-                penales_visitante=data.penales_visitante,
+                **_sin_nulos(
+                    ganador_desempate_id=ganador_desempate_id,
+                    metodo_desempate=metodo_desempate,
+                    penales_local=data.penales_local,
+                    penales_visitante=data.penales_visitante,
+                ),
             )
 
         hito = await self.repo.create(

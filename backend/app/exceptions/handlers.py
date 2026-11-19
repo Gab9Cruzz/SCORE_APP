@@ -10,6 +10,7 @@ from app.core.logging import CABECERA_REQUEST_ID, request_id_actual
 
 from app.exceptions.errors import (
     AuthError,
+    CampoObligatorioError,
     ConcurrencyConflictError,
     ConflictError,
     DomainRuleError,
@@ -90,7 +91,7 @@ def _dbapi_error_response(exc: DBAPIError, request: Request | None = None) -> JS
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": _primera_linea(exc)})
     if sqlstate == "22001":
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={"detail": "Uno de los textos es demasiado largo."},
         )
     if sqlstate is not None and sqlstate.startswith("23"):
@@ -106,6 +107,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ConflictError)
     async def _conflict(_: Request, exc: ConflictError) -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": exc.detail})
+
+    @app.exception_handler(CampoObligatorioError)
+    async def _campo_obligatorio(_: Request, exc: CampoObligatorioError) -> JSONResponse:
+        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": exc.detail})
 
     @app.exception_handler(DomainRuleError)
     async def _domain_rule(_: Request, exc: DomainRuleError) -> JSONResponse:

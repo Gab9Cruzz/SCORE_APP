@@ -78,9 +78,11 @@ class PlantillaBaseService:
                 raise DomainRuleError(f"{jugador.nombre} ya está en la plantilla base de este equipo.")
             # unique_equipo_jugador_base es incondicional (no parcial): un
             # candidato que se había quitado se REACTIVA, no se re-inserta.
-            fila = await self.repo.save_changes(
-                existente, estado="Activo", dorsal_sugerido=data.dorsal_sugerido
-            )
+            # TASK-020: sin dorsal sugerido nuevo se conserva el anterior.
+            cambios = {"estado": "Activo"}
+            if data.dorsal_sugerido is not None:
+                cambios["dorsal_sugerido"] = data.dorsal_sugerido
+            fila = await self.repo.save_changes(existente, **cambios)
         else:
             fila = await self.repo.create(
                 equipo_id=equipo_id,

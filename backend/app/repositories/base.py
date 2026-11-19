@@ -12,7 +12,7 @@ from typing import Any, Generic, TypeVar
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.exceptions.errors import NotFoundError
+from app.exceptions.errors import CampoObligatorioError, NotFoundError
 
 ModelT = TypeVar("ModelT")
 
@@ -88,10 +88,19 @@ class BaseRepository(Generic[ModelT]):
         el objeto ANTES de mutarlo (ej: el ownership-check de Árbitro en
         roles-3-modulos-plan.md Fase 1) no tenga que cargarlo dos veces —
         una para el chequeo y otra dentro de `update`.
+
+        TASK-020 (FUN-10): escribe TODO lo que recibe, `None` incluido — un
+        `null` explícito limpia el campo. Antes los `None` se descartaban y no
+        había forma de vaciar nada. Por eso los llamadores pasan solo lo que
+        quieren escribir (`model_dump(exclude_unset=True)` en los PATCH). Un
+        `None` en una columna que no admite vacío es 422.
         """
+        columnas = obj.__mapper__.columns
         for campo, valor in datos.items():
-            if valor is not None:
-                setattr(obj, campo, valor)
+            if valor is None and campo in columnas and not columnas[campo].nullable:
+                raise CampoObligatorioError(campo)
+        for campo, valor in datos.items():
+            setattr(obj, campo, valor)
         await self.session.commit()
         # fecha_modificacion la pisa el trigger fn_actualizar_fecha_modificacion
         # (06_triggers.sql) en el UPDATE; refresh trae ese valor real de vuelta.

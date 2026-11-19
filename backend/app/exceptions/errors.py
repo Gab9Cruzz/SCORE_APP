@@ -14,6 +14,16 @@ class NotFoundError(Exception):
         super().__init__(self.detail)
 
 
+class CampoObligatorioError(Exception):
+    """TASK-020: un PATCH mandó `null` en un campo que no admite vacío.
+    422, igual que una validación de esquema."""
+
+    def __init__(self, campo: str):
+        self.campo = campo
+        self.detail = f"El campo '{campo}' es obligatorio: no puede quedar vacío."
+        super().__init__(self.detail)
+
+
 class ConflictError(Exception):
     """Viola una restricción UNIQUE (ej: dorsal repetido, torneo duplicado)."""
 
