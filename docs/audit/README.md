@@ -20,6 +20,7 @@
 | 09 | [Evaluación global](09_EVALUACION_GLOBAL.md) | Puntuación ponderada y nivel de confianza |
 | 10 | [Roadmap de mejoras](10_ROADMAP_MEJORAS.md) | Plan por fases, dependencias, esfuerzo, DoD |
 | 11 | [Backlog de implementación](11_BACKLOG_IMPLEMENTACION.md) | 56 tareas ejecutables `TASK-001…056` |
+| 12 | [Revisión visual](12_REVISION_VISUAL.md) | TASK-042: capturas en 4 tamaños, veredicto de cada `UX-*` y hallazgos nuevos `UX-16…26` |
 
 ## Convenciones
 

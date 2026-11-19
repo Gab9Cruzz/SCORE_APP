@@ -7,6 +7,11 @@ retomarlo — acá solo queda lo que sigue abierto.
 
 ## Pendiente — ya evaluado, falta ejecutar
 
+- **`GET /partidos/{id}/cronometro` responde 400 cuando el torneo no tiene
+  configuración de tiempos** (UX-21, `docs/audit/12_REVISION_VISUAL.md`). Es
+  un estado normal, no un error: deja dos errores en la consola por visita a
+  "Gestionar partido" y ensucia el monitoreo de 4xx. Devolver 200 con
+  `null` (y adaptar `Cronometro.tsx`) o un 404 explícito. Prioridad P3.
 - **Paginación real con cursor en `/equipos` y `/jugadores`** (3B-9). Cambia
   el contrato de API (rompe cualquier cliente que asuma offset) — requiere
   su propio ciclo, no es un fix acotado. **Diferido con umbral numérico**
