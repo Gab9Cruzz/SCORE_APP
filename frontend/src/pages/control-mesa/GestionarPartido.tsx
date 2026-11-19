@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
+import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { MesaPanel } from "../../components/MesaPanel";
 import { useEmpezarPartido } from "../../components/useEmpezarPartido";
 import { useNombresPorIds } from "../../hooks/useFetchFaltantes";
@@ -615,13 +616,17 @@ export function GestionarPartidoPage() {
           convocatoria arriba (`#convocatoria-editor`) en la MISMA vista —
           "ir a Convocatoria" desde el empty state de ModalSustitucion es
           un scroll, no una navegación que perdería el partido en curso. */}
+      {/* TASK-041: si el panel en vivo falla al dibujarse, el resto de la
+          página (marcador, estado, convocatoria) sigue en pantalla. */}
       {enCurso && (
-        <MesaPanel
-          partidoId={id}
-          onIrAConvocatoria={() =>
-            document.getElementById("convocatoria-editor")?.scrollIntoView({ behavior: "smooth", block: "start" })
-          }
-        />
+        <ErrorBoundary ambito="el panel de mesa" anidado claveReinicio={id}>
+          <MesaPanel
+            partidoId={id}
+            onIrAConvocatoria={() =>
+              document.getElementById("convocatoria-editor")?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+          />
+        </ErrorBoundary>
       )}
 
       {resultadoDirectoAbierto && partido.equipos_id_local != null && partido.equipos_id_visitante != null && (

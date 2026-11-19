@@ -70,9 +70,11 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
 
   // TASK-036 (UX-02): sin sesión, una ruta protegida lleva al formulario
   // de login (antes: una tarjeta "Necesitás iniciar sesión" con un enlace).
-  it("navegar directo a /torneo-admin sin sesión lleva al login, no crashea", () => {
+  // TASK-041: /torneo-admin es una ruta diferida (React.lazy): hay que
+  // esperar a que se cargue antes de que decida redirigir.
+  it("navegar directo a /torneo-admin sin sesión lleva al login, no crashea", async () => {
     renderApp("/torneo-admin/torneos");
-    expect(screen.getByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
     expect(screen.getByText(/Iniciá sesión para seguir/)).toBeInTheDocument();
   });
 

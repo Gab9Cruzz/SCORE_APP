@@ -402,6 +402,20 @@ main {
   position: relative;
 }
 
+/* TASK-041: aviso de error dentro de una página (panel de mesa). */
+.error-limite {
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  padding: var(--espacio-4);
+  margin: var(--espacio-4) 0;
+}
+
+.error-limite__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-2);
+}
+
 /* TASK-039: pie de tabla paginada. */
 .paginacion {
   display: flex;
