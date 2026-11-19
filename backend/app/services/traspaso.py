@@ -185,7 +185,7 @@ class TraspasoService:
                     "El jugador no tiene una membresía activa en el equipo de origen indicado."
                 )
             origen.estado = "Traspasado"
-            origen.fecha_fin = date.today()
+            origen.fecha_fin = max(date.today(), origen.fecha_inicio)  # TASK-026
         else:
             # Fichaje desde agencia libre: el perfil no debe tener NINGUNA
             # membresía activa ahora mismo, o esto no es una agencia libre
@@ -286,7 +286,7 @@ class TraspasoService:
                 "un movimiento posterior ya lo sacó de ahí. No se puede revertir automáticamente."
             )
         destino_activo.estado = "Inactivo"
-        destino_activo.fecha_fin = date.today()
+        destino_activo.fecha_fin = max(date.today(), destino_activo.fecha_inicio)  # TASK-026
         # Cierra destino ANTES de reactivar origen (mismo motivo que
         # crear(): fn_validar_exclusividad_torneo no debe ver dos Activo
         # del mismo perfil en el mismo torneo a la vez).

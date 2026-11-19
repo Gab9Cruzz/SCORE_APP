@@ -416,3 +416,37 @@ ALTER TABLE CONVOCADO_A_PARTIDO
 ALTER TABLE AUDITORIA
     ADD CONSTRAINT fk_auditoria_usuario FOREIGN KEY (Usuario_ID) REFERENCES USUARIOS(ID),
     ADD CONSTRAINT chk_auditoria_accion CHECK (Accion IN ('crear', 'modificar', 'eliminar'));
+
+-- ------------------------------------------------------------
+-- TASK-026 (docs/audit/, DB-01/DB-02): estados obligatorios y coherencia
+-- de fechas, rangos y nombres. Un CHECK (Estado IN (...)) da por válido un
+-- NULL, y sin estas reglas la base aceptaba por SQL directo valores que la
+-- API nunca produce. Migración: 40_migracion_restricciones_coherencia.sql.
+-- ------------------------------------------------------------
+ALTER TABLE DISCIPLINA ALTER COLUMN Estado SET NOT NULL;
+ALTER TABLE MODALIDAD ALTER COLUMN Estado SET NOT NULL;
+ALTER TABLE TORNEO ALTER COLUMN Estado SET NOT NULL;
+ALTER TABLE EQUIPOS ALTER COLUMN Estado SET NOT NULL;
+ALTER TABLE JUGADORES ALTER COLUMN Estado SET NOT NULL;
+ALTER TABLE INSCRIPCIONES_TORNEO ALTER COLUMN Estado SET NOT NULL;
+ALTER TABLE JUGADOR_EQUIPO ALTER COLUMN Estado SET NOT NULL;
+ALTER TABLE TRASPASOS ALTER COLUMN Estado SET NOT NULL;
+ALTER TABLE EQUIPO_JUGADOR_BASE ALTER COLUMN Estado SET NOT NULL;
+ALTER TABLE PARTIDOS ALTER COLUMN Estado SET NOT NULL;
+ALTER TABLE EVENTOS ALTER COLUMN Estado SET NOT NULL;
+ALTER TABLE USUARIOS ALTER COLUMN Estado SET NOT NULL;
+ALTER TABLE EVENTOS_PARTIDO ALTER COLUMN Estado SET NOT NULL;
+
+ALTER TABLE TORNEO ADD CONSTRAINT chk_torneo_fechas CHECK (Fecha_Fin >= Fecha_Inicio);
+ALTER TABLE TORNEO ADD CONSTRAINT chk_torneo_equipos_por_grupo CHECK (Equipos_Por_Grupo IS NULL OR Equipos_Por_Grupo > 0);
+ALTER TABLE TORNEO ADD CONSTRAINT chk_torneo_clasificados_por_grupo CHECK (Clasificados_Por_Grupo IS NULL OR Clasificados_Por_Grupo > 0);
+ALTER TABLE TORNEO ADD CONSTRAINT chk_torneo_nombre_no_vacio CHECK (btrim(Nombre) <> '');
+ALTER TABLE JUGADOR_EQUIPO ADD CONSTRAINT chk_jugador_equipo_fechas CHECK (Fecha_Fin IS NULL OR Fecha_Fin >= Fecha_Inicio);
+ALTER TABLE JUGADOR_EQUIPO ADD CONSTRAINT chk_jugador_equipo_dorsal CHECK (Dorsal IS NULL OR Dorsal > 0);
+ALTER TABLE CONFIGURACION_TIEMPO_TORNEO ADD CONSTRAINT chk_config_tiempo_cantidad_periodos CHECK (Cantidad_Periodos IS NULL OR Cantidad_Periodos > 0);
+ALTER TABLE CONFIGURACION_TIEMPO_TORNEO ADD CONSTRAINT chk_config_tiempo_duracion_periodo CHECK (Duracion_Periodo_Minutos IS NULL OR Duracion_Periodo_Minutos > 0);
+ALTER TABLE CONFIGURACION_TIEMPO_TORNEO ADD CONSTRAINT chk_config_tiempo_duracion_descanso CHECK (Duracion_Descanso_Minutos IS NULL OR Duracion_Descanso_Minutos >= 0);
+ALTER TABLE HITOS_PARTIDO ADD CONSTRAINT chk_hitos_partido_minuto_reloj CHECK (Minuto_Reloj IS NULL OR Minuto_Reloj >= 0);
+ALTER TABLE EQUIPOS ADD CONSTRAINT chk_equipos_nombre_no_vacio CHECK (btrim(Nombre) <> '');
+ALTER TABLE JUGADORES ADD CONSTRAINT chk_jugadores_nombre_no_vacio CHECK (btrim(Nombre) <> '');
+ALTER TABLE EVENTOS ADD CONSTRAINT chk_eventos_nombre_no_vacio CHECK (btrim(Nombre) <> '');

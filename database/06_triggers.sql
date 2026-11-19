@@ -529,7 +529,9 @@ RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.Estado = 'Finalizado' AND OLD.Estado <> 'Finalizado' THEN
         UPDATE JUGADOR_EQUIPO je
-        SET Estado = 'Inactivo', Fecha_Fin = CURRENT_DATE
+        -- TASK-026: una membresía que todavía no empezó cierra el día que
+        -- empieza (chk_jugador_equipo_fechas).
+        SET Estado = 'Inactivo', Fecha_Fin = GREATEST(CURRENT_DATE, je.Fecha_Inicio)
         FROM INSCRIPCIONES_TORNEO it
         WHERE je.Inscripcion_Torneo_ID = it.ID
           AND it.Torneo_ID = NEW.ID

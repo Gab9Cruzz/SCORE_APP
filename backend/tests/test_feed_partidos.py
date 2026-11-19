@@ -218,24 +218,21 @@ async def test_e_l1_torneo_finalizado_con_partido_hoy_aparece(client: AsyncClien
     assert partido.id in {p["partido_id"] for p in body["partidos"]}
 
 
-async def test_e_l3_estado_null_en_equipos_torneo_no_excluye_la_fila(
+async def test_e_l3_estado_null_en_equipos_torneo_ya_no_es_posible(
     client: AsyncClient, db_session: AsyncSession
 ):
-    """EQUIPOS.Estado/TORNEO.Estado son nullable (sin NOT NULL) — un NULL
-    real (no 'Activo' ni 'Inactivo') no debe caer víctima de un `= 'Activo'`
-    que lo descartaría en silencio (IS DISTINCT FROM, no igualdad)."""
-    torneo = await _crear_torneo(db_session, nombre="Feed Estado Null")
-    torneo.estado = None
-    local = await _crear_equipo(db_session, "Estado Null Local", disciplina_id=torneo.disciplina_id, modalidad_id=torneo.modalidad_id)
-    visitante = await _crear_equipo(db_session, "Estado Null Visitante", disciplina_id=torneo.disciplina_id, modalidad_id=torneo.modalidad_id)
-    local.estado = None
-    await _inscribir(db_session, torneo.id, local.id)
-    await _inscribir(db_session, torneo.id, visitante.id)
-    partido = await _crear_partido(db_session, torneo_id=torneo.id, local_id=local.id, visitante_id=visitante.id)
-    await db_session.commit()
+    """Antes EQUIPOS.Estado/TORNEO.Estado admitían NULL y esta prueba
+    comprobaba que la vista del feed no descartara esa fila (IS DISTINCT
+    FROM). Desde TASK-026 (DB-01) la base rechaza el NULL, así que el caso
+    no puede darse; la vista conserva IS DISTINCT FROM como defensa."""
+    from sqlalchemy.exc import DBAPIError
 
-    body = await _feed(client, fecha=str(FECHA_HOY))
-    assert partido.id in {p["partido_id"] for p in body["partidos"]}
+    torneo = await _crear_torneo(db_session, nombre="Feed Estado Null")
+    await db_session.commit()
+    torneo.estado = None
+    with pytest.raises(DBAPIError):
+        await db_session.commit()
+    await db_session.rollback()
 
 
 async def test_e_l5_corte_en_borde_de_bloque_nunca_devuelve_menos_del_primer_bloque_completo(

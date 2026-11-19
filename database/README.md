@@ -61,6 +61,7 @@ Cada una aplica un plan concreto sobre una base **ya provisionada**
 | `37_migracion_indice_partido_ida.sql` | TASK-023 (`docs/audit/`): índice `idx_partidos_ida` sobre `PARTIDOS(Partido_Ida_ID)` |
 | `38_migracion_inicio_partido_unico.sql` | TASK-024 (`docs/audit/`): índice único `uq_hitos_partido_inicio_unico` (un solo `Inicio_Partido` por partido) |
 | `39_migracion_tabla_posiciones.sql` | TASK-025 (`docs/audit/`): `vw_tabla_posiciones` parte de los participantes y usa el ganador declarado en cronómetro corrido; toma `Ganador_Corrido_ID` de `PARTIDOS` |
+| `40_migracion_restricciones_coherencia.sql` | TASK-026 (`docs/audit/`): `Estado NOT NULL` en 13 tablas, `CHECK` de fechas, rangos y nombres no vacíos; el cierre de torneo no deja una baja anterior al alta |
 
 **Nota (2026-09-14):** este índice se quedó desactualizado entre `21` y `30` — ninguna de esas
 migraciones aparecía listada aquí, aunque sí estaban aplicadas (o, en el caso de `21`,
