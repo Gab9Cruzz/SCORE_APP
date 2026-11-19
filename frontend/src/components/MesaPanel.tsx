@@ -825,6 +825,7 @@ export function MesaPanel({
                   key={e.id}
                   evento={e}
                   tipoIcono={TIPO_ICONO[eventoNombrePorId.get(e.eventos_id) as TipoEvento] ?? eventoNombrePorId.get(e.eventos_id) ?? ""}
+                  tipoNombre={eventoNombrePorId.get(e.eventos_id) ?? "Evento"}
                   esCambio={eventoNombrePorId.get(e.eventos_id) === "Cambio"}
                   // Fase 1/2 (Timeline visual): nombre de jugador + equipo
                   // en todo hito — antes esta fila no mostraba el equipo.
@@ -855,6 +856,8 @@ export function MesaPanel({
 function EventoTimelineFila(props: {
   evento: EventoPartidoRow;
   tipoIcono: string;
+  /** El tipo en palabras ("Tarjeta Amarilla"): el ícono es aria-hidden. */
+  tipoNombre: string;
   esCambio: boolean;
   equipoNombre: string;
   jugadorNombre: string;
@@ -862,12 +865,16 @@ function EventoTimelineFila(props: {
   onCorregir: (minuto: number) => void;
   corrigiendo: boolean;
 }) {
-  const { evento, tipoIcono, esCambio, equipoNombre, jugadorNombre, jugadorEntraNombre, onCorregir, corrigiendo } = props;
+  const { evento, tipoIcono, tipoNombre, esCambio, equipoNombre, jugadorNombre, jugadorEntraNombre, onCorregir, corrigiendo } =
+    props;
   const [editando, setEditando] = useState(false);
   const [minuto, setMinuto] = useState(String(evento.minuto));
   const ariaLabel = esCambio
     ? `Minuto ${evento.minuto}, cambio, ${equipoNombre}, sale ${jugadorNombre}, entra ${jugadorEntraNombre ?? ""}`
-    : `Minuto ${evento.minuto}, ${equipoNombre}, ${jugadorNombre}`;
+    : // TASK-046: con el tipo. Antes un lector de pantalla oía tres filas
+      // iguales ("Minuto 0, Truenos, #4") para dos amarillas y la roja: el
+      // tipo solo estaba en el ícono, que es aria-hidden.
+      `Minuto ${evento.minuto}, ${tipoNombre}, ${equipoNombre}, ${jugadorNombre}`;
 
   return (
     <li aria-label={editando ? undefined : ariaLabel}>

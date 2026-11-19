@@ -491,6 +491,22 @@ describe("MesaPanel — CargaEvento sin la opción Cambio (C2b)", () => {
     if (!filaAndres) throw new Error("No se encontró la fila de Andrés Vera");
     await comprobarModalAccesible(user, within(filaAndres).getByRole("button", { name: "Sacar" }));
   });
+
+  // TASK-046: el tipo del evento solo se veía en el ícono (aria-hidden);
+  // dos amarillas y la roja sonaban igual en un lector de pantalla.
+  it("cada fila de la timeline dice el tipo de evento en su nombre accesible", async () => {
+    montarMesaPanel();
+    server.use(
+      http.get(EVENTOS_PARTIDO, () =>
+        HttpResponse.json([
+          { id: 1, partidos_id: 3, jugador_id: 5, equipo_id: 1, eventos_id: 1, jugador_id_entra: null, estado: "Registrado", minuto: 10 },
+          { id: 2, partidos_id: 3, jugador_id: 5, equipo_id: 1, eventos_id: 3, jugador_id_entra: null, estado: "Registrado", minuto: 20 },
+        ]),
+      ),
+    );
+    expect(await screen.findByRole("listitem", { name: /^Minuto 10, Gol, Tiburones FC/ })).toBeInTheDocument();
+    expect(screen.getByRole("listitem", { name: /^Minuto 20, Tarjeta Roja, Tiburones FC/ })).toBeInTheDocument();
+  });
 });
 
 // control-mesa-centralizacion-fixture-plan.md, ítem 1/2: RBAC scoping +
