@@ -874,6 +874,25 @@ class MotorFormatosService:
         tercero = tabla_final[2]["equipo_id"] if slots >= 3 else None
         return campeon, subcampeon, tercero
 
+    async def podio_de_llave(self, torneo_id: int) -> tuple[int, int, int | None] | None:
+        """TASK-046: el podio que `cerrar_torneo` va a guardar si la fase
+        actual es una eliminatoria, para que la confirmación muestre a quién
+        corona de verdad. `None` si la fase no es Eliminación (el podio sale
+        de la tabla) o si la final todavía no está resuelta.
+
+        Antes la confirmación lo deducía siempre de la tabla de posiciones:
+        en una llave con un reclamo (TASK-009) el que perdió en cancha y ganó
+        el tercer puesto sumaba más puntos que el campeón, y el botón decía
+        "coronar a" un equipo distinto del que se guardaba."""
+        await self.torneo_repo.get_or_404(torneo_id)
+        fase_actual = await self.fase_repo.ultima_por_torneo(torneo_id)
+        if fase_actual is None or fase_actual.tipo != "Eliminacion":
+            return None
+        try:
+            return await self._podio_desde_bracket(fase_actual)
+        except DomainRuleError:
+            return None
+
     async def cerrar_torneo(
         self, torneo_id: int, usuario_id: int, orden_podio: list[int] | None = None
     ) -> Torneo:

@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { server } from "../../../test/msw-server";
 import { createWrapper } from "../../../test/test-utils";
 import { ModalSiguienteFase } from "./ModalSiguienteFase";
@@ -10,6 +10,14 @@ const TORNEO_ID = 30;
 const POSICIONES_URL = `http://127.0.0.1:8000/api/v1/estadisticas/torneos/${TORNEO_ID}/posiciones`;
 const CERRAR_URL = `http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}/cerrar`;
 const PLAYOFFS_URL = `http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}/playoffs`;
+const PODIO_LLAVE_URL = `http://127.0.0.1:8000/api/v1/torneos/${TORNEO_ID}/podio-llave`;
+const EQUIPOS_URL = "http://127.0.0.1:8000/api/v1/equipos";
+
+// TASK-046: por defecto la fase no es una eliminatoria (null) y el podio
+// sale de la tabla, como en una Liga.
+beforeEach(() => {
+  server.use(http.get(PODIO_LLAVE_URL, () => HttpResponse.json(null)));
+});
 
 function renderModal(props: Partial<Parameters<typeof ModalSiguienteFase>[0]> = {}) {
   const Wrapper = createWrapper();
@@ -111,6 +119,49 @@ describe("ModalSiguienteFase — preview de podio (paso 2a)", () => {
 
     await user.click(screen.getByRole("button", { name: /Cerrar torneo y coronar a Leones/ }));
     await waitFor(() => expect(cuerpoEnviado).toEqual({ orden_podio: [2, 1, 3] }));
+  });
+
+  // TASK-046: en una eliminatoria el podio es el de la llave, aunque la
+  // tabla diga otra cosa (un reclamo puede dejar primero en puntos al que
+  // perdió la semifinal y ganó el tercer puesto).
+  it("en una eliminatoria corona al ganador de la final, no al primero de la tabla", async () => {
+    server.use(
+      http.get(POSICIONES_URL, () =>
+        HttpResponse.json([
+          { equipo_id: 3, equipo: "Osos", pj: 2, pts: 6, dg: 3, gf: 3 },
+          { equipo_id: 1, equipo: "Tigres", pj: 2, pts: 3, dg: 0, gf: 1 },
+          { equipo_id: 2, equipo: "Leones", pj: 2, pts: 3, dg: 0, gf: 1 },
+        ]),
+      ),
+      http.get(PODIO_LLAVE_URL, () =>
+        HttpResponse.json({ campeon_equipo_id: 1, subcampeon_equipo_id: 2, tercer_puesto_equipo_id: 3 }),
+      ),
+      http.get(EQUIPOS_URL, () =>
+        HttpResponse.json([
+          { id: 1, nombre: "Tigres" },
+          { id: 2, nombre: "Leones" },
+          { id: 3, nombre: "Osos" },
+        ]),
+      ),
+    );
+    let cuerpoEnviado: unknown;
+    server.use(
+      http.post(CERRAR_URL, async ({ request }) => {
+        cuerpoEnviado = await request.json();
+        return HttpResponse.json({ id: TORNEO_ID, estado: "Finalizado" });
+      }),
+    );
+    const user = userEvent.setup();
+    renderModal({ formatoTorneo: "Eliminacion", accionesDisponibles: ["cerrar_directo"] });
+
+    expect(await screen.findByText(/1° Tigres/)).toBeInTheDocument();
+    expect(screen.getByText(/2° Leones/)).toBeInTheDocument();
+    expect(screen.getByText(/3° Osos/)).toBeInTheDocument();
+    expect(screen.queryByText(/Desempatado por orden manual/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Bajar a/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cerrar torneo y coronar a Tigres" }));
+    await waitFor(() => expect(cuerpoEnviado).toEqual({}));
   });
 });
 

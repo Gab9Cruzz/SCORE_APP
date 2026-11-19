@@ -361,6 +361,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/torneos/{torneo_id}/podio-llave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Podio De Llave
+         * @description TASK-046: vista previa del podio de una eliminatoria, el mismo que
+         *     guarda `POST /cerrar`. `null` si la fase actual no es Eliminación o la
+         *     final no está resuelta (ahí el podio sale de la tabla de posiciones).
+         */
+        get: operations["obtener_podio_de_llave_api_v1_torneos__torneo_id__podio_llave_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/torneos/{torneo_id}/cerrar": {
         parameters: {
             query?: never;
@@ -3234,6 +3256,20 @@ export interface components {
             /** Metodo Desempate Eliminatoria */
             metodo_desempate_eliminatoria?: ("Manual" | "Penales_Directo") | null;
         };
+        /**
+         * PodioLlaveOut
+         * @description GET /torneos/{id}/podio-llave: el podio que `cerrar` va a guardar
+         *     cuando la fase actual es una eliminatoria — sale de la llave (ganador y
+         *     perdedor de la final, ganador del tercer puesto), no de la tabla.
+         */
+        PodioLlaveOut: {
+            /** Campeon Equipo Id */
+            campeon_equipo_id: number;
+            /** Subcampeon Equipo Id */
+            subcampeon_equipo_id: number;
+            /** Tercer Puesto Equipo Id */
+            tercer_puesto_equipo_id: number | null;
+        };
         /** PodioOut */
         PodioOut: {
             /** Campeon Equipo Id */
@@ -4644,6 +4680,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EstadoFaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_podio_de_llave_api_v1_torneos__torneo_id__podio_llave_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                torneo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PodioLlaveOut"] | null;
                 };
             };
             /** @description Validation Error */

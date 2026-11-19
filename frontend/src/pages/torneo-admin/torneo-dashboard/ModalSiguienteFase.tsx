@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { api, apiErrorMessage } from "../../../api/client";
 import { Modal } from "../../../components/ui/Modal";
+import { useNombresPorIds } from "../../../hooks/useFetchFaltantes";
 import { LOCALE } from "../../../lib/fechas";
 
 type AccionDisponible = "cerrar_directo" | "generar_playoffs";
@@ -185,6 +186,29 @@ function PasoCerrarDirecto(props: {
 }) {
   const { torneoId, mostrarVolver, onVolver, onCancelar, onCerrado } = props;
 
+  // TASK-046: en una eliminatoria el podio sale de la llave (final y tercer
+  // puesto), no de la tabla. Se le pregunta al servidor el mismo podio que
+  // va a guardar: con un reclamo (TASK-009), el que perdió en cancha y ganó
+  // el tercer puesto podía encabezar la tabla, y el botón "coronaba" a un
+  // equipo distinto del campeón real. `null` = la fase no es una
+  // eliminatoria y se sigue con la tabla.
+  const podioLlaveQuery = useQuery({
+    queryKey: ["podio-llave", torneoId],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}/podio-llave", {
+        params: { path: { torneo_id: torneoId } },
+      });
+      if (error) throw error;
+      return data ?? null;
+    },
+  });
+  const llave = podioLlaveQuery.data ?? null;
+  const nombreEquipo = useNombresPorIds(
+    "/api/v1/equipos",
+    llave ? [llave.campeon_equipo_id, llave.subcampeon_equipo_id, llave.tercer_puesto_equipo_id] : [],
+  );
+  const nombreDe = (id: number) => nombreEquipo.get(id) ?? `Equipo #${id}`;
+
   const tablaQuery = useQuery({
     queryKey: ["tabla-posiciones", torneoId],
     queryFn: async () => {
@@ -270,9 +294,8 @@ function PasoCerrarDirecto(props: {
 
   const cerrar = useMutation({
     mutationFn: async () => {
-      const ordenPodio = hayEmpateEnPodio
-        ? tablaFinal.slice(0, slots).map((f) => f.equipo_id)
-        : undefined;
+      const ordenPodio =
+        !llave && hayEmpateEnPodio ? tablaFinal.slice(0, slots).map((f) => f.equipo_id) : undefined;
       const { data, error } = await api.POST("/api/v1/torneos/{torneo_id}/cerrar", {
         params: { path: { torneo_id: torneoId } },
         body: ordenPodio ? { orden_podio: ordenPodio } : {},
@@ -283,15 +306,47 @@ function PasoCerrarDirecto(props: {
     onSuccess: onCerrado,
   });
 
-  const campeon = tablaFinal[0] ? tablaFinal[0].equipo : null;
+  const campeon = llave ? nombreDe(llave.campeon_equipo_id) : tablaFinal[0] ? tablaFinal[0].equipo : null;
 
   return (
     <>
       {mostrarVolver && <p className="modal-panel__paso">Paso 2 de 2 · Cerrar torneo</p>}
       <h2 id="modal-siguiente-fase-titulo">Cerrar torneo y coronar campeones</h2>
-      {tablaQuery.isLoading && <p className="muted">Cargando la tabla de posiciones...</p>}
+      {(tablaQuery.isLoading || podioLlaveQuery.isLoading) && (
+        <p className="muted">Cargando la tabla de posiciones...</p>
+      )}
       {tablaQuery.isError && <p className="error-text">{apiErrorMessage(tablaQuery.error)}</p>}
-      {tabla.length > 0 && (
+      {podioLlaveQuery.isError && <p className="error-text">{apiErrorMessage(podioLlaveQuery.error)}</p>}
+      {llave && (
+        <div className="modal-panel__checklist" style={{ maxHeight: "none" }}>
+          <div className="modal-panel__equipo-fila">
+            <span>
+              1° {nombreDe(llave.campeon_equipo_id)}
+              <br />
+              <span className="muted--cuerpo">Ganó la final</span>
+            </span>
+          </div>
+          <div className="modal-panel__equipo-fila">
+            <span>
+              2° {nombreDe(llave.subcampeon_equipo_id)}
+              <br />
+              <span className="muted--cuerpo">Perdió la final</span>
+            </span>
+          </div>
+          <div className="modal-panel__equipo-fila">
+            {llave.tercer_puesto_equipo_id != null ? (
+              <span>
+                3° {nombreDe(llave.tercer_puesto_equipo_id)}
+                <br />
+                <span className="muted--cuerpo">Ganó el partido por el tercer puesto</span>
+              </span>
+            ) : (
+              <span className="muted--cuerpo">Sin tercer puesto.</span>
+            )}
+          </div>
+        </div>
+      )}
+      {!llave && !podioLlaveQuery.isLoading && tabla.length > 0 && (
         <div className="modal-panel__checklist" style={{ maxHeight: "none" }}>
           {tablaFinal.slice(0, slots).map((fila, i) => {
             const clave = `${fila.pts}-${fila.dg}-${fila.gf}`;
@@ -335,7 +390,7 @@ function PasoCerrarDirecto(props: {
           })}
         </div>
       )}
-      {tabla.length === 0 && !tablaQuery.isLoading && !tablaQuery.isError && (
+      {!llave && tabla.length === 0 && !tablaQuery.isLoading && !tablaQuery.isError && (
         <p className="error-text">No hay equipos con partidos jugados todavía — no se puede armar el podio.</p>
       )}
       {cerrar.isError && <p className="error-text">{apiErrorMessage(cerrar.error)}</p>}
@@ -349,7 +404,11 @@ function PasoCerrarDirecto(props: {
             Cancelar
           </button>
         )}
-        <button type="button" disabled={cerrar.isPending || tabla.length === 0} onClick={() => cerrar.mutate()}>
+        <button
+          type="button"
+          disabled={cerrar.isPending || podioLlaveQuery.isLoading || (!llave && tabla.length === 0)}
+          onClick={() => cerrar.mutate()}
+        >
           {cerrar.isPending ? "Cerrando..." : `Cerrar torneo y coronar a ${campeon ?? "…"}`}
         </button>
       </div>

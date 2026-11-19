@@ -524,3 +524,69 @@ async def test_tras_reabrir_la_plantilla_vigente_vuelve_a_estar_disponible(
     assert resp.status_code == 200, resp.text
     despues = {f["jugador_perfil_id"] for f in await repo.plantilla_equipo(equipo, torneo_id)}
     assert despues == antes
+
+
+# ---------- TASK-046: vista previa del podio de una eliminatoria ----------
+
+
+async def test_podio_llave_coincide_con_el_cierre_aunque_la_tabla_diga_otra_cosa(
+    client: AsyncClient, torneo_admin_headers: dict[str, str], db_session: AsyncSession
+):
+    """Con un reclamo en semifinal, el que perdió en cancha y después ganó el
+    tercer puesto suma más puntos que el campeón. La vista previa tiene que
+    nombrar al que gana la final — el mismo que guarda `cerrar` — y no al
+    primero de la tabla (lo encontró el recorrido e2e PR-064)."""
+    torneo_id, _ = await _torneo_con_equipos(client, torneo_admin_headers, 4, "Eliminacion", "Copa Preview")
+    assert (await client.post(f"/api/v1/torneos/{torneo_id}/sorteo", json={}, headers=torneo_admin_headers)).status_code == 200
+    llave = (await client.get(f"/api/v1/torneos/{torneo_id}/bracket", headers=torneo_admin_headers)).json()
+    semi1, semi2 = [p for p in llave if p["ronda_nombre"] == "Semifinal"]
+    await _finalizar(db_session, semi1["id"], {semi1["equipos_id_local"]: 1, semi1["equipos_id_visitante"]: 0})
+    await _finalizar(db_session, semi2["id"], {semi2["equipos_id_local"]: 1, semi2["equipos_id_visitante"]: 0})
+    favorecido = semi1["equipos_id_visitante"]
+    resp = await client.post(
+        f"/api/v1/partidos/{semi1['id']}/reclamo",
+        json={"equipo_id": favorecido, "motivo": "alineación indebida"},
+        headers=torneo_admin_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    llave = (await client.get(f"/api/v1/torneos/{torneo_id}/bracket", headers=torneo_admin_headers)).json()
+    final = next(p for p in llave if p["ronda_nombre"] == "Final")
+    tercero = next(p for p in llave if p["ronda_nombre"] == "Tercer Lugar")
+    await _finalizar(db_session, final["id"], {favorecido: 1})
+    await _finalizar(db_session, tercero["id"], {tercero["equipos_id_local"]: 2})
+
+    # La tabla pone primero a otro equipo...
+    tabla = (
+        await client.get(f"/api/v1/estadisticas/torneos/{torneo_id}/posiciones", headers=torneo_admin_headers)
+    ).json()
+    assert tabla[0]["equipo_id"] != favorecido
+
+    # ...pero la vista previa nombra al campeón de la llave, igual que el cierre.
+    preview = (await client.get(f"/api/v1/torneos/{torneo_id}/podio-llave", headers=torneo_admin_headers)).json()
+    assert preview["campeon_equipo_id"] == favorecido
+    cerrado = (await client.post(f"/api/v1/torneos/{torneo_id}/cerrar", json={}, headers=torneo_admin_headers)).json()
+    assert (cerrado["campeon_equipo_id"], cerrado["subcampeon_equipo_id"], cerrado["tercer_puesto_equipo_id"]) == (
+        preview["campeon_equipo_id"],
+        preview["subcampeon_equipo_id"],
+        preview["tercer_puesto_equipo_id"],
+    )
+
+
+async def test_podio_llave_es_null_en_liga_y_con_la_final_pendiente(
+    client: AsyncClient, torneo_admin_headers: dict[str, str]
+):
+    liga_id, _ = await _torneo_con_equipos(client, torneo_admin_headers, 3, "Liga", "Liga Preview")
+    await client.post(f"/api/v1/torneos/{liga_id}/fixture", headers=torneo_admin_headers)
+    resp = await client.get(f"/api/v1/torneos/{liga_id}/podio-llave", headers=torneo_admin_headers)
+    assert resp.status_code == 200 and resp.json() is None
+
+    copa_id, _ = await _torneo_con_equipos(client, torneo_admin_headers, 2, "Eliminacion", "Copa Pendiente")
+    await client.post(f"/api/v1/torneos/{copa_id}/sorteo", json={}, headers=torneo_admin_headers)
+    resp = await client.get(f"/api/v1/torneos/{copa_id}/podio-llave", headers=torneo_admin_headers)
+    assert resp.status_code == 200 and resp.json() is None
+
+
+async def test_podio_llave_exige_acceso_al_torneo(client: AsyncClient, torneo_admin_headers: dict[str, str]):
+    torneo_id, _ = await _torneo_con_equipos(client, torneo_admin_headers, 2, "Eliminacion", "Copa Ajena Preview")
+    assert (await client.get(f"/api/v1/torneos/{torneo_id}/podio-llave")).status_code == 401

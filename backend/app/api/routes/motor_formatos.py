@@ -12,6 +12,7 @@ from app.models.usuario import Usuario
 from app.schemas.fase import FaseOut
 from app.schemas.motor_formatos import (
     CerrarTorneoRequest,
+    PodioLlaveOut,
     EstadoFaseOut,
     PlayoffsRequest,
     SorteoRequest,
@@ -111,6 +112,22 @@ async def estado_fase(torneo_id: int, session: AsyncSession = Depends(get_db)) -
     mostrar, no un dato de audiencia."""
     estado = await MotorFormatosService(session).estado_fase(torneo_id)
     return EstadoFaseOut.model_validate(estado)
+
+
+@router.get(
+    "/{torneo_id}/podio-llave",
+    response_model=PodioLlaveOut | None,
+    dependencies=[Depends(require_roles("TorneoAdmin")), Depends(require_torneo_access())],
+)
+async def obtener_podio_de_llave(torneo_id: int, session: AsyncSession = Depends(get_db)) -> PodioLlaveOut | None:
+    """TASK-046: vista previa del podio de una eliminatoria, el mismo que
+    guarda `POST /cerrar`. `null` si la fase actual no es Eliminación o la
+    final no está resuelta (ahí el podio sale de la tabla de posiciones)."""
+    podio = await MotorFormatosService(session).podio_de_llave(torneo_id)
+    if podio is None:
+        return None
+    campeon, subcampeon, tercero = podio
+    return PodioLlaveOut(campeon_equipo_id=campeon, subcampeon_equipo_id=subcampeon, tercer_puesto_equipo_id=tercero)
 
 
 @router.post(

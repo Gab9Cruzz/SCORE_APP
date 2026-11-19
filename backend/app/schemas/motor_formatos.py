@@ -39,6 +39,16 @@ class PlayoffsRequest(BaseModel):
     metodo_desempate_eliminatoria: Literal["Manual", "Penales_Directo"] | None = None
 
 
+class PodioLlaveOut(BaseModel):
+    """GET /torneos/{id}/podio-llave: el podio que `cerrar` va a guardar
+    cuando la fase actual es una eliminatoria — sale de la llave (ganador y
+    perdedor de la final, ganador del tercer puesto), no de la tabla."""
+
+    campeon_equipo_id: int
+    subcampeon_equipo_id: int
+    tercer_puesto_equipo_id: int | None
+
+
 class CerrarTorneoRequest(BaseModel):
     """POST /torneos/{id}/cerrar — `orden_podio`: el orden explícito que
     el admin eligió para desempatar equipos empatados en pts/dg/gf en el
