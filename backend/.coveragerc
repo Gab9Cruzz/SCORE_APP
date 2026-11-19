@@ -1,0 +1,16 @@
+# TASK-047 (QA-04/QA-11): cobertura del backend.
+# La corre CI con `pytest --cov` y después exige un piso por carpeta con
+# `coverage report --include=... --fail-under=N` (ver .github/workflows/ci.yml
+# y docs/cobertura.md, que registra la medición de la que sale cada piso).
+[run]
+source = app
+branch = false
+# SQLAlchemy async ejecuta cada consulta en un greenlet: sin esto coverage
+# pierde el rastro después de cada `await session...` y subestima todo lo
+# que usa la base (medido: motor_formatos 27 % → 67 % con la misma prueba).
+concurrency = thread,greenlet
+
+[report]
+skip_empty = true
+show_missing = false
+precision = 1

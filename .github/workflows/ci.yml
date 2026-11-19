@@ -1,7 +1,8 @@
 # CI mínima (TASK-003, docs/audit/11_BACKLOG_IMPLEMENTACION.md).
 # Lo mismo que verificar.ps1, en un entorno fijo y en cada cambio:
-#   backend   -> pytest (normal y concurrencia) contra un PostgreSQL 16 de servicio
-#   frontend  -> npm run verify (oxlint, tsc, vitest, vite build)
+#   backend   -> pytest (normal y concurrencia) contra un PostgreSQL 16 de servicio,
+#                con cobertura y piso por carpeta (TASK-047)
+#   frontend  -> npm run verify (oxlint, tsc, vitest, vite build) y cobertura
 #   contrato  -> regenera src/api/schema.d.ts desde la API y falla si cambió
 #   e2e       -> los cinco recorridos de e2e/ en un Chromium real (solo en main)
 name: CI
@@ -56,8 +57,18 @@ jobs:
       - name: Ruff (informativo, no bloquea todavía)
         continue-on-error: true
         run: ruff check .
-      - name: pytest
-        run: python -m pytest -q -m "not concurrencia"
+      - name: pytest (con cobertura, TASK-047)
+        run: python -m pytest -q -m "not concurrencia" --cov --cov-report=xml --cov-report=html
+      - name: Cobertura mínima por carpeta
+        run: python scripts/cobertura_minima.py coverage.xml
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-backend
+          path: |
+            backend/coverage.xml
+            backend/htmlcov/
+          retention-days: 14
       - name: pytest — concurrencia
         run: python -m pytest -q -m concurrencia
 
@@ -75,6 +86,15 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run verify
+      # TASK-047: vuelve a correr vitest con instrumentación y exige los
+      # pisos de src/lib y src/hooks (vite.config.ts).
+      - run: npm run coverage
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-frontend
+          path: frontend/coverage/
+          retention-days: 14
 
   contrato:
     # /openapi.json no toca la base: la API arranca sin PostgreSQL (el

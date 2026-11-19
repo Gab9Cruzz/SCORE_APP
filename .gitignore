@@ -40,3 +40,7 @@ CLAUDE.md
 # e2e (TASK-046): resultados de Playwright
 e2e/test-results/
 e2e/playwright-report/
+
+# Cobertura (TASK-047)
+coverage/
+coverage.xml
