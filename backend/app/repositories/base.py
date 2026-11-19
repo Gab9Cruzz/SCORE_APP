@@ -57,7 +57,7 @@ class BaseRepository(Generic[ModelT]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def create(self, **datos: Any) -> ModelT:
+    async def create(self, commit: bool = True, **datos: Any) -> ModelT:
         """Commitea de inmediato — un caller que necesite insertar más de
         una fila en la MISMA transacción (ej. un evento + una roja
         automática, o varios eventos de un resultado directo) no puede usar
@@ -73,15 +73,28 @@ class BaseRepository(Generic[ModelT]):
         — es a propósito que sea el caso simple."""
         obj = self.model(**datos)
         self.session.add(obj)
-        await self.session.commit()
-        await self.session.refresh(obj)
+        await self._confirmar(obj, commit)
         return obj
+
+    async def _confirmar(self, obj: ModelT, commit: bool) -> None:
+        """TASK-022 (BE-02): `commit=False` hace flush (asigna ids, corren
+        los triggers) sin confirmar, para que un caso de uso de varios pasos
+        confirme UNA vez al final y un fallo en cualquier paso no deje nada a
+        medias. El default sigue siendo confirmar para no cambiar a todos
+        los llamadores de una vez; el objetivo es invertirlo."""
+        if commit:
+            await self.session.commit()
+        else:
+            await self.session.flush()
+        # fecha_modificacion la pisa el trigger fn_actualizar_fecha_modificacion
+        # (06_triggers.sql) en el UPDATE; refresh trae ese valor real de vuelta.
+        await self.session.refresh(obj)
 
     async def update(self, id_: int, **datos: Any) -> ModelT:
         obj = await self.get_or_404(id_)
         return await self.save_changes(obj, **datos)
 
-    async def save_changes(self, obj: ModelT, **datos: Any) -> ModelT:
+    async def save_changes(self, obj: ModelT, commit: bool = True, **datos: Any) -> ModelT:
         """Igual que `update`, pero recibe el objeto ya cargado.
 
         Separado de `update` para que un caller que necesite hacer algo con
@@ -101,10 +114,7 @@ class BaseRepository(Generic[ModelT]):
                 raise CampoObligatorioError(campo)
         for campo, valor in datos.items():
             setattr(obj, campo, valor)
-        await self.session.commit()
-        # fecha_modificacion la pisa el trigger fn_actualizar_fecha_modificacion
-        # (06_triggers.sql) en el UPDATE; refresh trae ese valor real de vuelta.
-        await self.session.refresh(obj)
+        await self._confirmar(obj, commit)
         return obj
 
     async def soft_delete(self, id_: int, estado_inactivo: str = "Inactivo") -> ModelT:

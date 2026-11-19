@@ -409,7 +409,7 @@ class HitoPartidoService:
             # dispara fn_hito_sincroniza_estado_partido AFTER INSERT del
             # Hito — si el ganador no está seteado antes, el trigger de
             # validación lo rechaza.
-            partido = await self.partido_repo.save_changes(partido, ganador_corrido_id=data.ganador_corrido_id)
+            partido = await self.partido_repo.save_changes(partido, commit=False, ganador_corrido_id=data.ganador_corrido_id)
 
         if data.tipo_hito == "Fin_Partido" and (
             data.ganador_desempate_id is not None or data.penales_local is not None
@@ -455,6 +455,7 @@ class HitoPartidoService:
                 )
             partido = await self.partido_repo.save_changes(
                 partido,
+                commit=False,
                 **_sin_nulos(
                     ganador_desempate_id=ganador_desempate_id,
                     metodo_desempate=metodo_desempate,
@@ -522,7 +523,7 @@ class HitoPartidoService:
                 )
             if data.ganador_corrido_id not in (partido.equipos_id_local, partido.equipos_id_visitante):
                 raise DomainRuleError("El ganador debe ser uno de los dos equipos que disputan el partido.")
-            partido = await self.partido_repo.save_changes(partido, ganador_corrido_id=data.ganador_corrido_id)
+            partido = await self.partido_repo.save_changes(partido, commit=False, ganador_corrido_id=data.ganador_corrido_id)
 
         if data.ganador_desempate_id is not None or data.penales_local is not None:
             # Mismo criterio exacto que el Fin_Partido normal (SPEC-REVIEW
@@ -548,6 +549,7 @@ class HitoPartidoService:
                 )
             partido = await self.partido_repo.save_changes(
                 partido,
+                commit=False,
                 **_sin_nulos(
                     ganador_desempate_id=ganador_desempate_id,
                     metodo_desempate=metodo_desempate,

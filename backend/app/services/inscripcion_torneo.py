@@ -140,8 +140,13 @@ class InscripcionTorneoService:
                 f"este torneo es de {disciplina_torneo.nombre if disciplina_torneo else 'otra disciplina'}."
             )
 
-        inscripcion = await self.repo.create(torneo_id=data.torneo_id, equipo_id=data.equipo_id)
+        # TASK-022: la inscripción y la copia de la plantilla base se
+        # confirman juntas, con un commit explícito acá (la copia sale antes
+        # sin confirmar nada si el equipo no tiene plantilla base).
+        inscripcion = await self.repo.create(commit=False, torneo_id=data.torneo_id, equipo_id=data.equipo_id)
         resumen = await self.copiar_plantilla_base_al_roster(inscripcion, data.equipo_id)
+        await self.session.commit()
+        await self.session.refresh(inscripcion)
 
         salida = InscripcionTorneoOut.model_validate(inscripcion)
         salida.plantilla_base = resumen

@@ -193,17 +193,22 @@ class TorneoService:
         tipo_cronometro_efectivo = await self._tipo_cronometro_efectivo(data.config_tiempo, datos["modalidad_id"])
         validar_metodo_desempate_eliminatoria(data.metodo_desempate_eliminatoria, tipo_cronometro_efectivo)
 
-        torneo = await self.repo.create(**datos)
+        # TASK-022: un solo commit al final; si falla cualquier paso, no queda
+        # ni el torneo, ni el grupo nuevo, ni la fase, ni la asignación.
+        torneo = await self.repo.create(commit=False, **datos)
         await self._crear_fase_inicial(torneo)
         await self._auto_asignar_creador(torneo, usuario_actual)
         config = await self._crear_config_tiempo_inicial(torneo, data.config_tiempo)
+        await self.session.commit()
+        await self.session.refresh(torneo)
+        await self.session.refresh(config)
         return self._a_salida(torneo, config)
 
     async def _auto_asignar_creador(self, torneo: Torneo, usuario_actual: Usuario) -> None:
         if usuario_actual.rol != "TorneoAdmin":
             return
         self.session.add(AsignacionTorneoAdmin(usuario_id=usuario_actual.id, torneo_id=torneo.id, estado="Activo"))
-        await self.session.commit()
+        await self.session.flush()
 
     def _validar_parametros_formato(
         self,
@@ -266,7 +271,7 @@ class TorneoService:
             estado="Pendiente",
         )
         self.session.add(fase)
-        await self.session.commit()
+        await self.session.flush()
 
     async def _crear_config_tiempo_inicial(
         self, torneo: Torneo, config_tiempo: ConfiguracionTiempoTorneoCreate | None
@@ -276,7 +281,7 @@ class TorneoService:
         else:
             modalidad = await self.modalidad_repo.get_or_404(torneo.modalidad_id)
             datos = dict(_DEFAULT_CORRIDO if modalidad.tamano_equipo == 1 else _DEFAULT_PERIODOS)
-        config = await self.config_tiempo_repo.create(torneo_id=torneo.id, **datos)
+        config = await self.config_tiempo_repo.create(commit=False, torneo_id=torneo.id, **datos)
         return config
 
     async def update(self, id_: int, data: TorneoUpdate) -> TorneoOut:

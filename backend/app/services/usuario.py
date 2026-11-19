@@ -27,6 +27,7 @@ def _hash_de_relleno() -> str:
 
 class UsuarioService:
     def __init__(self, session: AsyncSession):
+        self.session = session
         self.repo = UsuarioRepository(session)
         self.acceso_repo = AccesoRepository(session)
         self.asignacion_repo = AsignacionTorneoAdminRepository(session)
@@ -71,7 +72,8 @@ class UsuarioService:
 
         objetivo = await self.repo.get_or_404(id_)
         rol_anterior = objetivo.rol
-        usuario = await self.repo.save_changes(objetivo, **payload)
+        # TASK-022: el cambio de rol y la baja de asignaciones van juntos.
+        usuario = await self.repo.save_changes(objetivo, commit=False, **payload)
 
         # Asignaciones huérfanas (rbac-licencias-torneos-plan.md, §3.2,
         # hallazgo #3 de la voz externa Eng): fn_validar_asignacion_torneo_admin_rol
@@ -83,6 +85,8 @@ class UsuarioService:
         if rol_anterior == "TorneoAdmin" and usuario.rol != "TorneoAdmin":
             await self.asignacion_repo.desactivar_todas_del_usuario(id_)
 
+        await self.session.commit()
+        await self.session.refresh(usuario)
         return usuario
 
     async def soft_delete(self, id_: int, usuario_actual: Usuario) -> Usuario:
