@@ -74,6 +74,48 @@ describe("useResourceCrud", () => {
     expect(result.current.truncado).toBe(true);
   });
 
+  // TASK-011: con X-Total-Count el aviso deja de ser una inferencia.
+  it("list: marca truncado y expone el total cuando X-Total-Count supera lo recibido", async () => {
+    server.use(
+      http.get(BASE, () =>
+        HttpResponse.json([{ id: 1, nombre: "Uno", estado: "Activo" }], { headers: { "X-Total-Count": "150" } }),
+      ),
+    );
+    const { result } = renderHook(
+      () => useResourceCrud<TestOut>({ resourceKey: "total-mayor", basePath: "/api/v1/test-resource" }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.total).toBe(150));
+    expect(result.current.listQuery.data).toHaveLength(1);
+    expect(result.current.truncado).toBe(true);
+  });
+
+  it("list: con X-Total-Count igual a lo recibido no marca truncado aunque llegue justo llena", async () => {
+    const llena = Array.from({ length: LIMITE_LISTA }, (_, i) => ({ id: i + 1, nombre: `F${i}`, estado: "Activo" }));
+    server.use(
+      http.get(BASE, () => HttpResponse.json(llena, { headers: { "X-Total-Count": String(LIMITE_LISTA) } })),
+    );
+    const { result } = renderHook(
+      () => useResourceCrud<TestOut>({ resourceKey: "total-igual", basePath: "/api/v1/test-resource" }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.total).toBe(LIMITE_LISTA));
+    expect(result.current.truncado).toBe(false);
+  });
+
+  it("list: sin X-Total-Count el total es null", async () => {
+    server.use(http.get(BASE, () => HttpResponse.json([{ id: 1, nombre: "Uno", estado: "Activo" }])));
+    const { result } = renderHook(
+      () => useResourceCrud<TestOut>({ resourceKey: "sin-total", basePath: "/api/v1/test-resource" }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.listQuery.isSuccess).toBe(true));
+    expect(result.current.total).toBeNull();
+  });
+
   it("list: no marca truncado si entran todas las filas", async () => {
     server.use(http.get(BASE, () => HttpResponse.json([{ id: 1, nombre: "Uno", estado: "Activo" }])));
     const { result } = renderHook(

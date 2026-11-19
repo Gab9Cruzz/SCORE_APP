@@ -96,6 +96,10 @@ class EventoPartidoService:
     ) -> list[EventoPartido]:
         return await self.repo.list(skip=skip, limit=limit, partidos_id=partidos_id)
 
+    async def contar(self, partidos_id: int | None = None) -> int:
+        """Total sin paginar de `list` con el mismo filtro (TASK-011)."""
+        return await self.repo.contar_filtrado(partidos_id=partidos_id)
+
     async def create(self, data: EventoPartidoCreate, usuario_actual: Usuario) -> EventoPartido:
         """A1 (docs/plans/cierre-pendientes-todos-plan.md) — REESTRUCTURADO
         para cerrar la carrera de la doble tarjeta amarilla simultánea:

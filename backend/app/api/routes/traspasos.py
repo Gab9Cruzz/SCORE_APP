@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_current_user_optional, require_roles, require_torneo_access_de
+from app.core.paginacion import Pagina, informar_total, paginacion
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
@@ -34,6 +35,9 @@ async def _torneo_id_de_traspaso(traspaso_id: int, session: AsyncSession = Depen
 async def listar_traspasos(
     jugador_perfil_id: int | None = None,
     torneo_id: int | None = None,
+    *,
+    response: Response,
+    pagina: Pagina = Depends(paginacion),
     session: AsyncSession = Depends(get_db),
     usuario: Usuario | None = Depends(get_current_user_optional),
 ) -> list[TraspasoOut]:
@@ -47,9 +51,14 @@ async def listar_traspasos(
     torneo_ids_permitidos: list[int] | None = None
     if usuario is not None and usuario.rol == "TorneoAdmin":
         torneo_ids_permitidos = await AsignacionTorneoAdminRepository(session).listar_torneo_ids_activos(usuario.id)
-    return await TraspasoService(session).list(
-        jugador_perfil_id=jugador_perfil_id, torneo_id=torneo_id, torneo_ids_permitidos=torneo_ids_permitidos
-    )
+    filtros = {
+        "jugador_perfil_id": jugador_perfil_id,
+        "torneo_id": torneo_id,
+        "torneo_ids_permitidos": torneo_ids_permitidos,
+    }
+    servicio = TraspasoService(session)
+    informar_total(response, await servicio.contar(**filtros))
+    return await servicio.list(skip=pagina.skip, limit=pagina.limit, **filtros)
 
 
 @router.get("/{traspaso_id}", response_model=TraspasoOut)

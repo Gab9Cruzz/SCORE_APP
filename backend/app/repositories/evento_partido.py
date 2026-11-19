@@ -25,10 +25,7 @@ class EventoPartidoRepository(BaseRepository[EventoPartido]):
         minuto) veía la lista en orden de inserción. Ahora el backend
         devuelve ya ordenado; el cliente no tiene que reimplementar el sort.
         """
-        stmt = select(self.model)
-        for campo, valor in filtros.items():
-            if valor is not None:
-                stmt = stmt.where(getattr(self.model, campo) == valor)
+        stmt = self._consulta_filtrada(**filtros)
         stmt = stmt.order_by(self.model.minuto, self.model.id).offset(skip).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

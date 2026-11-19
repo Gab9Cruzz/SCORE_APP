@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { api, apiErrorMessage } from "../api/client";
+import { LIMITE_EVENTOS_PARTIDO } from "../hooks/useResourceCrud";
 import { useAuth } from "../auth/useAuth";
 import { useNombrePorIdConFaltantes } from "../hooks/useFetchFaltantes";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
@@ -162,7 +163,9 @@ export function MesaPanel({
   const eventosPartidoQuery = useQuery({
     queryKey: ["eventos-partido", partidoId],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/eventos-partido", { params: { query: { partidos_id: partidoId } } });
+      const { data, error } = await api.GET("/api/v1/eventos-partido", {
+        params: { query: { partidos_id: partidoId, limit: LIMITE_EVENTOS_PARTIDO } },
+      });
       if (error) throw error;
       return data;
     },

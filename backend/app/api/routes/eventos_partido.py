@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles, require_torneo_access_de
+from app.core.paginacion import Pagina, informar_total, paginacion_eventos
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.repositories.evento_partido import EventoPartidoRepository
@@ -31,9 +32,16 @@ async def _torneo_id_de_evento_partido(evento_partido_id: int, session: AsyncSes
 
 @router.get("", response_model=list[EventoPartidoOut])
 async def listar_eventos_partido(
-    partidos_id: int | None = None, session: AsyncSession = Depends(get_db)
+    response: Response,
+    partidos_id: int | None = None,
+    pagina: Pagina = Depends(paginacion_eventos),
+    session: AsyncSession = Depends(get_db),
 ) -> list[EventoPartidoOut]:
-    return await EventoPartidoService(session).list(partidos_id=partidos_id)
+    """Hasta 500 por página (TASK-011): los eventos de un partido se traen
+    enteros, no se paginan en la interfaz."""
+    servicio = EventoPartidoService(session)
+    informar_total(response, await servicio.contar(partidos_id=partidos_id))
+    return await servicio.list(skip=pagina.skip, limit=pagina.limit, partidos_id=partidos_id)
 
 
 @router.get("/{evento_partido_id}", response_model=EventoPartidoOut)

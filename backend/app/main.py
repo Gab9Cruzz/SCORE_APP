@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core import auditoria as _auditoria_listener  # noqa: F401 - registra el event listener de flush (ver ese módulo)
 from app.core.config import get_settings
+from app.core.paginacion import CABECERA_TOTAL
 from app.db.database import async_session_factory
 from app.exceptions.handlers import register_exception_handlers
 from app.repositories.acceso import AccesoRepository
@@ -126,6 +127,9 @@ app.add_middleware(
     allow_credentials=settings.cors_origins != "*",
     allow_methods=["*"],
     allow_headers=["*"],
+    # TASK-011: sin esto el navegador le oculta al frontend el total de los
+    # listados paginados.
+    expose_headers=[CABECERA_TOTAL],
 )
 
 register_exception_handlers(app)

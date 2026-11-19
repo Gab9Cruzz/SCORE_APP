@@ -60,6 +60,25 @@ class JugadorEquipoService:
             jugador_perfil_id=jugador_perfil_id,
         )
 
+    async def contar(
+        self,
+        inscripcion_torneo_id: int | None = None,
+        jugador_perfil_id: int | None = None,
+        torneo_id: int | None = None,
+        torneo_ids_permitidos: list[int] | None = None,
+    ) -> int:
+        """Total sin paginar de `list` con los mismos filtros (TASK-011)."""
+        if torneo_id is not None or torneo_ids_permitidos is not None:
+            return await self.repo.contar_por_torneo(
+                torneo_id,
+                jugador_perfil_id=jugador_perfil_id,
+                inscripcion_torneo_id=inscripcion_torneo_id,
+                torneo_ids_permitidos=torneo_ids_permitidos,
+            )
+        return await self.repo.contar_filtrado(
+            inscripcion_torneo_id=inscripcion_torneo_id, jugador_perfil_id=jugador_perfil_id
+        )
+
     async def create(self, data: JugadorEquipoCreate) -> JugadorEquipo:
         # Serializa contra otra transacción concurrente activando el mismo
         # perfil en el mismo torneo (equipos-jugadores-plan.md, Fase 3

@@ -10,7 +10,7 @@ import { api } from "../api/client";
  * lado del backend.
  *
  * InscripcionTorneo y JugadorEquipo se desvían de esta forma (sin DELETE
- * plano, sin skip/limit/estado en el GET) — usan `customAction` para sus
+ * plano, sin filtro de estado en el GET) — usan `customAction` para sus
  * casos especiales en vez de `update`/`softDelete`, ver
  * torneo-dashboard/PlantillasDelTorneo.tsx y torneo-dashboard/EquiposDelTorneo.tsx
  * (cancelar una inscripción).
@@ -39,6 +39,10 @@ import { api } from "../api/client";
  * VISIBLE y no silencioso. */
 export const LIMITE_LISTA = 200;
 
+/** Tope de eventos de UN partido (`le=500` en GET /eventos-partido,
+ * TASK-011): un partido se trae entero, no se pagina. */
+export const LIMITE_EVENTOS_PARTIDO = 500;
+
 interface UseResourceCrudOptions {
   /** Cache key de TanStack Query para este recurso (ej: "torneos"). */
   resourceKey: string;
@@ -59,17 +63,25 @@ export function useResourceCrud<
   const queryClient = useQueryClient();
   const queryKey = [resourceKey, listParams ?? null] as const;
 
-  const listQuery = useQuery({
+  // TASK-011: la respuesta guarda también el total de X-Total-Count. Dos
+  // observadores sobre la misma entrada de caché (una sola petición): uno
+  // expone las filas, como siempre, y el otro el total.
+  const listaConTotal = {
     queryKey,
     enabled,
-    queryFn: async () => {
-      const { data, error } = await api.GET(basePath as never, {
+    queryFn: async (): Promise<{ filas: TOut[]; total: number | null }> => {
+      const { data, error, response } = await api.GET(basePath as never, {
         params: { query: { limit: LIMITE_LISTA, ...listParams } },
       } as never);
       if (error) throw error;
-      return data as TOut[];
+      const cabecera = (response as Response | undefined)?.headers.get("X-Total-Count");
+      const total = cabecera != null && cabecera !== "" ? Number(cabecera) : null;
+      return { filas: data as TOut[], total: Number.isFinite(total) ? total : null };
     },
-  });
+  };
+  const listQuery = useQuery({ ...listaConTotal, select: (d) => d.filas });
+  const totalQuery = useQuery({ ...listaConTotal, select: (d) => d.total });
+  const total = totalQuery.data ?? null;
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: [resourceKey] });
@@ -128,7 +140,10 @@ export function useResourceCrud<
    * positivo (exactamente 200 filas en total) es aceptable: el costo es un
    * aviso de más; el del falso negativo era que la fila 201 no existiera
    * para nadie, sin ningún indicio en pantalla. */
-  const truncado = (listQuery.data?.length ?? 0) === LIMITE_LISTA;
+  const filasRecibidas = listQuery.data?.length ?? 0;
+  // TASK-011: con X-Total-Count el aviso es exacto. Sin la cabecera (los
+  // endpoints que todavía no la mandan) se mantiene la inferencia de arriba.
+  const truncado = total !== null ? total > filasRecibidas : filasRecibidas === LIMITE_LISTA;
 
-  return { listQuery, truncado, create, update, softDelete, customAction };
+  return { listQuery, total, truncado, create, update, softDelete, customAction };
 }

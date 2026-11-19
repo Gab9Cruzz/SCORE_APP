@@ -65,6 +65,17 @@ class InscripcionTorneoService:
             torneo_ids_permitidos=torneo_ids_permitidos,
         )
 
+    async def contar(
+        self,
+        torneo_id: int | None = None,
+        equipo_id: int | None = None,
+        torneo_ids_permitidos: list[int] | None = None,
+    ) -> int:
+        """Total sin paginar de `list` con los mismos filtros (TASK-011)."""
+        return await self.repo.contar_filtrado(
+            torneo_id=torneo_id, equipo_id=equipo_id, torneo_ids_permitidos=torneo_ids_permitidos
+        )
+
     async def create(self, data: InscripcionTorneoCreate) -> InscripcionTorneoOut:
         if data.equipo_id is not None:
             return await self._crear_por_equipo(data)

@@ -314,7 +314,11 @@ export function PlantillasDelTorneoPage() {
           equipos agrupados — un torneo con muchos equipos chicos puede
           tocar el techo aunque `gruposPorEquipo.length` sea bajo. */}
       {crud.truncado && (
-        <p className="muted">Mostrando los primeros {LIMITE_LISTA} vínculos jugador-equipo de esta edición.</p>
+        <p className="muted">
+          {crud.total !== null
+            ? `Mostrando ${crud.listQuery.data?.length ?? 0} de ${crud.total} vínculos jugador-equipo de esta edición.`
+            : `Mostrando los primeros ${LIMITE_LISTA} vínculos jugador-equipo de esta edición.`}
+        </p>
       )}
       {!cargando && gruposPorEquipo.length === 0 && (
         <p className="muted">

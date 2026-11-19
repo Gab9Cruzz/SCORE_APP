@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { LIMITE_EVENTOS_PARTIDO } from "../hooks/useResourceCrud";
 import { formatearResultadoDesempate, fraseResultadoDesempate } from "../lib/desempate";
 
 // Intervalo de refresco para lo "en vivo" — arranca en 5s, ver Recommended
@@ -107,7 +108,9 @@ export function PartidoEnVivoPage() {
   const eventosQuery = useQuery({
     queryKey: ["eventos-partido", id],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/eventos-partido", { params: { query: { partidos_id: id } } });
+      const { data, error } = await api.GET("/api/v1/eventos-partido", {
+        params: { query: { partidos_id: id, limit: LIMITE_EVENTOS_PARTIDO } },
+      });
       if (error) throw error;
       return data;
     },

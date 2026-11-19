@@ -1,6 +1,6 @@
 from typing import Sequence
 
-from sqlalchemy import func, select, text
+from sqlalchemy import Select, func, select, text
 
 from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.jugador_equipo import JugadorEquipo
@@ -63,6 +63,31 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
         asignados. `JugadorEquipoService.list` fuerza este método (en vez
         del `list` genérico de la base) cada vez que hay un scope que
         aplicar, con o sin `torneo_id` explícito."""
+        stmt = self._consulta_por_torneo(torneo_id, jugador_perfil_id, inscripcion_torneo_id, torneo_ids_permitidos)
+        stmt = stmt.order_by(JugadorEquipo.id).offset(skip).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def contar_por_torneo(
+        self,
+        torneo_id: int | None,
+        jugador_perfil_id: int | None = None,
+        inscripcion_torneo_id: int | None = None,
+        torneo_ids_permitidos: Sequence[int] | None = None,
+    ) -> int:
+        """Total sin paginar con los mismos filtros que `listar_por_torneo`
+        (TASK-011)."""
+        return await self._contar(
+            self._consulta_por_torneo(torneo_id, jugador_perfil_id, inscripcion_torneo_id, torneo_ids_permitidos)
+        )
+
+    @staticmethod
+    def _consulta_por_torneo(
+        torneo_id: int | None,
+        jugador_perfil_id: int | None,
+        inscripcion_torneo_id: int | None,
+        torneo_ids_permitidos: Sequence[int] | None,
+    ) -> Select:
         stmt = select(JugadorEquipo).join(
             InscripcionTorneo, InscripcionTorneo.id == JugadorEquipo.inscripcion_torneo_id
         )
@@ -74,9 +99,7 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
             stmt = stmt.where(JugadorEquipo.jugador_perfil_id == jugador_perfil_id)
         if inscripcion_torneo_id is not None:
             stmt = stmt.where(JugadorEquipo.inscripcion_torneo_id == inscripcion_torneo_id)
-        stmt = stmt.order_by(JugadorEquipo.id).offset(skip).limit(limit)
-        result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        return stmt
 
     async def get_activo_en_torneo(self, jugador_perfil_id: int, torneo_id: int) -> JugadorEquipo | None:
         """Join con INSCRIPCIONES_TORNEO: Torneo_ID no vive directo acá (Fase 1).

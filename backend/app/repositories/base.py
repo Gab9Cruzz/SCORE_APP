@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Generic, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import NotFoundError
@@ -33,11 +33,26 @@ class BaseRepository(Generic[ModelT]):
             raise NotFoundError(self.nombre_recurso, id_)
         return obj
 
-    async def list(self, skip: int = 0, limit: int = 100, **filtros: Any) -> list[ModelT]:
+    def _consulta_filtrada(self, **filtros: Any) -> Select:
         stmt = select(self.model)
         for campo, valor in filtros.items():
             if valor is not None:
                 stmt = stmt.where(getattr(self.model, campo) == valor)
+        return stmt
+
+    async def _contar(self, stmt: Select) -> int:
+        """Total de filas de `stmt` sin paginar (TASK-011): mismo filtro que
+        el listado, para la cabecera X-Total-Count."""
+        subconsulta = stmt.order_by(None).subquery()
+        result = await self.session.execute(select(func.count()).select_from(subconsulta))
+        return result.scalar_one()
+
+    async def contar_filtrado(self, **filtros: Any) -> int:
+        """Lo que contaría `list(**filtros)` sin `skip`/`limit`."""
+        return await self._contar(self._consulta_filtrada(**filtros))
+
+    async def list(self, skip: int = 0, limit: int = 100, **filtros: Any) -> list[ModelT]:
+        stmt = self._consulta_filtrada(**filtros)
         stmt = stmt.order_by(self.model.id).offset(skip).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

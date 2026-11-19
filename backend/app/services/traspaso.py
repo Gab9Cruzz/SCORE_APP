@@ -55,6 +55,19 @@ class TraspasoService:
             traspasos = await self.repo.list(skip=skip, limit=limit, jugador_perfil_id=jugador_perfil_id)
         return [await self._a_salida(t) for t in traspasos]
 
+    async def contar(
+        self,
+        jugador_perfil_id: int | None = None,
+        torneo_id: int | None = None,
+        torneo_ids_permitidos: list[int] | None = None,
+    ) -> int:
+        """Total sin paginar de `list` con los mismos filtros (TASK-011)."""
+        if torneo_id is not None or torneo_ids_permitidos is not None:
+            return await self.repo.contar_por_torneo(
+                torneo_id, jugador_perfil_id=jugador_perfil_id, torneo_ids_permitidos=torneo_ids_permitidos
+            )
+        return await self.repo.contar_filtrado(jugador_perfil_id=jugador_perfil_id)
+
     async def _puede_anularse(self, traspaso: Traspaso) -> bool:
         """fixes-datos-traspasos-control-mesa-plan.md: False si ya está
         Anulado, o si el club DESTINO ya arrancó un partido desde este

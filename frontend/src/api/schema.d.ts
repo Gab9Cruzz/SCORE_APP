@@ -1290,7 +1290,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar Eventos Partido */
+        /**
+         * Listar Eventos Partido
+         * @description Hasta 500 por página (TASK-011): los eventos de un partido se traen
+         *     enteros, no se paginan en la interfaz.
+         */
         get: operations["listar_eventos_partido_api_v1_eventos_partido_get"];
         put?: never;
         /**
@@ -6131,6 +6135,8 @@ export interface operations {
             query?: {
                 torneo_id?: number | null;
                 equipo_id?: number | null;
+                skip?: number;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -6263,6 +6269,8 @@ export interface operations {
                 inscripcion_torneo_id?: number | null;
                 jugador_perfil_id?: number | null;
                 torneo_id?: number | null;
+                skip?: number;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -6493,6 +6501,8 @@ export interface operations {
             query?: {
                 jugador_perfil_id?: number | null;
                 torneo_id?: number | null;
+                skip?: number;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -6619,6 +6629,8 @@ export interface operations {
         parameters: {
             query?: {
                 partidos_id?: number | null;
+                skip?: number;
+                limit?: number;
             };
             header?: never;
             path?: never;
