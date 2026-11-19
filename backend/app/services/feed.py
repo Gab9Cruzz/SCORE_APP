@@ -2,14 +2,23 @@
 (portal-publico-feed-partidos-plan.md, T3.3/E-G3/F5/E-S3).
 """
 import time
+from collections import OrderedDict
+from collections.abc import Hashable
 from datetime import date, timedelta
+from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.metricas import registrar_evento
 from app.repositories.feed import FeedRepository
 from app.schemas.disciplina import DisciplinaConPartidosOut
-from app.schemas.partido import FeedEquipoOut, FeedPartidoOut, FeedResponseOut, FeedTorneoOut
+from app.schemas.partido import (
+    FeedEquipoOut,
+    FeedPartidoOut,
+    FeedResponseOut,
+    FeedTorneoOut,
+)
 
 # E-S3a: caché en proceso — el feed no tiene auto-refresh (C14), así que
 # 60s de frescura es gratis y hace irrelevante el costo por request de un
@@ -20,7 +29,62 @@ from app.schemas.partido import FeedEquipoOut, FeedPartidoOut, FeedResponseOut, 
 # (ventana=0): la primera puede resolver `fecha_efectiva` a otro día, y
 # devolvérsela a la segunda sería un dato incorrecto, no solo stale.
 _CACHE_TTL_SEGUNDOS = 60
-_cache: dict[tuple[date, int | None, int, int], tuple[float, FeedResponseOut]] = {}
+_CACHE_MAXIMO = 256
+
+
+class CacheAcotada:
+    """TASK-030 (BE-08, SEC-08): caché en memoria con tamaño máximo (sale la
+    menos usada) y expiración. Antes era un dict sin límite cuyas claves
+    (fecha, disciplina, limit) las elige cualquier visitante anónimo: mil
+    fechas distintas eran mil entradas para siempre.
+
+    Es por proceso: con varios workers cada uno tiene la suya, que está bien
+    para un TTL de 60 s. La caché compartida la da el proxy (Cache-Control,
+    ver routes/partidos.py)."""
+
+    def __init__(self, maximo: int, ttl_segundos: float):
+        self.maximo = maximo
+        self.ttl = ttl_segundos
+        self._datos: OrderedDict[Hashable, tuple[float, Any]] = OrderedDict()
+
+    def obtener(self, clave: Hashable, ahora: float | None = None) -> Any | None:
+        ahora = time.monotonic() if ahora is None else ahora
+        entrada = self._datos.get(clave)
+        if entrada is None:
+            return None
+        vence, valor = entrada
+        if vence <= ahora:
+            del self._datos[clave]
+            return None
+        self._datos.move_to_end(clave)
+        return valor
+
+    def guardar(self, clave: Hashable, valor: Any, ahora: float | None = None) -> None:
+        ahora = time.monotonic() if ahora is None else ahora
+        self._datos[clave] = (ahora + self.ttl, valor)
+        self._datos.move_to_end(clave)
+        while len(self._datos) > self.maximo:
+            self._datos.popitem(last=False)
+
+    def clear(self) -> None:
+        self._datos.clear()
+
+    def __len__(self) -> int:
+        return len(self._datos)
+
+
+_cache = CacheAcotada(maximo=_CACHE_MAXIMO, ttl_segundos=_CACHE_TTL_SEGUNDOS)
+
+
+# TASK-030: respuestas públicas iguales para todos; un proxy puede servirlas.
+CACHE_CONTROL_PUBLICO = "public, max-age=60"
+# TASK-030: una fecha absurda no tiene sentido y solo llena la caché.
+DIAS_MAXIMOS_FEED = 730
+
+
+def validar_fecha_feed(fecha: date | None) -> None:
+    if fecha is not None and abs((fecha - date.today()).days) > DIAS_MAXIMOS_FEED:
+        raise HTTPException(status_code=422, detail="La fecha tiene que estar dentro de los dos años de hoy.")
 
 
 class FeedService:
@@ -62,10 +126,9 @@ class FeedService:
         fecha_pedida_real = fecha_pedida if fecha_pedida is not None else await self.repo.fecha_actual_servidor()
 
         clave = (fecha_pedida_real, disciplina_id, limit, ventana_fallback_dias)
-        cacheado = _cache.get(clave)
-        ahora = time.monotonic()
-        if cacheado is not None and cacheado[0] > ahora:
-            return cacheado[1]
+        cacheado = _cache.obtener(clave)
+        if cacheado is not None:
+            return cacheado
 
         fecha_efectiva = await self._resolver_fecha_efectiva(
             fecha_pedida_real, disciplina_id, ventana_fallback_dias
@@ -89,7 +152,7 @@ class FeedService:
                 fecha_efectiva=str(fecha_efectiva),
             )
 
-        _cache[clave] = (ahora + _CACHE_TTL_SEGUNDOS, respuesta)
+        _cache.guardar(clave, respuesta)
         return respuesta
 
     async def obtener_disciplinas_con_partidos(

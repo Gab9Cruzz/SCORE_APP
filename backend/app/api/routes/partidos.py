@@ -43,7 +43,7 @@ from app.schemas.partido import (
 )
 from app.services.convocado_a_partido import ConvocadoAPartidoService
 from app.services.estadisticas import EstadisticasService
-from app.services.feed import FeedService
+from app.services.feed import CACHE_CONTROL_PUBLICO, FeedService, validar_fecha_feed
 from app.services.hito_partido import HitoPartidoService
 from app.services.partido import PartidoService
 
@@ -75,11 +75,13 @@ async def feed_partidos(
     # ambigüedad de mayúsculas/tildes).
     deporte: str | None = None,
     fecha: date | None = None,
-    limit: int = Query(default=200, le=200),
+    limit: int = Query(default=200, ge=1, le=200),
     # F5: 7 en la carga inicial (sin `fecha` en la URL) — D3/E-G3.
     # Navegar explícito a una fecha manda 0: ese día no tiene fallback,
     # se ve exactamente lo que ese día tiene (o su empty state real).
     ventana_fallback_dias: int = Query(default=7, ge=0, le=7),
+    *,
+    response: Response,
     session: AsyncSession = Depends(get_db),
 ) -> FeedResponseOut:
     """Portal Público (portal-publico-feed-partidos-plan.md, T3.3/C12):
@@ -97,6 +99,8 @@ async def feed_partidos(
 
     Ejemplo: `GET /api/v1/partidos/feed?disciplina_id=1&limit=20`.
     """
+    validar_fecha_feed(fecha)
+    response.headers["Cache-Control"] = CACHE_CONTROL_PUBLICO
     disciplina_id_resuelto = disciplina_id
     if disciplina_id_resuelto is None and deporte:
         encontradas = await DisciplinaRepository(session).list(slug=deporte, limit=1)
