@@ -5603,8 +5603,9 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 torneo_id?: number | null;
-                estado?: ("Programado" | "En curso" | "Finalizado" | "Cancelado") | null;
+                estado?: ("Programado" | "En curso" | "Finalizado" | "Cancelado")[] | null;
                 arbitro_id?: number | null;
+                orden?: "id" | "fecha";
                 solo_mios?: boolean;
                 incluir_archivados?: boolean;
             };

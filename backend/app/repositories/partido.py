@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import and_, not_, select
+from sqlalchemy import Select, and_, not_, select
 
 from app.exceptions.errors import NotFoundError
 from app.models.partido import Partido
@@ -39,6 +39,8 @@ class PartidoRepository(BaseRepository[Partido]):
         torneo_ids_permitidos: Sequence[int] | None = None,
         incluir_archivados: bool = False,
         solo_publicados: bool = False,
+        estados: Sequence[str] | None = None,
+        orden: str = "id",
         **filtros: object,
     ) -> list[Partido]:
         """Override de BaseRepository.list: mismo mecanismo exacto que
@@ -60,11 +62,46 @@ class PartidoRepository(BaseRepository[Partido]):
         partidos 'En curso'/'Finalizado' de un grupo archivado NUNCA se
         excluyen (EC-A4) — solo los 'Programado' quedan huérfanos de
         sentido si el torneo se archiva a mitad de camino."""
+        stmt = self._consulta(torneo_ids_permitidos, incluir_archivados, solo_publicados, estados, filtros)
+        # TASK-012: "fecha" es lo que necesitan Mesa y Mis partidos (lo
+        # próximo primero); el id desempata dos partidos a la misma hora.
+        if orden == "fecha":
+            stmt = stmt.order_by(Partido.fecha_partido, Partido.id)
+        else:
+            stmt = stmt.order_by(Partido.id)
+        stmt = stmt.offset(skip).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def contar(
+        self,
+        torneo_ids_permitidos: Sequence[int] | None = None,
+        incluir_archivados: bool = False,
+        solo_publicados: bool = False,
+        estados: Sequence[str] | None = None,
+        **filtros: object,
+    ) -> int:
+        """Total sin paginar con los mismos filtros que `list` (TASK-012)."""
+        return await self._contar(
+            self._consulta(torneo_ids_permitidos, incluir_archivados, solo_publicados, estados, filtros)
+        )
+
+    @staticmethod
+    def _consulta(
+        torneo_ids_permitidos: Sequence[int] | None,
+        incluir_archivados: bool,
+        solo_publicados: bool,
+        estados: Sequence[str] | None,
+        filtros: dict[str, object],
+    ) -> Select:
         stmt = (
             select(Partido)
             .join(Torneo, Torneo.id == Partido.torneo_id)
             .join(TorneoGrupo, TorneoGrupo.id == Torneo.torneo_grupo_id)
         )
+        # TASK-012: varios estados a la vez (Programado + En curso).
+        if estados:
+            stmt = stmt.where(Partido.estado.in_(estados))
         if torneo_ids_permitidos is not None:
             stmt = stmt.where(Partido.torneo_id.in_(torneo_ids_permitidos))
         # Portal Público (portal-publico-feed-partidos-plan.md, E-B3a):
@@ -77,7 +114,5 @@ class PartidoRepository(BaseRepository[Partido]):
         for campo, valor in filtros.items():
             if valor is not None:
                 stmt = stmt.where(getattr(Partido, campo) == valor)
-        stmt = stmt.order_by(Partido.id).offset(skip).limit(limit)
-        result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        return stmt
 

@@ -56,6 +56,24 @@ describe("ControlDeMesaPage — RBAC scoping (control-mesa-centralizacion-fixtur
     await waitFor(() => expect(queryRecibida?.get("solo_mios")).toBe("true"));
   });
 
+  it("pide al servidor solo Programado/En curso, ordenados por fecha (TASK-012)", async () => {
+    sembrarSesion("TorneoAdmin", "torneo_admin_test", 7);
+    let queryRecibida: URLSearchParams | undefined;
+    server.use(
+      http.get(PARTIDOS, ({ request }) => {
+        queryRecibida = new URL(request.url).searchParams;
+        return HttpResponse.json([PARTIDO_TORNEO_1]);
+      }),
+      http.get(TORNEOS, () => HttpResponse.json([{ id: 1, nombre: "Copa Ecotec 2026" }])),
+      http.get(EQUIPOS, () => HttpResponse.json([{ id: 1, nombre: "Tiburones FC" }, { id: 2, nombre: "Águilas del Sur" }])),
+    );
+    renderControlDeMesa();
+
+    await waitFor(() => expect(queryRecibida).toBeDefined());
+    expect(queryRecibida!.getAll("estado")).toEqual(["Programado", "En curso"]);
+    expect(queryRecibida!.get("orden")).toBe("fecha");
+  });
+
   it("un TorneoAdmin con 2+ torneos asignados ve el selector, con el nombre de cada torneo", async () => {
     sembrarSesion("TorneoAdmin", "torneo_admin_test", 7);
     server.use(

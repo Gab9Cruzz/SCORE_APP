@@ -55,11 +55,12 @@ class PartidoService:
         skip: int = 0,
         limit: int = 100,
         torneo_id: int | None = None,
-        estado: str | None = None,
+        estados: Sequence[str] | None = None,
         arbitro_id: int | None = None,
         torneo_ids_permitidos: Sequence[int] | None = None,
         incluir_archivados: bool = False,
         solo_publicados: bool = False,
+        orden: str = "id",
     ) -> list[PartidoOut]:
         # arbitro_id (Fase 3, D1): filtro más, mismo mecanismo genérico de
         # BaseRepository.list — no hace falta tocar el repositorio.
@@ -76,13 +77,33 @@ class PartidoService:
             skip=skip,
             limit=limit,
             torneo_id=torneo_id,
-            estado=estado,
+            estados=estados,
+            arbitro_id=arbitro_id,
+            torneo_ids_permitidos=torneo_ids_permitidos,
+            incluir_archivados=incluir_archivados,
+            solo_publicados=solo_publicados,
+            orden=orden,
+        )
+        return [await self._a_salida(p) for p in partidos]
+
+    async def contar(
+        self,
+        torneo_id: int | None = None,
+        estados: Sequence[str] | None = None,
+        arbitro_id: int | None = None,
+        torneo_ids_permitidos: Sequence[int] | None = None,
+        incluir_archivados: bool = False,
+        solo_publicados: bool = False,
+    ) -> int:
+        """Total sin paginar de `list` con los mismos filtros (TASK-012)."""
+        return await self.repo.contar(
+            torneo_id=torneo_id,
+            estados=estados,
             arbitro_id=arbitro_id,
             torneo_ids_permitidos=torneo_ids_permitidos,
             incluir_archivados=incluir_archivados,
             solo_publicados=solo_publicados,
         )
-        return [await self._a_salida(p) for p in partidos]
 
     async def create(self, data: PartidoCreate) -> PartidoOut:
         # Nada de validación de negocio acá: quién disputa el partido y si

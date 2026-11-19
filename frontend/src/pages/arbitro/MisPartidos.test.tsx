@@ -83,22 +83,38 @@ describe("MisPartidosPage (roles-3-modulos-plan.md, Fase 3)", () => {
     expect(screen.getByText(/No pudimos confirmar tu usuario/)).toBeInTheDocument();
   });
 
-  it("filtra a Programado/En curso — no muestra Finalizado ni Cancelado (D6)", async () => {
+  // TASK-012 (FUN-06): el filtro a Programado/En curso (D6) lo hace el
+  // servidor. Filtrar en el navegador sobre los 100 primeros por ID dejaba
+  // la lista vacía en cuanto había más de 100 partidos jugados.
+  it("pide al servidor solo Programado/En curso, ordenados por fecha (D6)", async () => {
+    let params: URLSearchParams | undefined;
+    server.use(
+      http.get(PARTIDOS, ({ request }) => {
+        params = new URL(request.url).searchParams;
+        return HttpResponse.json([]);
+      }),
+    );
+    sembrarSesionArbitro();
+    renderPagina();
+
+    await waitFor(() => expect(params).toBeDefined());
+    expect(params!.getAll("estado")).toEqual(["Programado", "En curso"]);
+    expect(params!.get("orden")).toBe("fecha");
+  });
+
+  it("avisa cuando hay más partidos de los que se muestran", async () => {
     server.use(
       http.get(PARTIDOS, () =>
-        HttpResponse.json([
-          { id: 1, estado: "Finalizado", fecha_partido: "2026-01-15T16:00:00", torneo_id: 1, equipos_id_local: 1, equipos_id_visitante: 2, jornada: 1, arbitro_id: 42 },
-          { id: 2, estado: "Cancelado", fecha_partido: "2026-01-16T16:00:00", torneo_id: 1, equipos_id_local: 1, equipos_id_visitante: 2, jornada: 2, arbitro_id: 42 },
-          { id: 5, estado: "Programado", fecha_partido: "2026-02-05T16:00:00", torneo_id: 1, equipos_id_local: 1, equipos_id_visitante: 2, jornada: 3, arbitro_id: 42 },
-        ]),
+        HttpResponse.json(
+          [{ id: 5, estado: "Programado", fecha_partido: "2026-02-05T16:00:00", torneo_id: 1, equipos_id_local: 1, equipos_id_visitante: 2, jornada: 3, arbitro_id: 42 }],
+          { headers: { "X-Total-Count": "250" } },
+        ),
       ),
     );
     sembrarSesionArbitro();
     renderPagina();
 
-    expect(await screen.findByText(/Partido #5/)).toBeInTheDocument();
-    expect(screen.queryByText(/Partido #1\b/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Partido #2\b/)).not.toBeInTheDocument();
+    expect(await screen.findByText(/Mostrando 1 de 250/)).toBeInTheDocument();
   });
 
   it("empty-state árbitro-específico cuando no hay partidos asignados activos", async () => {

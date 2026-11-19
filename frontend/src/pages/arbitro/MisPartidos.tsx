@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { ESTADOS_OPERABLES, totalDeRespuesta } from "../../lib/partidosOperables";
 import { useAuth } from "../../auth/useAuth";
 import { useNavigate } from "react-router-dom";
 
@@ -20,11 +21,15 @@ export function MisPartidosPage() {
   const partidosQuery = useQuery({
     queryKey: ["mis-partidos", session?.id],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/partidos", {
-        params: { query: { limit: 100, arbitro_id: session!.id } },
+      // TASK-012 (FUN-06): el filtro a Programado/En curso (D6) y el orden
+      // los hace el servidor; X-Total-Count dice si quedó algo afuera.
+      const { data, error, response } = await api.GET("/api/v1/partidos", {
+        params: {
+          query: { limit: 200, arbitro_id: session!.id, estado: [...ESTADOS_OPERABLES], orden: "fecha" },
+        },
       });
       if (error) throw error;
-      return data;
+      return { partidos: data, total: totalDeRespuesta(response) };
     },
     // session.id puede tardar en llegar (se pide a /auth/me después del
     // login, D2) o quedar undefined si esa llamada falló — sin id no hay
@@ -32,9 +37,8 @@ export function MisPartidosPage() {
     enabled: session?.id !== undefined,
   });
 
-  const activos = (partidosQuery.data ?? []).filter(
-    (p) => p.estado === "Programado" || p.estado === "En curso",
-  );
+  const activos = partidosQuery.data?.partidos ?? [];
+  const total = partidosQuery.data?.total ?? null;
 
   return (
     <div className="page">
@@ -48,6 +52,11 @@ export function MisPartidosPage() {
       {partidosQuery.isError && <p className="error-text">No se pudieron cargar tus partidos.</p>}
       {!partidosQuery.isLoading && session?.id !== undefined && activos.length === 0 && (
         <p>No tenés partidos asignados por ahora.</p>
+      )}
+      {total !== null && total > activos.length && (
+        <p className="muted">
+          Mostrando {activos.length} de {total} partidos asignados (los más próximos primero).
+        </p>
       )}
       <ul className="partidos-list partidos-list--tappable">
         {activos.map((p) => (

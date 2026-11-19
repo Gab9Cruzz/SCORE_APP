@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
 import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
+import { ESTADOS_OPERABLES, totalDeRespuesta } from "../../lib/partidosOperables";
 
 /** Dashboard de Control de Mesa: la lista de partidos operables.
  *
@@ -37,26 +38,36 @@ export function ControlDeMesaPage() {
   const partidosQuery = useQuery({
     queryKey: ["partidos-mesa", torneoIdSeleccionado],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/partidos", {
+      // TASK-012 (FUN-06): filtro de estado y orden en el servidor. Antes se
+      // pedían los 100 primeros por ID y se filtraba acá: con más de 100
+      // partidos jugados, la lista quedaba vacía aunque hubiera pendientes.
+      const { data, error, response } = await api.GET("/api/v1/partidos", {
         params: {
           query: {
-            limit: 100,
+            limit: 200,
             solo_mios: true,
+            estado: [...ESTADOS_OPERABLES],
+            orden: "fecha",
             ...(torneoIdSeleccionado != null ? { torneo_id: torneoIdSeleccionado } : {}),
           },
         },
       } as never);
       if (error) throw error;
-      return data as {
-        id: number;
-        torneo_id: number;
-        estado: string;
-        fecha_partido: string;
-        equipos_id_local: number | null;
-        equipos_id_visitante: number | null;
-      }[];
+      return {
+        total: totalDeRespuesta(response as Response | undefined),
+        partidos: data as {
+          id: number;
+          torneo_id: number;
+          estado: string;
+          fecha_partido: string;
+          equipos_id_local: number | null;
+          equipos_id_visitante: number | null;
+        }[],
+      };
     },
   });
+  const partidos = partidosQuery.data?.partidos ?? [];
+  const total = partidosQuery.data?.total ?? null;
 
   // Lista de equipos como mapa BASE, con resolución dirigida por ID encima:
   // un equipo fuera de la ventana del listado se pide individual antes de caer
@@ -78,17 +89,15 @@ export function ControlDeMesaPage() {
   const nombreTorneo = useNombrePorIdConFaltantes(
     "/api/v1/torneos",
     new Map(torneos.map((t) => [t.id, t.nombre])),
-    (partidosQuery.data ?? []).map((p) => p.torneo_id),
+    partidos.map((p) => p.torneo_id),
   );
   const nombreEquipo = useNombrePorIdConFaltantes(
     "/api/v1/equipos",
     nombreEquipoBase,
-    (partidosQuery.data ?? []).flatMap((p) => [p.equipos_id_local, p.equipos_id_visitante]),
+    partidos.flatMap((p) => [p.equipos_id_local, p.equipos_id_visitante]),
   );
 
-  const seleccionables = (partidosQuery.data ?? []).filter(
-    (p) => p.estado === "Programado" || p.estado === "En curso",
-  );
+  const seleccionables = partidos;
 
   return (
     <div className="page">
@@ -115,6 +124,12 @@ export function ControlDeMesaPage() {
       {partidosQuery.isError && <p className="error-text">No se pudieron cargar los partidos.</p>}
       {!partidosQuery.isLoading && seleccionables.length === 0 && (
         <p>No hay partidos programados ni en curso ahora mismo.</p>
+      )}
+      {total !== null && total > seleccionables.length && (
+        <p className="muted">
+          Mostrando {seleccionables.length} de {total} partidos programados o en curso (los más próximos primero).
+          Elegí un torneo para acotar la lista.
+        </p>
       )}
       <ul className="partidos-list">
         {seleccionables.map((p) => (

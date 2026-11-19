@@ -1,6 +1,7 @@
 from datetime import date
+from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -10,6 +11,7 @@ from app.api.deps import (
     require_torneo_access,
     require_torneo_access_de,
 )
+from app.core.paginacion import informar_total
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.exceptions.errors import NotFoundError
@@ -107,11 +109,17 @@ async def feed_partidos(
 
 @router.get("", response_model=list[PartidoOut])
 async def listar_partidos(
-    skip: int = 0,
-    limit: int = Query(default=100, le=200),
+    response: Response,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
     torneo_id: int | None = None,
-    estado: EstadoPartido | None = None,
+    # TASK-012 (FUN-06): repetible (`?estado=Programado&estado=En curso`).
+    # Mesa y Mis partidos filtran acá, no en el navegador sobre 100 filas.
+    estado: list[EstadoPartido] | None = Query(default=None),
     arbitro_id: int | None = None,
+    # TASK-012: "fecha" = lo próximo primero. "id" (default) es el orden de
+    # siempre para los demás consumidores.
+    orden: Literal["id", "fecha"] = "id",
     # control-mesa-centralizacion-fixture-plan.md, ítem 1: mismo opt-in que
     # GET /torneos?solo_mios=true (E1) — filtra a los torneos asignados
     # cuando el caller es TorneoAdmin, sin efecto para AdminGeneral/Arbitro/
@@ -136,19 +144,20 @@ async def listar_partidos(
     torneo_ids_permitidos: list[int] | None = None
     if solo_mios and usuario is not None and usuario.rol == "TorneoAdmin":
         torneo_ids_permitidos = await AsignacionTorneoAdminRepository(session).listar_torneo_ids_activos(usuario.id)
-    return await PartidoService(session).list(
-        skip=skip,
-        limit=limit,
-        torneo_id=torneo_id,
-        estado=estado,
-        arbitro_id=arbitro_id,
-        torneo_ids_permitidos=torneo_ids_permitidos,
-        incluir_archivados=incluir_archivados,
+    filtros = {
+        "torneo_id": torneo_id,
+        "estados": estado,
+        "arbitro_id": arbitro_id,
+        "torneo_ids_permitidos": torneo_ids_permitidos,
+        "incluir_archivados": incluir_archivados,
         # E-B3a (portal-publico-feed-partidos-plan.md): mismo criterio que
         # GET /torneos — un anónimo no debe poder enumerar el fixture de
         # un torneo despublicado por esta vía, aunque su detalle 404ee.
-        solo_publicados=usuario is None,
-    )
+        "solo_publicados": usuario is None,
+    }
+    servicio = PartidoService(session)
+    informar_total(response, await servicio.contar(**filtros))
+    return await servicio.list(skip=skip, limit=limit, orden=orden, **filtros)
 
 
 @router.get("/{partido_id}", response_model=PartidoOut)
