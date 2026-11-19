@@ -70,7 +70,7 @@ function TablaPosiciones({ torneoId }: { torneoId: number }) {
       <h2>Tabla de posiciones</h2>
       {query.isLoading && <p>Cargando...</p>}
       {query.isError && <p className="error-text">No se pudo cargar la tabla.</p>}
-      {query.data && query.data.length === 0 && <p>Todavía no hay partidos finalizados.</p>}
+      {query.data && query.data.length === 0 && <p>Todavía no hay equipos inscriptos en este torneo.</p>}
       {query.data && query.data.length > 0 && (
         <div className="table-scroll">
           <table>
