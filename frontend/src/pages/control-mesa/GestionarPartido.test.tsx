@@ -408,3 +408,24 @@ describe("GestionarPartido — redirección post-guardado de resultado directo",
     expect(await screen.findByText("VISTA PÚBLICA DEL PARTIDO")).toBeInTheDocument();
   });
 });
+
+// TASK-021 (SEC-09): la fecha del partido es de organización; el backend
+// le responde 403 a un árbitro que intente cambiarla.
+describe("GestionarPartido — permisos del árbitro (TASK-021)", () => {
+  it("al árbitro no le ofrece reprogramar la fecha", async () => {
+    sembrarSesion("Arbitro", 42);
+    sembrarBackend();
+    montar();
+
+    expect(await screen.findByRole("heading", { name: /Tiburones FC vs Águilas del Sur/ })).toBeInTheDocument();
+    expect(screen.queryByText(/📅/)).not.toBeInTheDocument();
+  });
+
+  it("al TorneoAdmin sí", async () => {
+    sembrarSesion("TorneoAdmin");
+    sembrarBackend();
+    montar();
+
+    expect(await screen.findByText(/📅/)).toBeInTheDocument();
+  });
+});

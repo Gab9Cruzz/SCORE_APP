@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../api/client";
+import { useAuth } from "../../auth/useAuth";
 import { MesaPanel } from "../../components/MesaPanel";
 import { useEmpezarPartido } from "../../components/useEmpezarPartido";
 import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
@@ -53,6 +54,10 @@ export function GestionarPartidoPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const online = useOnlineStatus();
+  // TASK-021 (SEC-09): la fecha es de organización; el backend le responde
+  // 403 a un árbitro, así que ni se le ofrece.
+  const { session } = useAuth();
+  const puedeReprogramar = session?.rol !== "Arbitro";
 
   const [seleccion, setSeleccion] = useState<Seleccion | null>(null);
   const [equipoActivo, setEquipoActivo] = useState<"local" | "visitante">("local");
@@ -571,7 +576,7 @@ export function GestionarPartidoPage() {
           con las dos acciones principales. */}
       <details className="gestionar-partido__otras">
         <summary>Otras acciones</summary>
-        {!enCurso && !bloqueado && (
+        {!enCurso && !bloqueado && puedeReprogramar && (
           <EditorFechaPartido
             partidoId={partido.id}
             fechaActual={partido.fecha_partido}

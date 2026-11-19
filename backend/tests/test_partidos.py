@@ -117,12 +117,15 @@ async def test_mismo_equipo_local_y_visitante_es_rechazado(
 async def test_arbitro_puede_actualizar_su_partido_asignado(
     client: AsyncClient, arbitro_headers: dict[str, str]
 ):
-    # arbitro_headers (conftest.py) queda asignado al partido 3.
+    # arbitro_headers (conftest.py) queda asignado al partido 3. Desde
+    # TASK-021 el árbitro solo edita los campos de su papel (desempate,
+    # ganador de un partido corrido); la jornada es de organización (ver
+    # test_partido_edicion_arbitro.py).
     resp = await client.patch(
-        "/api/v1/partidos/3", json={"jornada": 7}, headers=arbitro_headers
+        "/api/v1/partidos/3", json={"hubo_tiempo_extra": True}, headers=arbitro_headers
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["jornada"] == 7
+    assert resp.json()["hubo_tiempo_extra"] is True
 
 
 async def test_arbitro_no_puede_actualizar_partido_no_asignado(

@@ -7,7 +7,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.metricas import registrar_evento
-from app.exceptions.errors import DomainRuleError
+from app.exceptions.errors import DomainRuleError, ForbiddenError
 from app.models.evento_partido import EventoPartido
 from app.models.hito_partido import HitoPartido
 from app.models.partido import Partido
@@ -29,6 +29,12 @@ from app.services.permisos import verificar_arbitro_asignado
 from app.services.reglamento_torneo import ReglamentoTorneo
 from app.services.reglas_cambio import validar_reglas_cambio
 from app.services.reglas_tarjetas import procesar_doble_amarilla
+
+
+# TASK-021: lo único que un árbitro puede cambiar por PATCH /partidos/{id}.
+_CAMPOS_DEL_ARBITRO = frozenset(
+    {"ganador_desempate_id", "metodo_desempate", "penales_local", "penales_visitante", "hubo_tiempo_extra", "ganador_corrido_id"}
+)
 
 
 class PartidoService:
@@ -122,6 +128,19 @@ class PartidoService:
         partido = await self.repo.get_or_404(id_)
         verificar_arbitro_asignado(partido, usuario_actual)
         payload = data.model_dump(exclude_unset=True)
+        # TASK-021 (SEC-09, FUN-22): el árbitro solo carga lo que su papel
+        # necesita; fecha, jornada, fase y asignación son de organización.
+        if usuario_actual.rol == "Arbitro":
+            ajenos = sorted(set(payload) - _CAMPOS_DEL_ARBITRO)
+            if ajenos:
+                raise ForbiddenError(
+                    "Como árbitro solo podés cargar el desempate o el ganador del partido; "
+                    f"no podés cambiar: {', '.join(ajenos)}."
+                )
+        if payload.get("arbitro_id") is not None:
+            arbitro = await self.session.get(Usuario, payload["arbitro_id"])
+            if arbitro is None or arbitro.rol != "Arbitro" or arbitro.estado != "Activo":
+                raise DomainRuleError("La cuenta elegida no es un árbitro activo.")
         # SPEC-REVIEW F1: el PATCH genérico es uno de los cuatro caminos
         # que ya escriben `ganador_desempate_id` hoy sin saber mandar
         # `metodo_desempate` — se completa a 'Manual' para no romper con
