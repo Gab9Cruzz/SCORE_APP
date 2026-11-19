@@ -36,18 +36,20 @@ describe("fechas", () => {
   });
 
   // TASK-040 (FUN-17): el resultado no depende de la zona del navegador.
-  // Node aplica un cambio de process.env.TZ en caliente.
+  // Node aplica un cambio de process.env.TZ en caliente. El frontend no
+  // carga los tipos de Node, así que se declara lo poco que se usa.
+  const entorno = (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process.env;
   it.each(["Pacific/Kiritimati", "Asia/Kolkata", "UTC", "America/Guayaquil", "Pacific/Pago_Pago"])(
     "sumarDias da lo mismo con el navegador en %s",
     (zona) => {
-      const original = process.env.TZ;
-      process.env.TZ = zona;
+      const original = entorno.TZ;
+      entorno.TZ = zona;
       try {
         expect(sumarDias("2026-05-10", 1)).toBe("2026-05-11");
         expect(sumarDias("2026-03-08", -1)).toBe("2026-03-07");
         expect(sumarDias("2026-11-01", 1)).toBe("2026-11-02");
       } finally {
-        process.env.TZ = original;
+        entorno.TZ = original;
       }
     },
   );
