@@ -163,6 +163,32 @@ class MotorFormatosService:
             return None
         if any(p.estado == "Finalizado" for p in partidos):
             raise DomainRuleError("No se puede rehacer el sorteo: ya hay resultados registrados en esta fase.")
+        # TASK-018 (FUN-11): borrar los partidos se lleva en cascada su
+        # actividad. Solo se rehace si ninguno la tiene: todos Programado y
+        # sin hitos, eventos ni convocados.
+        ids = [p.id for p in partidos]
+        con_actividad = (
+            await self.session.execute(
+                text(
+                    """
+                    SELECT p.ID FROM PARTIDOS p
+                     WHERE p.ID = ANY(:ids)
+                       AND (p.Estado <> 'Programado'
+                            OR EXISTS (SELECT 1 FROM HITOS_PARTIDO h WHERE h.Partido_ID = p.ID)
+                            OR EXISTS (SELECT 1 FROM EVENTOS_PARTIDO e WHERE e.PARTIDOS_ID = p.ID)
+                            OR EXISTS (SELECT 1 FROM CONVOCADO_A_PARTIDO c WHERE c.Partido_ID = p.ID))
+                     ORDER BY p.ID
+                    """
+                ),
+                {"ids": ids},
+            )
+        ).scalars().all()
+        if con_actividad:
+            raise DomainRuleError(
+                "No se puede rehacer el sorteo: el partido #"
+                + ", #".join(str(i) for i in con_actividad)
+                + " ya tiene actividad (empezó, o tiene eventos o convocados). Rehacerlo la borraría."
+            )
 
         sorteo_result = await self.session.execute(
             select(Sorteo).where(Sorteo.fase_id == fase.id, Sorteo.estado == "Completado")
