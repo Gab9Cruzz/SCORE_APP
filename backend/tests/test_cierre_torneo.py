@@ -381,3 +381,146 @@ async def test_estado_fase_eliminacion_completa_solo_ofrece_cerrar_directo(
     estado = resp.json()
     assert estado["fase_completa"] is True
     assert estado["acciones_disponibles"] == ["cerrar_directo"]
+
+
+# ---------- TASK-007 (FUN-01): reabrir restaura las plantillas ----------
+
+
+async def _plantilla_de(db_session: AsyncSession, torneo_id: int) -> dict[int, tuple[str, object]]:
+    """{vinculo_id: (estado, fecha_fin)} de todas las membresías del torneo."""
+    db_session.expire_all()
+    filas = (
+        await db_session.execute(
+            select(JugadorEquipo)
+            .join(InscripcionTorneo, InscripcionTorneo.id == JugadorEquipo.inscripcion_torneo_id)
+            .where(InscripcionTorneo.torneo_id == torneo_id)
+        )
+    ).scalars().all()
+    return {f.id: (f.estado, f.fecha_fin) for f in filas}
+
+
+async def _torneo_cerrable_con_plantilla(
+    client: AsyncClient, headers: dict[str, str], db_session: AsyncSession, nombre: str
+) -> tuple[int, dict, int]:
+    """Copa de 2 equipos con la final jugada (lista para cerrar), dos
+    jugadores activos más por equipo y una baja manual de enero. Devuelve
+    (torneo_id, final, vinculo_id de la baja manual)."""
+    torneo_id, equipos = await _torneo_con_equipos(client, headers, 2, "Eliminacion", nombre)
+    resp = await client.post(f"/api/v1/torneos/{torneo_id}/sorteo", json={}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    final = (await client.get(f"/api/v1/torneos/{torneo_id}/bracket", headers=headers)).json()[0]
+    await _finalizar(db_session, final["id"], {final["equipos_id_local"]: 1, final["equipos_id_visitante"]: 0})
+
+    baja_manual_id = 0
+    for equipo_id in equipos:
+        inscripcion = (
+            await db_session.execute(
+                select(InscripcionTorneo).where(
+                    InscripcionTorneo.torneo_id == torneo_id, InscripcionTorneo.equipo_id == equipo_id
+                )
+            )
+        ).scalar_one()
+        for i in range(3):
+            jugador = Jugador(
+                nombre=f"R{equipo_id}-{i}", cedula=f"REAB{torneo_id}-{equipo_id}-{i}",
+                correo_electronico=f"reab{torneo_id}{equipo_id}{i}@test.com",
+            )
+            db_session.add(jugador)
+            await db_session.flush()
+            perfil = JugadorPerfilDisciplina(jugador_id=jugador.id, disciplina_id=DISCIPLINA_FUTBOL)
+            db_session.add(perfil)
+            await db_session.flush()
+            # El tercero de cada equipo se dio de baja a mano en enero.
+            baja = i == 2
+            vinculo = JugadorEquipo(
+                jugador_perfil_id=perfil.id, inscripcion_torneo_id=inscripcion.id, fecha_inicio="2026-01-01",
+                estado="Inactivo" if baja else "Activo", fecha_fin="2026-01-31" if baja else None,
+            )
+            db_session.add(vinculo)
+            await db_session.flush()
+            if baja:
+                baja_manual_id = vinculo.id
+    await db_session.commit()
+    return torneo_id, final, baja_manual_id
+
+
+async def test_reabrir_restaura_la_plantilla_que_cerro_el_cierre(
+    client: AsyncClient, torneo_admin_headers: dict[str, str], db_session: AsyncSession
+):
+    """PR-001: la plantilla activa tras reabrir es la de antes del cierre."""
+    torneo_id, _, baja_manual_id = await _torneo_cerrable_con_plantilla(
+        client, torneo_admin_headers, db_session, "Copa Reabrir Plantilla"
+    )
+    antes = await _plantilla_de(db_session, torneo_id)
+    activos_antes = {vid for vid, (estado, _) in antes.items() if estado == "Activo"}
+    assert activos_antes
+
+    resp = await client.post(f"/api/v1/torneos/{torneo_id}/cerrar", json={}, headers=torneo_admin_headers)
+    assert resp.status_code == 200, resp.text
+    cerrada = await _plantilla_de(db_session, torneo_id)
+    assert all(cerrada[vid][0] == "Inactivo" for vid in activos_antes)
+
+    resp = await client.post(f"/api/v1/torneos/{torneo_id}/reabrir", headers=torneo_admin_headers)
+    assert resp.status_code == 200, resp.text
+
+    despues = await _plantilla_de(db_session, torneo_id)
+    activos_despues = {vid for vid, (estado, _) in despues.items() if estado == "Activo"}
+    assert activos_despues == activos_antes
+    assert all(despues[vid][1] is None for vid in activos_despues)  # Fecha_Fin limpia
+
+
+async def test_reabrir_no_reactiva_una_baja_manual_anterior_al_cierre(
+    client: AsyncClient, torneo_admin_headers: dict[str, str], db_session: AsyncSession
+):
+    """PR-002."""
+    torneo_id, _, baja_manual_id = await _torneo_cerrable_con_plantilla(
+        client, torneo_admin_headers, db_session, "Copa Reabrir Baja Manual"
+    )
+    await client.post(f"/api/v1/torneos/{torneo_id}/cerrar", json={}, headers=torneo_admin_headers)
+    resp = await client.post(f"/api/v1/torneos/{torneo_id}/reabrir", headers=torneo_admin_headers)
+    assert resp.status_code == 200, resp.text
+
+    despues = await _plantilla_de(db_session, torneo_id)
+    assert despues[baja_manual_id][0] == "Inactivo"
+    assert str(despues[baja_manual_id][1]) == "2026-01-31"
+
+
+async def test_reabrir_y_volver_a_cerrar_vuelve_a_liberar_y_calcula_el_podio(
+    client: AsyncClient, torneo_admin_headers: dict[str, str], db_session: AsyncSession
+):
+    torneo_id, final, _ = await _torneo_cerrable_con_plantilla(
+        client, torneo_admin_headers, db_session, "Copa Reabrir Dos Veces"
+    )
+    await client.post(f"/api/v1/torneos/{torneo_id}/cerrar", json={}, headers=torneo_admin_headers)
+    await client.post(f"/api/v1/torneos/{torneo_id}/reabrir", headers=torneo_admin_headers)
+
+    resp = await client.post(f"/api/v1/torneos/{torneo_id}/cerrar", json={}, headers=torneo_admin_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["campeon_equipo_id"] == final["equipos_id_local"]
+    plantilla = await _plantilla_de(db_session, torneo_id)
+    assert all(estado != "Activo" for estado, _ in plantilla.values())
+
+
+async def test_tras_reabrir_la_plantilla_vigente_vuelve_a_estar_disponible(
+    client: AsyncClient, torneo_admin_headers: dict[str, str], db_session: AsyncSession
+):
+    """La plantilla "vigente hoy" (vw_jugadores_activos_por_equipo) es la
+    que usan la mesa, la convocatoria y el selector de goleador. Cerrada,
+    queda vacía; tras reabrir tiene que volver a tener a los jugadores."""
+    from app.repositories.estadisticas import EstadisticasRepository
+
+    torneo_id, final, _ = await _torneo_cerrable_con_plantilla(
+        client, torneo_admin_headers, db_session, "Copa Reabrir Vigente"
+    )
+    equipo = final["equipos_id_local"]
+    repo = EstadisticasRepository(db_session)
+    antes = {f["jugador_perfil_id"] for f in await repo.plantilla_equipo(equipo, torneo_id)}
+    assert antes
+
+    await client.post(f"/api/v1/torneos/{torneo_id}/cerrar", json={}, headers=torneo_admin_headers)
+    assert await repo.plantilla_equipo(equipo, torneo_id) == []
+
+    resp = await client.post(f"/api/v1/torneos/{torneo_id}/reabrir", headers=torneo_admin_headers)
+    assert resp.status_code == 200, resp.text
+    despues = {f["jugador_perfil_id"] for f in await repo.plantilla_equipo(equipo, torneo_id)}
+    assert despues == antes

@@ -25,6 +25,7 @@ import random
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import DomainRuleError
@@ -32,6 +33,7 @@ from app.models.fase import Fase
 from app.models.grupo import Grupo
 from app.models.grupo_equipo import GrupoEquipo
 from app.models.inscripcion_torneo import InscripcionTorneo
+from app.models.jugador_equipo import JugadorEquipo
 from app.models.partido import Partido
 from app.models.sorteo import Sorteo
 from app.models.torneo import Torneo
@@ -903,6 +905,18 @@ class MotorFormatosService:
         if torneo.estado != "Finalizado":
             raise DomainRuleError("Este torneo no está cerrado.")
 
+        # TASK-007 (FUN-01): el día que se cerró, en la hora de la base. Es
+        # el CURRENT_DATE que fn_cerrar_torneo_libera_jugadores puso como
+        # Fecha_Fin; Fecha_Cierre se guarda en UTC, así que comparar contra su
+        # fecha directa falla si el cierre fue de noche. Se lee antes de
+        # limpiar Fecha_Cierre.
+        dia_cierre = (
+            await self.session.execute(
+                text("SELECT (Fecha_Cierre AT TIME ZONE 'UTC')::date FROM TORNEO WHERE ID = :id"),
+                {"id": torneo_id},
+            )
+        ).scalar_one()
+
         fase_actual = await self.fase_repo.ultima_por_torneo(torneo_id)
         torneo.campeon_equipo_id = None
         torneo.subcampeon_equipo_id = None
@@ -911,13 +925,62 @@ class MotorFormatosService:
         torneo.estado = "Activo"
         if fase_actual is not None:
             fase_actual.estado = "En_Curso"
+        # El torneo tiene que estar abierto antes de tocar su plantilla: el
+        # bloqueo de escritura de un torneo cerrado (migración 32) la rechaza.
+        await self.session.flush()
+
+        restauradas, no_restauradas = await self._restaurar_plantillas_del_cierre(torneo_id, dia_cierre)
         await self.session.commit()
         await self.session.refresh(torneo)
         logger.info(
-            "reabrir_torneo torneo_id=%s usuario_id=%s fase_id=%s",
-            torneo_id, usuario_id, fase_actual.id if fase_actual else None,
+            "reabrir_torneo torneo_id=%s usuario_id=%s fase_id=%s plantillas_restauradas=%s",
+            torneo_id, usuario_id, fase_actual.id if fase_actual else None, restauradas,
         )
+        if no_restauradas:
+            logger.warning(
+                "reabrir_torneo torneo_id=%s: %s membresía(s) no se restauraron por conflicto "
+                "(el jugador ya está activo en otro equipo del torneo): vinculo_ids=%s",
+                torneo_id, len(no_restauradas), no_restauradas,
+            )
         return torneo
+
+    async def _restaurar_plantillas_del_cierre(self, torneo_id: int, dia_cierre) -> tuple[int, list[int]]:
+        """TASK-007 (FUN-01): reactiva las membresías que dio de baja el
+        cierre: las del torneo que quedaron 'Inactivo' con Fecha_Fin igual al
+        día del cierre. Una baja manual de otro día no se toca; una del mismo
+        día del cierre es indistinguible y se reactiva (limitación conocida).
+
+        Por ORM, fila a fila, para que cada cambio quede en AUDITORIA. Si una
+        choca con la exclusividad por torneo (el jugador ya está activo en
+        otro equipo del mismo torneo), se deja como está y se informa en el
+        log en vez de abortar la reapertura."""
+        if dia_cierre is None:
+            return 0, []
+        vinculos = (
+            await self.session.execute(
+                select(JugadorEquipo)
+                .join(InscripcionTorneo, InscripcionTorneo.id == JugadorEquipo.inscripcion_torneo_id)
+                .where(
+                    InscripcionTorneo.torneo_id == torneo_id,
+                    JugadorEquipo.estado == "Inactivo",
+                    JugadorEquipo.fecha_fin == dia_cierre,
+                )
+                .order_by(JugadorEquipo.id)
+            )
+        ).scalars().all()
+        restauradas = 0
+        no_restauradas: list[int] = []
+        for vinculo in vinculos:
+            try:
+                async with self.session.begin_nested():
+                    vinculo.estado = "Activo"
+                    vinculo.fecha_fin = None
+                    await self.session.flush()
+                restauradas += 1
+            except DBAPIError:
+                await self.session.refresh(vinculo)
+                no_restauradas.append(vinculo.id)
+        return restauradas, no_restauradas
 
     async def estado_fase(self, torneo_id: int) -> dict:
         """C4 — fuente única de "¿la fase terminó y qué se puede hacer
