@@ -101,9 +101,14 @@ select {
   display: flex;
   gap: 0.75rem;
   flex: 1;
+  /* TASK-036: entre 900px y el ancho en que todo entra en una línea, los
+     enlaces bajan enteros al renglón siguiente en vez de partirse. */
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .nav-bar__links a {
+  white-space: nowrap;
   color: var(--text-muted);
   text-decoration: none;
   padding: 0.35rem 0.6rem;
@@ -125,6 +130,121 @@ select {
 
 .nav-bar__session a {
   color: var(--accent);
+}
+
+/* TASK-036 (UX-01): grupo "Administración" y menú plegable. */
+.nav-bar__menu {
+  display: none;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: var(--espacio-2) var(--espacio-3);
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.nav-bar__grupo {
+  position: relative;
+}
+
+.nav-bar__grupo-boton {
+  white-space: nowrap;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.nav-bar__grupo-boton.active,
+.nav-bar__grupo-boton:hover,
+.nav-bar__grupo-boton[aria-expanded="true"] {
+  color: var(--text);
+  background: var(--surface-alt);
+}
+
+.nav-bar__submenu {
+  position: absolute;
+  top: calc(100% + var(--espacio-1));
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-1);
+  min-width: 11rem;
+  padding: var(--espacio-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.nav-bar__submenu[hidden] {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .nav-bar__menu {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .nav-bar__session {
+    margin-left: auto;
+  }
+
+  /* Cerrado no ocupa lugar; abierto, una columna a todo el ancho debajo de
+     la marca y la sesión. */
+  .nav-bar__links {
+    display: none;
+    order: 3;
+    flex-basis: 100%;
+    flex-direction: column;
+    gap: var(--espacio-1);
+  }
+
+  .nav-bar__links--abierto {
+    display: flex;
+  }
+
+  .nav-bar__links a,
+  .nav-bar__grupo-boton {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    text-align: left;
+  }
+
+  .nav-bar__submenu {
+    position: static;
+    border: none;
+    padding: 0 0 0 var(--espacio-4);
+    background: none;
+  }
+}
+
+/* TASK-036: "sin permiso" y 404. */
+.estado-acceso {
+  max-width: 560px;
+}
+
+.estado-acceso code {
+  word-break: break-all;
+}
+
+/* TASK-036 (FE-05): "Mis partidos" sin id de usuario. */
+.aviso-reintento {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-2);
+  margin-bottom: var(--espacio-4);
+}
+
+.aviso-reintento p {
+  margin: 0;
 }
 
 main {
@@ -1001,11 +1121,6 @@ td:first-child {
 }
 
 @media (max-width: 480px) {
-  .nav-bar__links {
-    order: 3;
-    width: 100%;
-  }
-
   .marcador__score {
     font-size: 1.5rem;
   }

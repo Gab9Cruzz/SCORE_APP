@@ -11,6 +11,29 @@ import { AuthContext, type AuthContextValue, type Rol, type Session } from "./au
 
 const SESSION_STORAGE_KEY = "score-app.session";
 
+/** GET /auth/me, con un reintento (TASK-036, FE-05): un fallo de red
+ * puntual justo después del login dejaba la sesión sin id hasta volver a
+ * entrar. `undefined` si los dos intentos fallan. */
+async function pedirIdUsuario(): Promise<number | undefined> {
+  for (let intento = 0; intento < 2; intento++) {
+    try {
+      const { data: me, error } = await api.GET("/api/v1/auth/me", {});
+      if (!error) return me.id;
+    } catch {
+      /* red caída: se reintenta una vez */
+    }
+  }
+  return undefined;
+}
+
+function guardarSesion(datos: Omit<Session, "token">) {
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(datos));
+  } catch {
+    /* sesión igual queda activa en memoria para esta pestaña */
+  }
+}
+
 function loadStoredSession(): Session | null {
   const token = getStoredToken();
   if (!token) return null;
@@ -90,26 +113,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // GET /auth/me (roles-3-modulos-plan.md, Fase 3, D2): /auth/login no
       // devuelve el id numérico del usuario, así que se pide aparte acá en
-      // vez de tocar el contrato de login. Si esta llamada falla, el login
-      // en sí ya fue exitoso — no lo tumbamos, session.id queda undefined
-      // (el filtro de "Mis partidos" no puede armarse hasta el próximo
-      // login que sí consiga el id).
-      let id: number | undefined;
-      try {
-        const { data: me, error } = await api.GET("/api/v1/auth/me", {});
-        if (error) throw error;
-        id = me.id;
-      } catch {
-        id = undefined;
-      }
+      // vez de tocar el contrato de login. Si falla dos veces, el login en
+      // sí ya fue exitoso — no lo tumbamos, session.id queda undefined y
+      // "Mis partidos" ofrece reintentar (recargarUsuario).
+      const id = await pedirIdUsuario();
 
       const nextSession: Session = { token: data.access_token, username, rol: data.rol, id };
       setSession(nextSession);
-      try {
-        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ username, rol: data.rol, id }));
-      } catch {
-        /* sesión igual queda activa en memoria para esta pestaña */
-      }
+      guardarSesion({ username, rol: data.rol, id });
       return data.rol;
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : "No se pudo iniciar sesión.");
@@ -133,6 +144,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession((actual) => (actual ? { ...actual, token } : actual));
   }, []);
 
+  const recargarUsuario = useCallback(async () => {
+    const id = await pedirIdUsuario();
+    if (id === undefined) return false;
+    setSession((actual) => {
+      if (!actual) return actual;
+      guardarSesion({ username: actual.username, rol: actual.rol, id });
+      return { ...actual, id };
+    });
+    return true;
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
@@ -143,8 +165,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loggingIn,
       licenseRevoked,
       reemplazarToken,
+      recargarUsuario,
     }),
-    [session, login, logout, loginError, loggingIn, licenseRevoked, reemplazarToken],
+    [session, login, logout, loginError, loggingIn, licenseRevoked, reemplazarToken, recargarUsuario],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -37,6 +37,9 @@ export interface AuthContextValue {
    * anteriores y devuelve uno nuevo; esto lo pone en uso sin cerrar la
    * sesión. */
   reemplazarToken: (token: string) => void;
+  /** TASK-036 (FE-05): vuelve a pedir GET /auth/me cuando `session.id`
+   * quedó sin valor. `true` si ahora hay id. */
+  recargarUsuario: () => Promise<boolean>;
 }
 
 /** El contexto y sus tipos viven acá, separados de `AuthContext.tsx`, por

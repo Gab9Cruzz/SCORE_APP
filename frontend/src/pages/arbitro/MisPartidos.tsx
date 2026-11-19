@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { api } from "../../api/client";
 import { ESTADOS_OPERABLES, totalDeRespuesta } from "../../lib/partidosOperables";
 import { useAuth } from "../../auth/useAuth";
 import { useNavigate } from "react-router-dom";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
+import { Button } from "../../components/ui/Button";
 
 /** Landing del módulo Árbitro (roles-3-modulos-plan.md, Fase 3).
  *
@@ -16,8 +18,16 @@ import { LOCALE, parsearFecha } from "../../lib/fechas";
  * reusa `MesaPanel` tal cual (D4) — sin duplicar la carga de eventos.
  */
 export function MisPartidosPage() {
-  const { session } = useAuth();
+  const { session, recargarUsuario } = useAuth();
   const navigate = useNavigate();
+  const [reintentando, setReintentando] = useState(false);
+  const [reintentoFallido, setReintentoFallido] = useState(false);
+
+  async function reintentar() {
+    setReintentando(true);
+    setReintentoFallido(!(await recargarUsuario()));
+    setReintentando(false);
+  }
 
   const partidosQuery = useQuery({
     queryKey: ["mis-partidos", session?.id],
@@ -45,9 +55,16 @@ export function MisPartidosPage() {
     <div className="page">
       <h1>Mis partidos</h1>
       {session?.id === undefined && (
-        <p className="error-text">
-          No pudimos confirmar tu usuario. Volvé a iniciar sesión para ver tus partidos asignados.
-        </p>
+        // TASK-036 (FE-05): antes solo decía "volvé a iniciar sesión".
+        <div className="aviso-reintento" role="alert">
+          <p className="error-text">
+            No pudimos confirmar tu usuario, así que todavía no sabemos qué partidos tenés asignados.
+          </p>
+          {reintentoFallido && <p className="muted">Sigue sin responder. Probá de nuevo en un momento.</p>}
+          <Button variante="primario" onClick={reintentar} disabled={reintentando}>
+            {reintentando ? "Reintentando..." : "Reintentar"}
+          </Button>
+        </div>
       )}
       {partidosQuery.isLoading && <p>Cargando tus partidos...</p>}
       {partidosQuery.isError && <p className="error-text">No se pudieron cargar tus partidos.</p>}

@@ -8,6 +8,7 @@ import { DashboardPage } from "./pages/Dashboard";
 import { LicenseRevokedScreen } from "./pages/LicenseRevokedScreen";
 import { LoginPage } from "./pages/Login";
 import { MiCuentaPage } from "./pages/MiCuenta";
+import { NoEncontradaPage } from "./pages/NoEncontrada";
 import { PartidoEnVivoPage } from "./pages/PartidoEnVivo";
 import { DetalleTorneoPublicoPage } from "./pages/publico/DetalleTorneoPublico";
 import { FeedPartidosPage } from "./pages/publico/FeedPartidos";
@@ -198,18 +199,11 @@ export function App() {
             <Route path="plantillas/lote" element={<RegistroLoteAdminPage />} />
           </Route>
 
-          {/* portal-publico-feed-partidos-plan.md, T1.2 (C7/F20): el
-              catch-all cae en "/" en vez de "/dashboard" directo. Hoy "/"
-              sigue redirigiendo a "/dashboard" para todos (T4.1/C16 todavía
-              no aterrizó — eso es R3), así que el comportamiento no cambia
-              todavía; cuando "/" empiece a decidir por sesión, un anónimo
-              que aterriza acá por una ruta inexistente cae en el feed
-              público en vez del dashboard interno. "/dashboard" tipeado
-              directo sigue alcanzable sin sesión (decisión F20): esta
-              pantalla no tiene módulos de Control de Mesa y ya consume
-              solo endpoints públicos, así que no se le agregó RequireRole
-              — se le sacó el link, no el acceso. */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* TASK-036 (FE-03): una ruta inexistente muestra la 404. Antes
+              caía en "/" en silencio (T1.2), y un enlace roto parecía "la
+              app me sacó". "/dashboard" tipeado directo sigue alcanzable
+              sin sesión (decisión F20): se le sacó el link, no el acceso. */}
+          <Route path="*" element={<NoEncontradaPage />} />
         </Routes>
       </main>
     </div>

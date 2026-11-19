@@ -37,6 +37,11 @@ function renderApp(initialPath: string) {
   );
 }
 
+/** La barra pública de disciplinas pide esto en cualquier ruta. */
+function disciplinasDisponibles() {
+  server.use(http.get("http://127.0.0.1:8000/api/v1/disciplinas/con-partidos", () => HttpResponse.json([])));
+}
+
 function mockLogin(rol: string) {
   server.use(
     http.post(LOGIN, () => HttpResponse.json({ access_token: "fake-token", token_type: "bearer", rol })),
@@ -63,16 +68,24 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
     );
   });
 
-  it("navegar directo a /torneo-admin sin sesión muestra el prompt de login, no crashea", () => {
+  // TASK-036 (UX-02): sin sesión, una ruta protegida lleva al formulario
+  // de login (antes: una tarjeta "Necesitás iniciar sesión" con un enlace).
+  it("navegar directo a /torneo-admin sin sesión lleva al login, no crashea", () => {
     renderApp("/torneo-admin/torneos");
-    expect(screen.getByText("Necesitás iniciar sesión")).toBeInTheDocument();
-    expect(screen.getByText(/TorneoAdmin o AdminGeneral/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
+    expect(screen.getByText(/Iniciá sesión para seguir/)).toBeInTheDocument();
   });
 
-  it("navegar directo a /arbitro sin sesión muestra el prompt de login, no crashea (Fase 3, D3 + Fase 4, D1)", () => {
+  it("navegar directo a /arbitro sin sesión lleva al login, no crashea (Fase 3, D3 + Fase 4, D1)", () => {
     renderApp("/arbitro");
-    expect(screen.getByText("Necesitás iniciar sesión")).toBeInTheDocument();
-    expect(screen.getByText("Arbitro o AdminGeneral", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
+  });
+
+  it("tras iniciar sesión desde una ruta protegida, vuelve a esa ruta (TASK-036)", async () => {
+    mockLogin("AdminGeneral");
+    renderApp("/admin/usuarios");
+    await iniciarSesion();
+    expect(await screen.findByRole("heading", { name: "Usuarios" })).toBeInTheDocument();
   });
 
   it("TorneoAdmin logueado no puede entrar a /arbitro (D3: TorneoAdmin nunca estuvo en la lista)", async () => {
@@ -82,7 +95,9 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
     await waitFor(() => expect(screen.getByRole("heading", { name: "Torneo Admin" })).toBeInTheDocument());
 
     renderApp("/arbitro");
-    expect(screen.getByText("Necesitás iniciar sesión")).toBeInTheDocument();
+    // TASK-036 (UX-02): con sesión es "sin permiso", no "iniciá sesión".
+    expect(screen.getByRole("heading", { name: "No tenés permiso para ver esta página" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Iniciar sesión" })).not.toBeInTheDocument();
   });
 
   it("AdminGeneral logueado SÍ puede entrar a /arbitro (Fase 4, D1: acceso cruzado)", async () => {
@@ -95,10 +110,9 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
     expect(await screen.findByRole("heading", { name: "Mis partidos" })).toBeInTheDocument();
   });
 
-  it("navegar directo a /admin/usuarios sin sesión muestra el prompt de login (Fase 4, D4)", () => {
+  it("navegar directo a /admin/usuarios sin sesión lleva al login (Fase 4, D4)", () => {
     renderApp("/admin/usuarios");
-    expect(screen.getByText("Necesitás iniciar sesión")).toBeInTheDocument();
-    expect(screen.getByText("AdminGeneral", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
   });
 
   it("TorneoAdmin logueado no puede entrar a /admin/usuarios (D4: literal AdminGeneral-only, coincide con el backend)", async () => {
@@ -108,7 +122,10 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
     await waitFor(() => expect(screen.getByRole("heading", { name: "Torneo Admin" })).toBeInTheDocument());
 
     renderApp("/admin/usuarios");
-    expect(screen.getByText("Necesitás iniciar sesión")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "No tenés permiso para ver esta página" })).toBeInTheDocument();
+    expect(screen.getByText("AdminGeneral", { selector: "strong" })).toBeInTheDocument();
+    // El enlace lleva al inicio de SU rol.
+    expect(screen.getByRole("link", { name: "Ir a mi inicio" })).toHaveAttribute("href", "/torneo-admin");
   });
 
   it("AdminGeneral logueado puede entrar a /admin/usuarios (Fase 4, D4)", async () => {
@@ -173,26 +190,21 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
     expect(screen.getByRole("link", { name: "Portal público" })).toBeInTheDocument();
   });
 
-  it("ruta inexistente cae en / (catch-all, T1.2); anónimo ve el feed público, no el dashboard interno (T4.1/C16)", async () => {
-    server.use(
-      http.get("http://127.0.0.1:8000/api/v1/partidos/feed", () =>
-        HttpResponse.json({ fecha_pedida: "2026-09-15", fecha_efectiva: "2026-09-15", total_disponible: 0, partidos: [] }),
-      ),
-      http.get("http://127.0.0.1:8000/api/v1/disciplinas/con-partidos", () => HttpResponse.json([])),
-    );
+  // TASK-036 (FE-03): antes el catch-all redirigía a "/" en silencio.
+  it("una ruta inexistente muestra la 404; el anónimo vuelve al portal", async () => {
+    disciplinasDisponibles();
     renderApp("/esto-no-existe");
-    expect(await screen.findByText("Actualizado", { exact: false })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Dashboard de Torneo" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "No encontramos esta página" })).toBeInTheDocument();
+    expect(screen.getByText("/esto-no-existe")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ir al portal" })).toHaveAttribute("href", "/");
   });
 
-  it("ruta inexistente cae en / (catch-all); logueado sigue yendo a /dashboard (T4.1/C16 no cambia el arranque de nadie con sesión)", async () => {
-    mockLogin("TorneoAdmin");
-    renderApp("/login");
-    await iniciarSesion();
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Torneo Admin" })).toBeInTheDocument());
-
-    renderApp("/esto-no-existe");
-    expect(await screen.findByRole("heading", { name: "Dashboard de Torneo" })).toBeInTheDocument();
+  it("la 404 con sesión ofrece volver al inicio del rol", async () => {
+    disciplinasDisponibles();
+    sembrarSesion("Arbitro", 7);
+    renderApp("/torneo-admin/no-existe");
+    expect(screen.getByRole("heading", { name: "No encontramos esta página" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ir a mi inicio" })).toHaveAttribute("href", "/arbitro");
   });
 
   it("T5.5: /torneos/:torneoId monta la vista pública de torneo, sin sesión", async () => {
@@ -249,6 +261,101 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
     expect(
       screen.getByText(/No pudimos confirmar tu usuario/),
     ).toBeInTheDocument();
+  });
+
+  it("GET /auth/me se reintenta una vez: un fallo puntual no deja la sesión sin id (TASK-036)", async () => {
+    let llamadas = 0;
+    server.use(
+      http.get(ME, () => {
+        llamadas += 1;
+        return llamadas === 1 ? HttpResponse.error() : HttpResponse.json({ id: 42, username: "usuario_test", rol: "Arbitro" });
+      }),
+    );
+    mockLogin("Arbitro");
+    renderApp("/login");
+    await iniciarSesion();
+
+    expect(await screen.findByText("No tenés partidos asignados por ahora.")).toBeInTheDocument();
+    expect(screen.queryByText(/No pudimos confirmar tu usuario/)).not.toBeInTheDocument();
+    expect(llamadas).toBe(2);
+  });
+
+  it("sin id tras los dos intentos, 'Mis partidos' ofrece reintentar (TASK-036)", async () => {
+    let responde = false;
+    server.use(
+      http.get(ME, () =>
+        responde ? HttpResponse.json({ id: 42, username: "usuario_test", rol: "Arbitro" }) : HttpResponse.error(),
+      ),
+    );
+    mockLogin("Arbitro");
+    renderApp("/login");
+    await iniciarSesion();
+    expect(await screen.findByText(/No pudimos confirmar tu usuario/)).toBeInTheDocument();
+
+    responde = true;
+    await userEvent.setup().click(screen.getByRole("button", { name: "Reintentar" }));
+
+    expect(await screen.findByText("No tenés partidos asignados por ahora.")).toBeInTheDocument();
+    expect(screen.queryByText(/No pudimos confirmar tu usuario/)).not.toBeInTheDocument();
+  });
+});
+
+describe("Barra de navegación (TASK-036, UX-01)", () => {
+  beforeEach(() => {
+    server.use(
+      http.get(TORNEOS, () => HttpResponse.json([])),
+      http.get(PARTIDOS, () => HttpResponse.json([])),
+      http.get(USUARIOS, () => HttpResponse.json([])),
+    );
+    disciplinasDisponibles();
+  });
+
+  it("Usuarios, Accesos y Auditoría van agrupados en 'Administración'", async () => {
+    sembrarSesion("AdminGeneral", 1);
+    const user = userEvent.setup();
+    renderApp("/dashboard");
+
+    const grupo = screen.getByRole("button", { name: /Administración/ });
+    expect(grupo).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: "Usuarios" })).not.toBeInTheDocument();
+
+    await user.click(grupo);
+    expect(grupo).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Accesos" })).toBeInTheDocument();
+
+    // Elegir un enlace cierra el grupo.
+    await user.click(screen.getByRole("link", { name: "Usuarios" }));
+    expect(await screen.findByRole("heading", { name: "Usuarios" })).toBeInTheDocument();
+    expect(grupo).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("Escape cierra el grupo y devuelve el foco a su botón", async () => {
+    sembrarSesion("AdminGeneral", 1);
+    const user = userEvent.setup();
+    renderApp("/dashboard");
+    const grupo = screen.getByRole("button", { name: /Administración/ });
+    await user.click(grupo);
+    await user.keyboard("{Escape}");
+    expect(grupo).toHaveAttribute("aria-expanded", "false");
+    expect(grupo).toHaveFocus();
+  });
+
+  it("el botón 'Menú' abre y cierra la navegación con aria-expanded", async () => {
+    sembrarSesion("TorneoAdmin", 2);
+    const user = userEvent.setup();
+    renderApp("/dashboard");
+    const menu = screen.getByRole("button", { name: "Menú" });
+    expect(menu).toHaveAttribute("aria-controls", "nav-principal");
+    expect(menu).toHaveAttribute("aria-expanded", "false");
+    await user.click(menu);
+    expect(screen.getByRole("button", { name: "Cerrar menú" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("navigation", { name: "Principal" })).toHaveClass("nav-bar__links--abierto");
+  });
+
+  it("los roles sin Administración no ven el grupo", () => {
+    sembrarSesion("TorneoAdmin", 2);
+    renderApp("/dashboard");
+    expect(screen.queryByRole("button", { name: /Administración/ })).not.toBeInTheDocument();
   });
 });
 

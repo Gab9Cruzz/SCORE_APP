@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { Button } from "./ui/Button";
 import { BarraDisciplinasPublica } from "./publico/BarraDisciplinasPublica";
 
 export function NavBar() {
@@ -26,12 +28,71 @@ export function NavBar() {
   // no renderizar el `<nav>` en absoluto cuando no hay nada adentro.
   const hayLinksDeSesion = session != null;
 
+  // TASK-036 (UX-01): por debajo de 900px los enlaces van detrás de un botón
+  // "Menú"; Usuarios, Accesos y Auditoría se agrupan en "Administración".
+  // Los dos se cierran al elegir un enlace, con Escape y con un clic afuera.
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [adminAbierto, setAdminAbierto] = useState(false);
+  const grupoAdminRef = useRef<HTMLDivElement>(null);
+  const botonAdminRef = useRef<HTMLButtonElement>(null);
+  const enAdministracion = location.pathname.startsWith("/admin/");
+
+  useEffect(() => {
+    if (!adminAbierto && !menuAbierto) return;
+    function alClicAfuera(e: globalThis.MouseEvent) {
+      if (!(e.target instanceof Node)) return;
+      if (grupoAdminRef.current && !grupoAdminRef.current.contains(e.target)) setAdminAbierto(false);
+    }
+    function alPresionarTecla(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (adminAbierto) {
+        setAdminAbierto(false);
+        botonAdminRef.current?.focus();
+      } else {
+        setMenuAbierto(false);
+      }
+    }
+    document.addEventListener("click", alClicAfuera);
+    document.addEventListener("keydown", alPresionarTecla);
+    return () => {
+      document.removeEventListener("click", alClicAfuera);
+      document.removeEventListener("keydown", alPresionarTecla);
+    };
+  }, [adminAbierto, menuAbierto]);
+
+  function alElegirEnlace(e: MouseEvent) {
+    if (e.target instanceof Element && e.target.closest("a")) {
+      setMenuAbierto(false);
+      setAdminAbierto(false);
+    }
+  }
+
+  const claseActiva = ({ isActive }: { isActive: boolean }) => (isActive ? "active" : undefined);
+
   return (
     <header className="nav-bar">
       <div className="nav-bar__fila1">
         <div className="nav-bar__brand">Score-App</div>
         {hayLinksDeSesion && (
-          <nav className="nav-bar__links">
+          <button
+            type="button"
+            className="nav-bar__menu"
+            aria-expanded={menuAbierto}
+            aria-controls="nav-principal"
+            onClick={() => setMenuAbierto((v) => !v)}
+          >
+            {menuAbierto ? "Cerrar menú" : "Menú"}
+          </button>
+        )}
+        {hayLinksDeSesion && (
+          // onClick por delegación: el clic real lo hace un <a>, que ya
+          // funciona con teclado (Enter dispara click).
+          <nav
+            id="nav-principal"
+            aria-label="Principal"
+            className={menuAbierto ? "nav-bar__links nav-bar__links--abierto" : "nav-bar__links"}
+            onClick={alElegirEnlace}
+          >
             {/* portal-publico-feed-partidos-plan.md, T1.1/T1.2 (C7): el público
                 anónimo ya no ve ni Dashboard ni Control de Mesa acá — el link a
                 Control de Mesa quedaba visible para cualquiera aunque la ruta
@@ -39,44 +100,53 @@ export function NavBar() {
                 anónimo (el link, no la ruta: /dashboard sigue alcanzable
                 tipeada directo, ver F20 en App.routing.test.tsx) porque no
                 aporta nada sin sesión. */}
-            <NavLink to="/dashboard" className={({ isActive }) => (isActive ? "active" : undefined)}>
+            <NavLink to="/dashboard" className={claseActiva}>
               Dashboard
             </NavLink>
             {/* D6: con T1.2 mandando a un logueado siempre a /dashboard y sin
                 ningún link de vuelta al portal público, nadie con sesión podía
                 llegar al feed — ni el TorneoAdmin que acaba de cargar los
-                partidos. Una línea, mismo razonamiento que T5.2c aplicó a la
-                vista de torneo. */}
+                partidos. */}
             <NavLink to="/">Portal público</NavLink>
             {(session?.rol === "TorneoAdmin" || session?.rol === "AdminGeneral" || session?.rol === "Arbitro") && (
-              <NavLink to="/control-de-mesa" className={({ isActive }) => (isActive ? "active" : undefined)}>
+              <NavLink to="/control-de-mesa" className={claseActiva}>
                 Control de Mesa
               </NavLink>
             )}
             {(session?.rol === "TorneoAdmin" || session?.rol === "AdminGeneral") && (
-              <NavLink to="/torneo-admin" className={({ isActive }) => (isActive ? "active" : undefined)}>
+              <NavLink to="/torneo-admin" className={claseActiva}>
                 Torneo Admin
               </NavLink>
             )}
             {(session?.rol === "Arbitro" || session?.rol === "AdminGeneral") && (
-              <NavLink to="/arbitro" className={({ isActive }) => (isActive ? "active" : undefined)}>
+              <NavLink to="/arbitro" className={claseActiva}>
                 Mis partidos
               </NavLink>
             )}
             {session?.rol === "AdminGeneral" && (
-              <NavLink to="/admin/usuarios" className={({ isActive }) => (isActive ? "active" : undefined)}>
-                Usuarios
-              </NavLink>
-            )}
-            {session?.rol === "AdminGeneral" && (
-              <NavLink to="/admin/accesos" className={({ isActive }) => (isActive ? "active" : undefined)}>
-                Accesos
-              </NavLink>
-            )}
-            {session?.rol === "AdminGeneral" && (
-              <NavLink to="/admin/auditoria" className={({ isActive }) => (isActive ? "active" : undefined)}>
-                Auditoría
-              </NavLink>
+              <div className="nav-bar__grupo" ref={grupoAdminRef}>
+                <button
+                  type="button"
+                  ref={botonAdminRef}
+                  className={enAdministracion ? "nav-bar__grupo-boton active" : "nav-bar__grupo-boton"}
+                  aria-expanded={adminAbierto}
+                  aria-controls="nav-administracion"
+                  onClick={() => setAdminAbierto((v) => !v)}
+                >
+                  Administración <span aria-hidden="true">▾</span>
+                </button>
+                <div id="nav-administracion" className="nav-bar__submenu" hidden={!adminAbierto}>
+                  <NavLink to="/admin/usuarios" className={claseActiva}>
+                    Usuarios
+                  </NavLink>
+                  <NavLink to="/admin/accesos" className={claseActiva}>
+                    Accesos
+                  </NavLink>
+                  <NavLink to="/admin/auditoria" className={claseActiva}>
+                    Auditoría
+                  </NavLink>
+                </div>
+              </div>
             )}
           </nav>
         )}
@@ -87,9 +157,7 @@ export function NavBar() {
               <NavLink to="/mi-cuenta" className="nav-bar__user" title="Mi cuenta">
                 {session.username} <span className="badge">{session.rol}</span>
               </NavLink>
-              <button type="button" onClick={logout}>
-                Salir
-              </button>
+              <Button onClick={logout}>Salir</Button>
             </>
           ) : (
             <NavLink to="/login">Iniciar sesión</NavLink>

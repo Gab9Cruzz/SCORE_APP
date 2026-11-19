@@ -1,22 +1,14 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { type Rol } from "../auth/authContextValue";
+import { landingPorRol } from "../auth/landing";
 import { useAuth } from "../auth/useAuth";
 import { Button } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
 
 // roles-3-modulos-plan.md, Fase 2, D2: landing por default después de
-// loguearse. `from` (si existe) siempre gana — si alguien fue redirigido
-// acá desde una ruta protegida específica, volver ahí importa más que el
-// landing genérico del rol.
-function landingPorRol(rol: Rol | undefined): string {
-  if (rol === "TorneoAdmin" || rol === "AdminGeneral") return "/torneo-admin";
-  // Fase 3, D3: Árbitro tiene su propia landing ("Mis partidos") — el
-  // resto (Publico, sin sesión) sigue cayendo en /dashboard sin cambios.
-  if (rol === "Arbitro") return "/arbitro";
-  return "/dashboard";
-}
-
+// loguearse (auth/landing.ts). `from` (si existe) siempre gana — si alguien
+// fue redirigido acá desde una ruta protegida específica (RequireRole,
+// TASK-036), volver ahí importa más que el landing genérico del rol.
 export function LoginPage() {
   const { login, loginError, loggingIn, isAuthenticated, session } = useAuth();
   const [username, setUsername] = useState("");
@@ -50,6 +42,7 @@ export function LoginPage() {
     <div className="login-page">
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Iniciar sesión</h1>
+        {from && <p className="muted--cuerpo">Iniciá sesión para seguir a la página que querías ver.</p>}
         <Field etiqueta="Usuario">
           {(p) => (
             <input
@@ -77,24 +70,6 @@ export function LoginPage() {
           {loggingIn ? "Ingresando..." : "Ingresar"}
         </Button>
       </form>
-    </div>
-  );
-}
-
-/** Lo que ve alguien sin sesión (o con rol insuficiente) al entrar a una ruta
- * protegida — nunca un 401 crudo. Ver "Manejo de sesión y roles" del design doc. */
-export function LoginPrompt({ requiredRoles }: { requiredRoles: Rol[] }) {
-  return (
-    <div className="login-page">
-      <div className="login-form login-form--prompt">
-        <h1>Necesitás iniciar sesión</h1>
-        <p>
-          Esta sección requiere rol <strong>{requiredRoles.join(" o ")}</strong>.
-        </p>
-        <a className="button-link" href="/login">
-          Ir a iniciar sesión
-        </a>
-      </div>
     </div>
   );
 }
