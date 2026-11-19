@@ -21,3 +21,13 @@ def verificar_arbitro_asignado(partido: Partido, usuario: Usuario) -> None:
         return
     if partido.arbitro_id != usuario.id:
         raise ForbiddenError("Este partido no está asignado a vos.")
+
+
+ROLES_CON_DATOS_PERSONALES = ("AdminGeneral", "TorneoAdmin")
+
+
+def puede_ver_pii(usuario: Usuario | None) -> bool:
+    """TASK-014 (SEC-05): cédula y correo solo para los roles de gestión.
+    Antes alcanzaba con tener sesión, y una cuenta Publico o Arbitro los
+    recibía igual que un administrador."""
+    return usuario is not None and usuario.rol in ROLES_CON_DATOS_PERSONALES

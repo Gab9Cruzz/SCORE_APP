@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.exceptions.errors import NotFoundError
 from app.models.torneo_grupo import TorneoGrupo
 from app.repositories.torneo import TorneoRepository
 from app.repositories.torneo_grupo import TorneoGrupoRepository
@@ -14,12 +15,18 @@ class TorneoGrupoService:
     async def get(self, id_: int) -> TorneoGrupo:
         return await self.repo.get_or_404(id_)
 
-    async def get_con_ediciones(self, id_: int) -> TorneoGrupoConEdiciones:
+    async def get_con_ediciones(self, id_: int, solo_publicados: bool = False) -> TorneoGrupoConEdiciones:
         """Un solo grupo + sus ediciones — usado por "Ver Torneo" para el
         selector de ediciones (a diferencia de `listar_con_ediciones`, que
         trae TODOS los grupos para la Pestaña Torneos)."""
         grupo = await self.repo.get_or_404(id_)
         ediciones = await self.torneo_repo.listar_ediciones_del_grupo(id_)
+        # TASK-014 (SEC-07): un anónimo solo ve ediciones publicadas; un grupo
+        # sin ninguna es, para él, inexistente (mismo 404 que un torneo).
+        if solo_publicados:
+            ediciones = [t for t in ediciones if t.publicado]
+            if not ediciones:
+                raise NotFoundError("TorneoGrupo", id_)
         return TorneoGrupoConEdiciones(
             id=grupo.id,
             nombre=grupo.nombre,
@@ -35,7 +42,9 @@ class TorneoGrupoService:
         todas de una — no hay ninguna fila de TORNEO que tocar."""
         return await self.repo.update(id_, **data.model_dump(exclude_unset=True))
 
-    async def listar_con_ediciones(self, incluir_archivados: bool = False) -> list[TorneoGrupoConEdiciones]:
+    async def listar_con_ediciones(
+        self, incluir_archivados: bool = False, solo_publicados: bool = False
+    ) -> list[TorneoGrupoConEdiciones]:
         """Lo que consume la Pestaña Torneos (Fase 2, paso 1 del journey):
         tarjeta por grupo con todas sus ediciones.
 
@@ -54,6 +63,12 @@ class TorneoGrupoService:
         directo, sin filtro), solo no aparece acá salvo que se pida."""
         grupos = await self.repo.listar_con_ediciones(incluir_archivados=incluir_archivados)
         ediciones_por_grupo = await self.torneo_repo.ediciones_por_grupo([g.id for g in grupos])
+        # TASK-014 (SEC-07): ver get_con_ediciones.
+        if solo_publicados:
+            ediciones_por_grupo = {
+                gid: [t for t in eds if t.publicado] for gid, eds in ediciones_por_grupo.items()
+            }
+            grupos = [g for g in grupos if ediciones_por_grupo.get(g.id)]
         return [
             TorneoGrupoConEdiciones(
                 id=grupo.id,

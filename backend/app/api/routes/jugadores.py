@@ -9,6 +9,7 @@ from app.schemas.perfil_jugador import PerfilJugadorOut, PerfilJugadorPublicOut
 from app.services.jugador import JugadorService
 from app.services.permisos_catalogo import exigir_admin_de_torneos_del_jugador
 from app.services.perfil_jugador import PerfilJugadorService
+from app.services.permisos import puede_ver_pii
 
 router = APIRouter(prefix="/jugadores", tags=["Jugadores"])
 
@@ -50,8 +51,14 @@ async def listar_jugadores(
     session: AsyncSession = Depends(get_db),
     usuario_actual: Usuario | None = Depends(get_current_user_optional),
 ) -> list[JugadorOut] | list[JugadorPublicOut]:
-    jugadores = await JugadorService(session).list(skip=skip, limit=limit, estado=estado, q=q)
-    if usuario_actual is None:
+    # TASK-014 (SEC-05): sin permiso para ver datos personales, la búsqueda
+    # no mira la cédula (si no, alcanzaba con probar una cédula para saber
+    # si esa persona está registrada) y la respuesta no la trae.
+    ver_pii = puede_ver_pii(usuario_actual)
+    jugadores = await JugadorService(session).list(
+        skip=skip, limit=limit, estado=estado, q=q, incluir_cedula=ver_pii
+    )
+    if not ver_pii:
         return [JugadorPublicOut.model_validate(j) for j in jugadores]
     return [JugadorOut.model_validate(j) for j in jugadores]
 
@@ -63,7 +70,7 @@ async def obtener_jugador(
     usuario_actual: Usuario | None = Depends(get_current_user_optional),
 ) -> JugadorOut | JugadorPublicOut:
     jugador = await JugadorService(session).get(jugador_id)
-    if usuario_actual is None:
+    if not puede_ver_pii(usuario_actual):
         return JugadorPublicOut.model_validate(jugador)
     return JugadorOut.model_validate(jugador)
 
@@ -77,7 +84,7 @@ async def obtener_perfil_de_jugador(
     """Stats + trayectoria consolidadas por disciplina (equipos-jugadores-plan.md,
     Fase 2, Etapa D)."""
     resultado = await PerfilJugadorService(session).obtener(jugador_id)
-    if usuario_actual is None:
+    if not puede_ver_pii(usuario_actual):
         return PerfilJugadorPublicOut.model_validate(resultado.model_dump())
     return resultado
 

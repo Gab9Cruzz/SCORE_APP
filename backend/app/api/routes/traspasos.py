@@ -55,6 +55,8 @@ async def listar_traspasos(
         "jugador_perfil_id": jugador_perfil_id,
         "torneo_id": torneo_id,
         "torneo_ids_permitidos": torneo_ids_permitidos,
+        # TASK-014 (SEC-07): mismo criterio que GET /torneos y /partidos.
+        "solo_publicados": usuario is None,
     }
     servicio = TraspasoService(session)
     informar_total(response, await servicio.contar(**filtros))

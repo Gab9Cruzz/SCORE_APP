@@ -53,7 +53,13 @@ async def listar_inscripciones(
     torneo_ids_permitidos: list[int] | None = None
     if usuario is not None and usuario.rol == "TorneoAdmin":
         torneo_ids_permitidos = await AsignacionTorneoAdminRepository(session).listar_torneo_ids_activos(usuario.id)
-    filtros = {"torneo_id": torneo_id, "equipo_id": equipo_id, "torneo_ids_permitidos": torneo_ids_permitidos}
+    filtros = {
+        "torneo_id": torneo_id,
+        "equipo_id": equipo_id,
+        "torneo_ids_permitidos": torneo_ids_permitidos,
+        # TASK-014 (SEC-07): mismo criterio que GET /torneos y /partidos.
+        "solo_publicados": usuario is None,
+    }
     servicio = InscripcionTorneoService(session)
     informar_total(response, await servicio.contar(**filtros))
     return await servicio.list(skip=pagina.skip, limit=pagina.limit, **filtros)

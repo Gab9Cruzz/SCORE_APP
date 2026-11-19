@@ -11,6 +11,8 @@ async def test_listar_torneo_grupos_incluye_ediciones(client: AsyncClient):
 
 
 async def test_renombrar_torneo_grupo(client: AsyncClient, admin_general_headers: dict[str, str]):
+    # TASK-014: las lecturas van con sesión — la edición nace sin publicar y
+    # un anónimo ya no ve su grupo (ver test_privacidad_y_borradores.py).
     # EC-25 del plan: renombrar un grupo alcanza a todas sus ediciones sin
     # tocar ninguna fila de TORNEO — el nombre se compone en runtime.
     resp = await client.post(
@@ -36,7 +38,7 @@ async def test_renombrar_torneo_grupo(client: AsyncClient, admin_general_headers
     assert resp.status_code == 200, resp.text
     assert resp.json()["nombre"] == "Nombre Renombrado"
 
-    resp = await client.get("/api/v1/torneo-grupos")
+    resp = await client.get("/api/v1/torneo-grupos", headers=admin_general_headers)
     grupo = next(g for g in resp.json() if g["id"] == grupo_id)
     assert grupo["nombre"] == "Nombre Renombrado"
 
@@ -74,18 +76,20 @@ async def test_archivar_torneo_grupo_lo_oculta_del_listado_sin_tocar_ediciones(
     assert resp.status_code == 200, resp.text
     assert resp.json()["estado"] == "Archivado"
 
-    resp = await client.get("/api/v1/torneo-grupos")
+    resp = await client.get("/api/v1/torneo-grupos", headers=admin_general_headers)
     ids = {g["id"] for g in resp.json()}
     assert grupo_id not in ids
 
     # Sigue existiendo entero — GET directo por ID no filtra.
-    resp = await client.get(f"/api/v1/torneo-grupos/{grupo_id}")
+    resp = await client.get(f"/api/v1/torneo-grupos/{grupo_id}", headers=admin_general_headers)
     assert resp.status_code == 200, resp.text
     assert resp.json()["estado"] == "Archivado"
     assert len(resp.json()["ediciones"]) == 1
 
     # incluir_archivados=true lo trae de vuelta al listado.
-    resp = await client.get("/api/v1/torneo-grupos", params={"incluir_archivados": True})
+    resp = await client.get(
+        "/api/v1/torneo-grupos", params={"incluir_archivados": True}, headers=admin_general_headers
+    )
     ids = {g["id"] for g in resp.json()}
     assert grupo_id in ids
 
@@ -118,7 +122,7 @@ async def test_reactivar_torneo_grupo_lo_devuelve_al_listado(
     assert resp.status_code == 200, resp.text
     assert resp.json()["estado"] == "Activo"
 
-    resp = await client.get("/api/v1/torneo-grupos")
+    resp = await client.get("/api/v1/torneo-grupos", headers=admin_general_headers)
     ids = {g["id"] for g in resp.json()}
     assert grupo_id in ids
 

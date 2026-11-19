@@ -477,6 +477,9 @@ export interface paths {
          * @description EC-25: renombrar un grupo con ediciones ya finalizadas está
          *     permitido sin restricción — el nombre se compone en runtime en cada
          *     edición, así que esto alcanza a todas de una.
+         *
+         *     TASK-013 (SEC-04): solo quien administra alguna de sus ediciones (o un
+         *     AdminGeneral). Archivar oculta todas las ediciones.
          */
         patch: operations["renombrar_torneo_grupo_api_v1_torneo_grupos__torneo_grupo_id__patch"];
         trace?: never;
@@ -510,7 +513,11 @@ export interface paths {
         get: operations["obtener_equipo_api_v1_equipos__equipo_id__get"];
         put?: never;
         post?: never;
-        /** Dar De Baja Equipo */
+        /**
+         * Dar De Baja Equipo
+         * @description TASK-013 (SEC-04): exige administrar todos los torneos abiertos donde
+         *     juega (ver services/permisos_catalogo.py).
+         */
         delete: operations["dar_de_baja_equipo_api_v1_equipos__equipo_id__delete"];
         options?: never;
         head?: never;
@@ -607,7 +614,11 @@ export interface paths {
         get: operations["obtener_jugador_api_v1_jugadores__jugador_id__get"];
         put?: never;
         post?: never;
-        /** Dar De Baja Jugador */
+        /**
+         * Dar De Baja Jugador
+         * @description TASK-013 (SEC-04): exige administrar todos los torneos abiertos donde
+         *     está en una plantilla activa (ver services/permisos_catalogo.py).
+         */
         delete: operations["dar_de_baja_jugador_api_v1_jugadores__jugador_id__delete"];
         options?: never;
         head?: never;
@@ -674,7 +685,8 @@ export interface paths {
         head?: never;
         /**
          * Actualizar Perfil
-         * @description Único uso real: alternar `suspendido`.
+         * @description Único uso real: alternar `suspendido`. TASK-013 (SEC-04): exige
+         *     administrar todos los torneos abiertos donde el jugador está activo.
          */
         patch: operations["actualizar_perfil_api_v1_perfiles__perfil_id__patch"];
         trace?: never;

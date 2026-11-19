@@ -5,6 +5,7 @@ from typing import Sequence
 from sqlalchemy import Select, func, select, text
 
 from app.models.inscripcion_torneo import InscripcionTorneo
+from app.models.torneo import Torneo
 from app.repositories.base import BaseRepository
 
 
@@ -19,12 +20,13 @@ class InscripcionTorneoRepository(BaseRepository[InscripcionTorneo]):
         torneo_id: int | None = None,
         equipo_id: int | None = None,
         torneo_ids_permitidos: Sequence[int] | None = None,
+        solo_publicados: bool = False,
     ) -> list[InscripcionTorneo]:
         """Override de `BaseRepository.list` (P3, TODOS.md): el filtro por
         asignación necesita `.in_()`, que el genérico por igualdad de la
         base no sabe hacer — mismo motivo que `TorneoRepository.list`/
         `PartidoRepository.list` ya tienen el suyo propio."""
-        stmt = self._consulta(torneo_id, equipo_id, torneo_ids_permitidos)
+        stmt = self._consulta(torneo_id, equipo_id, torneo_ids_permitidos, solo_publicados)
         stmt = stmt.order_by(InscripcionTorneo.id).offset(skip).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
@@ -34,15 +36,22 @@ class InscripcionTorneoRepository(BaseRepository[InscripcionTorneo]):
         torneo_id: int | None = None,
         equipo_id: int | None = None,
         torneo_ids_permitidos: Sequence[int] | None = None,
+        solo_publicados: bool = False,
     ) -> int:
         """Total sin paginar con los mismos filtros que `list` (TASK-011)."""
-        return await self._contar(self._consulta(torneo_id, equipo_id, torneo_ids_permitidos))
+        return await self._contar(self._consulta(torneo_id, equipo_id, torneo_ids_permitidos, solo_publicados))
 
     @staticmethod
     def _consulta(
-        torneo_id: int | None, equipo_id: int | None, torneo_ids_permitidos: Sequence[int] | None
+        torneo_id: int | None,
+        equipo_id: int | None,
+        torneo_ids_permitidos: Sequence[int] | None,
+        solo_publicados: bool = False,
     ) -> Select:
         stmt = select(InscripcionTorneo)
+        # TASK-014 (SEC-07): un anónimo no reconstruye un torneo no publicado.
+        if solo_publicados:
+            stmt = stmt.join(Torneo, Torneo.id == InscripcionTorneo.torneo_id).where(Torneo.publicado.is_(True))
         if torneo_id is not None:
             stmt = stmt.where(InscripcionTorneo.torneo_id == torneo_id)
         if equipo_id is not None:

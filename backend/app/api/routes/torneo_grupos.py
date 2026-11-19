@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user, get_current_user_optional, require_roles
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.torneo_grupo import TorneoGrupoConEdiciones, TorneoGrupoOut, TorneoGrupoUpdate
@@ -19,7 +19,9 @@ router = APIRouter(prefix="/torneo-grupos", tags=["Torneo Grupos"])
 
 @router.get("", response_model=list[TorneoGrupoConEdiciones])
 async def listar_torneo_grupos(
-    incluir_archivados: bool = False, session: AsyncSession = Depends(get_db)
+    incluir_archivados: bool = False,
+    session: AsyncSession = Depends(get_db),
+    usuario: Usuario | None = Depends(get_current_user_optional),
 ) -> list[TorneoGrupoConEdiciones]:
     """Tarjeta por grupo con sus ediciones (Fase 2, paso 1 del journey) —
     "N ediciones" y cuál es la más reciente/activa se calculan acá, no en
@@ -28,12 +30,16 @@ async def listar_torneo_grupos(
     3B-7 (docs/plans/cierre-backlog-todos-plan.md): sin
     `incluir_archivados`, los grupos Archivado no aparecen — TorneosAdminPage
     los pide explícito solo cuando el admin activa "Ver archivados"."""
-    return await TorneoGrupoService(session).listar_con_ediciones(incluir_archivados=incluir_archivados)
+    return await TorneoGrupoService(session).listar_con_ediciones(
+        incluir_archivados=incluir_archivados, solo_publicados=usuario is None
+    )
 
 
 @router.get("/{torneo_grupo_id}", response_model=TorneoGrupoConEdiciones)
 async def obtener_torneo_grupo(
-    torneo_grupo_id: int, session: AsyncSession = Depends(get_db)
+    torneo_grupo_id: int,
+    session: AsyncSession = Depends(get_db),
+    usuario: Usuario | None = Depends(get_current_user_optional),
 ) -> TorneoGrupoConEdiciones:
     """Incluye `ediciones` (mismo shape que el listado) para que "Ver
     Torneo" (TorneoDashboardPage) pueda ofrecer el selector de ediciones
@@ -41,7 +47,7 @@ async def obtener_torneo_grupo(
     la Pestaña Torneos (ediciones-catalogo-disciplinas-plan.md, pedido de
     seguimiento: administrar ediciones desde adentro del panel del
     torneo)."""
-    return await TorneoGrupoService(session).get_con_ediciones(torneo_grupo_id)
+    return await TorneoGrupoService(session).get_con_ediciones(torneo_grupo_id, solo_publicados=usuario is None)
 
 
 @router.patch(

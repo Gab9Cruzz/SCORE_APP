@@ -5,6 +5,7 @@ from sqlalchemy import Select, func, select, text
 from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.jugador_equipo import JugadorEquipo
 from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
+from app.models.torneo import Torneo
 from app.repositories.base import BaseRepository
 
 
@@ -40,6 +41,7 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
         jugador_perfil_id: int | None = None,
         inscripcion_torneo_id: int | None = None,
         torneo_ids_permitidos: Sequence[int] | None = None,
+        solo_publicados: bool = False,
     ) -> list[JugadorEquipo]:
         """Torneo_ID no vive directo en esta tabla (Fase 1) — mismo join que
         get_activo_en_torneo. Usado por el dashboard scoped de
@@ -63,7 +65,9 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
         asignados. `JugadorEquipoService.list` fuerza este método (en vez
         del `list` genérico de la base) cada vez que hay un scope que
         aplicar, con o sin `torneo_id` explícito."""
-        stmt = self._consulta_por_torneo(torneo_id, jugador_perfil_id, inscripcion_torneo_id, torneo_ids_permitidos)
+        stmt = self._consulta_por_torneo(
+            torneo_id, jugador_perfil_id, inscripcion_torneo_id, torneo_ids_permitidos, solo_publicados
+        )
         stmt = stmt.order_by(JugadorEquipo.id).offset(skip).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
@@ -74,11 +78,14 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
         jugador_perfil_id: int | None = None,
         inscripcion_torneo_id: int | None = None,
         torneo_ids_permitidos: Sequence[int] | None = None,
+        solo_publicados: bool = False,
     ) -> int:
         """Total sin paginar con los mismos filtros que `listar_por_torneo`
         (TASK-011)."""
         return await self._contar(
-            self._consulta_por_torneo(torneo_id, jugador_perfil_id, inscripcion_torneo_id, torneo_ids_permitidos)
+            self._consulta_por_torneo(
+                torneo_id, jugador_perfil_id, inscripcion_torneo_id, torneo_ids_permitidos, solo_publicados
+            )
         )
 
     @staticmethod
@@ -87,10 +94,14 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
         jugador_perfil_id: int | None,
         inscripcion_torneo_id: int | None,
         torneo_ids_permitidos: Sequence[int] | None,
+        solo_publicados: bool = False,
     ) -> Select:
         stmt = select(JugadorEquipo).join(
             InscripcionTorneo, InscripcionTorneo.id == JugadorEquipo.inscripcion_torneo_id
         )
+        # TASK-014 (SEC-07): un anónimo no reconstruye un torneo no publicado.
+        if solo_publicados:
+            stmt = stmt.join(Torneo, Torneo.id == InscripcionTorneo.torneo_id).where(Torneo.publicado.is_(True))
         if torneo_id is not None:
             stmt = stmt.where(InscripcionTorneo.torneo_id == torneo_id)
         if torneo_ids_permitidos is not None:

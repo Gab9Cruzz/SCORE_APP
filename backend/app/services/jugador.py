@@ -18,14 +18,19 @@ class JugadorService:
         return await self.repo.get_or_404(id_)
 
     async def list(
-        self, skip: int = 0, limit: int = 100, estado: str | None = None, q: str | None = None
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        estado: str | None = None,
+        q: str | None = None,
+        incluir_cedula: bool = True,
     ) -> list[Jugador]:
         # q (gestion-avanzada-equipos-control-mesa-plan.md, Requerimiento 2):
         # búsqueda server-side por nombre/cédula, camino separado del
         # listado paginado plano — no tiene sentido combinar skip/limit con
         # un patrón de búsqueda de texto libre en la misma consulta.
         if q is not None and q.strip():
-            return await self.repo.buscar(q, skip=skip, limit=limit, estado=estado)
+            return await self.repo.buscar(q, skip=skip, limit=limit, estado=estado, incluir_cedula=incluir_cedula)
         return await self.repo.list(skip=skip, limit=limit, estado=estado)
 
     async def create(self, data: JugadorCreate) -> Jugador:

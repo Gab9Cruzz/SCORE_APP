@@ -17,7 +17,7 @@ class JugadorRepository(BaseRepository[Jugador]):
         return result.scalar_one_or_none()
 
     async def buscar(
-        self, q: str, skip: int = 0, limit: int = 100, estado: str | None = None
+        self, q: str, skip: int = 0, limit: int = 100, estado: str | None = None, incluir_cedula: bool = True
     ) -> list[Jugador]:
         """Búsqueda server-side por nombre (parcial, insensible a
         mayúsculas) o cédula (parcial) — gestion-avanzada-equipos-control-
@@ -26,7 +26,14 @@ class JugadorRepository(BaseRepository[Jugador]):
         del listado y "no encontraría" un jugador que sí existe (mismo bug
         que ya documenta TODOS.md para Equipos)."""
         patron = f"%{q.strip()}%"
-        stmt = select(Jugador).where(or_(Jugador.nombre.ilike(patron), Jugador.cedula.ilike(patron)))
+        # TASK-014: `incluir_cedula=False` para quien no puede ver datos
+        # personales (ver services/permisos.puede_ver_pii).
+        criterio = (
+            or_(Jugador.nombre.ilike(patron), Jugador.cedula.ilike(patron))
+            if incluir_cedula
+            else Jugador.nombre.ilike(patron)
+        )
+        stmt = select(Jugador).where(criterio)
         if estado is not None:
             stmt = stmt.where(Jugador.estado == estado)
         stmt = stmt.order_by(Jugador.nombre).offset(skip).limit(limit)

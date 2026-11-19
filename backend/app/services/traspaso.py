@@ -37,19 +37,21 @@ class TraspasoService:
         jugador_perfil_id: int | None = None,
         torneo_id: int | None = None,
         torneo_ids_permitidos: list[int] | None = None,
+        solo_publicados: bool = False,
     ) -> list[TraspasoOut]:
         # Mismo criterio que JugadorEquipoService.list: torneo_id necesita
         # un join, rama aparte del filtro genérico (D-Eng-3 del plan).
         # `torneo_ids_permitidos` (P3, TODOS.md) fuerza esta misma rama
         # aunque no venga `torneo_id` — ver comentario en
         # TraspasoRepository.listar_por_torneo.
-        if torneo_id is not None or torneo_ids_permitidos is not None:
+        if torneo_id is not None or torneo_ids_permitidos is not None or solo_publicados:
             traspasos = await self.repo.listar_por_torneo(
                 torneo_id,
                 skip=skip,
                 limit=limit,
                 jugador_perfil_id=jugador_perfil_id,
                 torneo_ids_permitidos=torneo_ids_permitidos,
+                solo_publicados=solo_publicados,
             )
         else:
             traspasos = await self.repo.list(skip=skip, limit=limit, jugador_perfil_id=jugador_perfil_id)
@@ -60,11 +62,15 @@ class TraspasoService:
         jugador_perfil_id: int | None = None,
         torneo_id: int | None = None,
         torneo_ids_permitidos: list[int] | None = None,
+        solo_publicados: bool = False,
     ) -> int:
         """Total sin paginar de `list` con los mismos filtros (TASK-011)."""
-        if torneo_id is not None or torneo_ids_permitidos is not None:
+        if torneo_id is not None or torneo_ids_permitidos is not None or solo_publicados:
             return await self.repo.contar_por_torneo(
-                torneo_id, jugador_perfil_id=jugador_perfil_id, torneo_ids_permitidos=torneo_ids_permitidos
+                torneo_id,
+                jugador_perfil_id=jugador_perfil_id,
+                torneo_ids_permitidos=torneo_ids_permitidos,
+                solo_publicados=solo_publicados,
             )
         return await self.repo.contar_filtrado(jugador_perfil_id=jugador_perfil_id)
 
