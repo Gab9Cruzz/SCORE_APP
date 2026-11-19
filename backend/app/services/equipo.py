@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.exceptions.errors import DomainRuleError
+from app.exceptions.errors import ConflictError, DomainRuleError
 from app.models.equipo import Equipo
+from app.models.inscripcion_torneo import InscripcionTorneo
+from app.models.torneo import Torneo
 from app.repositories.disciplina import DisciplinaRepository
 from app.repositories.equipo import EquipoRepository
 from app.repositories.modalidad import ModalidadRepository
@@ -12,6 +15,7 @@ from app.schemas.equipo import EquipoCreate, EquipoOut, EquipoUpdate
 
 class EquipoService:
     def __init__(self, session: AsyncSession):
+        self.session = session
         self.repo = EquipoRepository(session)
         self.disciplina_repo = DisciplinaRepository(session)
         self.modalidad_repo = ModalidadRepository(session)
@@ -73,6 +77,25 @@ class EquipoService:
         return await self._con_plantilla(actualizado)
 
     async def soft_delete(self, id_: int) -> EquipoOut:
+        # TASK-016 (FUN-21): dar de baja un equipo que sigue inscripto en un
+        # torneo activo lo saca de los listados mientras sus partidos siguen
+        # programados. Primero se cancela la inscripción.
+        torneos = await self.session.execute(
+            select(Torneo.nombre)
+            .join(InscripcionTorneo, InscripcionTorneo.torneo_id == Torneo.id)
+            .where(
+                InscripcionTorneo.equipo_id == id_,
+                InscripcionTorneo.estado.in_(("Inscrito", "Confirmado")),
+                Torneo.estado == "Activo",
+            )
+        )
+        nombres = [n for n in torneos.scalars().all()]
+        if nombres:
+            raise ConflictError(
+                "El equipo sigue inscripto en torneos activos ("
+                + ", ".join(n or "sin nombre" for n in nombres)
+                + "). Cancelá esas inscripciones antes de darlo de baja."
+            )
         equipo = await self.repo.soft_delete(id_, estado_inactivo="Inactivo")
         return await self._con_plantilla(equipo)
 

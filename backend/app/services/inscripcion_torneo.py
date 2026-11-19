@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from sqlalchemy import or_, select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +11,7 @@ from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.jugador import Jugador
 from app.models.jugador_equipo import JugadorEquipo
 from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
+from app.models.partido import Partido
 from app.models.torneo import Torneo
 from app.repositories.disciplina import DisciplinaRepository
 from app.repositories.equipo import EquipoRepository
@@ -121,8 +123,12 @@ class InscripcionTorneoService:
         DomainRuleError ya se traduce a 400 en exceptions/handlers.py.
         """
         torneo = await self.torneo_repo.get_or_404(data.torneo_id)
-        await self._verificar_cupo(torneo)
+        self._exigir_torneo_activo(torneo)
         equipo = await self.equipo_repo.get_or_404(data.equipo_id)
+        # TASK-016 (FUN-07): un equipo dado de baja no se inscribe.
+        if equipo.estado != "Activo":
+            raise DomainRuleError(f"El equipo '{equipo.nombre}' está dado de baja: reactivalo antes de inscribirlo.")
+        await self._verificar_cupo(torneo)
 
         if equipo.disciplina_id != torneo.disciplina_id:
             disciplina_equipo = await self.disciplina_repo.get(equipo.disciplina_id)
@@ -255,6 +261,7 @@ class InscripcionTorneoService:
         EQUIPOS. También crea JUGADOR_EQUIPO (Dorsal=NULL) para que
         fn_validar_exclusividad_torneo siga aplicando sin reescribirse."""
         torneo = await self.torneo_repo.get_or_404(data.torneo_id)
+        self._exigir_torneo_activo(torneo)
         await self._verificar_cupo(torneo)
         cedula = data.jugador_cedula.strip()
         nombre = data.jugador_nombre.strip()
@@ -308,6 +315,67 @@ class InscripcionTorneoService:
         await self.session.refresh(inscripcion)
         return inscripcion
 
+    @staticmethod
+    def _exigir_torneo_activo(torneo: Torneo) -> None:
+        """TASK-016 (FUN-07): no se inscribe en un torneo finalizado o dado de
+        baja."""
+        if torneo.estado != "Activo":
+            estado = "finalizado" if torneo.estado == "Finalizado" else "dado de baja"
+            raise DomainRuleError(f"El torneo está {estado}: no admite inscripciones nuevas.")
+
     async def update(self, id_: int, data: InscripcionTorneoUpdate) -> InscripcionTorneo:
-        return await self.repo.update(id_, **data.model_dump(exclude_unset=True))
+        """TASK-016 (FUN-07): transición de estado con reglas explícitas.
+
+        - A 'Cancelado': se rechaza si el equipo tiene un partido En curso en
+          este torneo; si no, cierra en la misma transacción las membresías
+          activas de la inscripción (Inactivo, Fecha_Fin hoy), así esos
+          jugadores pueden pasar a otro equipo del torneo. Los partidos
+          Programado no bloquean: quedan para resolver (walkover o
+          reprogramación) desde el fixture.
+        - De 'Cancelado' a 'Inscrito'/'Confirmado': vuelve a ocupar cupo, así
+          que se comprueba el cupo con su bloqueo, como un alta.
+        - Entre 'Inscrito' y 'Confirmado': sin reglas extra."""
+        inscripcion = await self.repo.get_or_404(id_)
+        nuevo = data.estado
+        if nuevo == inscripcion.estado:
+            return inscripcion
+
+        if nuevo == "Cancelado":
+            if inscripcion.equipo_id is not None:
+                en_curso = await self.session.execute(
+                    select(Partido.id)
+                    .where(
+                        Partido.torneo_id == inscripcion.torneo_id,
+                        Partido.estado == "En curso",
+                        or_(
+                            Partido.equipos_id_local == inscripcion.equipo_id,
+                            Partido.equipos_id_visitante == inscripcion.equipo_id,
+                        ),
+                    )
+                    .limit(1)
+                )
+                if en_curso.first() is not None:
+                    raise DomainRuleError(
+                        "El equipo tiene un partido en curso en este torneo: terminalo antes de cancelar la inscripción."
+                    )
+            hoy = date.today()
+            activas = await self.session.execute(
+                select(JugadorEquipo).where(
+                    JugadorEquipo.inscripcion_torneo_id == inscripcion.id, JugadorEquipo.estado == "Activo"
+                )
+            )
+            for membresia in activas.scalars().all():
+                membresia.estado = "Inactivo"
+                # Una membresía que todavía no empezó cierra el mismo día que
+                # empieza (Fecha_Fin no puede ser anterior a Fecha_Inicio).
+                membresia.fecha_fin = max(hoy, membresia.fecha_inicio)
+        elif inscripcion.estado == "Cancelado":
+            torneo = await self.torneo_repo.get_or_404(inscripcion.torneo_id)
+            self._exigir_torneo_activo(torneo)
+            await self._verificar_cupo(torneo)
+
+        inscripcion.estado = nuevo
+        await self.session.commit()
+        await self.session.refresh(inscripcion)
+        return inscripcion
 
