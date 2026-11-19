@@ -67,6 +67,21 @@ select {
   color: inherit;
 }
 
+/* UX-17/UX-18 (TASK-042): un <select> mide lo que su opción más larga
+   ("Edición 2 — Activo (01/03/2026 a 30/06/2026)") y a 360px se salía de
+   la página. */
+select {
+  max-width: 100%;
+}
+
+/* UX-24: los enlaces sin clase propia usaban el azul y el morado de
+   "visitado" del navegador, fuera de la paleta. Va antes que las reglas por
+   contexto (.nav-bar__links a, .admin-nav a…), que siguen ganando. */
+a:not([class]),
+a:not([class]):visited {
+  color: var(--accent);
+}
+
 .app-shell {
   display: flex;
   flex-direction: column;
@@ -283,7 +298,10 @@ main {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  /* minmax(0, …) y no 1fr a secas (UX-18): 1fr no baja del ancho mínimo
+     de su contenido, así que la tabla de posiciones ensanchaba la columna
+     y la página en vez de hacer scroll dentro de .table-scroll. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -344,7 +362,7 @@ main {
 
 @media (min-width: 800px) {
   .dashboard-grid {
-    grid-template-columns: 1.3fr 1fr 1fr;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 
@@ -442,6 +460,7 @@ td:first-child {
 
 .torneo-picker {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 1rem;
@@ -1305,28 +1324,31 @@ td:first-child {
   font-size: 1.05rem;
 }
 
+/* UX-16 (TASK-042): hasta 7 botones en una fila que no envolvía; se salía
+   de la tarjeta y de la página incluso a 1280px. Ahora envuelve: las dos
+   acciones con botón ocupan el primer renglón y los enlaces van debajo.
+   El acento es para "Ver Torneo", la acción frecuente; antes lo tenía
+   "Archivar" por ser el último botón (UX-11). */
 .tarjeta-torneo__acciones {
   display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espacio-2) var(--espacio-3);
+  margin-top: var(--espacio-2);
 }
 
-.tarjeta-torneo__acciones button {
-  flex: 1;
-  padding: 0.5rem 0.6rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 0.85rem;
+.tarjeta-torneo__acciones .boton {
+  padding: var(--espacio-2) 0.6rem;
+  font-size: var(--texto-sm);
 }
 
-.tarjeta-torneo__acciones button:last-child {
-  background: var(--accent);
-  color: #05201d;
-  font-weight: 600;
-  border: none;
+.tarjeta-torneo__acciones .boton--primario,
+.tarjeta-torneo__acciones .boton--secundario {
+  flex: 1 1 auto;
+}
+
+.tarjeta-torneo__acciones .boton--enlace {
+  padding: var(--espacio-1) 0;
 }
 
 .torneo-dashboard__header {
@@ -1338,6 +1360,7 @@ td:first-child {
 
 .torneo-dashboard__edicion-selector {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 1rem;

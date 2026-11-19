@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
 import { ResourceForm, type ResourceFieldValue, type ResourceFormField } from "../../components/admin/ResourceForm";
+import { Button } from "../../components/ui/Button";
 import { useCatalogo } from "../../hooks/useCatalogo";
 import { FiltroDisciplinasBar } from "../../components/FiltroDisciplinasBar";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
@@ -826,63 +827,57 @@ export function TorneosAdminPage() {
                 </p>
               )}
               <div className="tarjeta-torneo__acciones">
-                <button type="button" onClick={() => setModo({ tipo: "nueva-edicion", grupo })}>
-                  + Nueva edición
-                </button>
-                <button
-                  type="button"
+                <Button
+                  variante="primario"
                   disabled={!edicion}
                   onClick={() => edicion && navigate(`/torneo-admin/torneos/${edicion.id}`)}
                 >
                   Ver Torneo →
-                </button>
-                <button type="button" className="link-button" onClick={() => setModo({ tipo: "editar-grupo", grupo })}>
+                </Button>
+                <Button onClick={() => setModo({ tipo: "nueva-edicion", grupo })}>+ Nueva edición</Button>
+                <Button variante="enlace" onClick={() => setModo({ tipo: "editar-grupo", grupo })}>
                   Editar
-                </button>
+                </Button>
                 {/* C7/D-D3: editable hasta que el primer partido de
                     eliminación de esta edición arranca — después, el
                     cambio no afecta a los que ya tomaron su regla
                     (Metodo_Desempate_Aplicable, D6/§8). */}
                 {edicion && (
-                  <button
-                    type="button"
-                    className="link-button"
+                  <Button
+                    variante="enlace"
                     onClick={() => setModo({ tipo: "editar-desempate", torneoId: edicion.id })}
                   >
                     Reglas de desempate
-                  </button>
+                  </Button>
                 )}
                 {/* T5.2c: sin esto la vista pública de torneo (T5.2) no
                     tiene ninguna puerta de entrada — el botón Compartir
                     vive DENTRO de ella. El label avisa cuando el link que
                     se va a copiar todavía no sirve para nadie más (D16). */}
-                <button
-                  type="button"
-                  className="link-button"
+                <Button
+                  variante="enlace"
                   disabled={!edicion}
                   onClick={() => edicion && navigate(`/torneos/${edicion.id}`)}
                 >
                   {edicion?.publicado ? "Ver página pública" : "Vista previa (no publicado)"}
-                </button>
+                </Button>
                 {edicion && (
-                  <button
-                    type="button"
-                    className="link-button"
+                  <Button
+                    variante="enlace"
                     disabled={publicarEdicion.isPending}
                     onClick={() =>
                       publicarEdicion.mutate({ torneoId: edicion.id, publicado: !edicion.publicado })
                     }
                   >
                     {edicion.publicado ? "Despublicar" : "Publicar"}
-                  </button>
+                  </Button>
                 )}
                 {/* 3B-7: baja lógica, sin cascada — ver el comentario de
                     cambiarEstadoGrupo. Nunca un botón "Eliminar" de
                     verdad: la recomendación del plan fue explícita en no
                     ofrecer DELETE acá. */}
-                <button
-                  type="button"
-                  className="link-button"
+                <Button
+                  variante="enlace"
                   disabled={cambiarEstadoGrupo.isPending}
                   onClick={() =>
                     cambiarEstadoGrupo.mutate({
@@ -892,7 +887,7 @@ export function TorneosAdminPage() {
                   }
                 >
                   {grupo.estado === "Archivado" ? "Reactivar" : "Archivar"}
-                </button>
+                </Button>
               </div>
               {publicarEdicion.isError && (
                 <p className="error-text">{apiErrorMessage(publicarEdicion.error)}</p>
