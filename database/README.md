@@ -64,6 +64,7 @@ Cada una aplica un plan concreto sobre una base **ya provisionada**
 | `40_migracion_restricciones_coherencia.sql` | TASK-026 (`docs/audit/`): `Estado NOT NULL` en 13 tablas, `CHECK` de fechas, rangos y nombres no vacíos; el cierre de torneo no deja una baja anterior al alta |
 | `41_migracion_bloqueo_torneo_cerrado.sql` | TASK-027 (`docs/audit/`): el bloqueo de torneo cerrado cubre también crear/borrar partidos, convocatorias e inscripciones |
 | `42_migracion_schema_migrations.sql` | TASK-031 (`docs/audit/`): tabla `SCHEMA_MIGRATIONS` (registro de migraciones aplicadas); ver "Registro de migraciones" |
+| `43_migracion_invalidar_sesiones.sql` | TASK-033 (`docs/audit/`): `USUARIOS.Tokens_Validos_Desde` (cambiar la contraseña cierra las demás sesiones) y motivo de acceso `cambio_password` |
 
 **Nota (2026-09-14):** este índice se quedó desactualizado entre `21` y `30` — ninguna de esas
 migraciones aparecía listada aquí, aunque sí estaban aplicadas (o, en el caso de `21`,

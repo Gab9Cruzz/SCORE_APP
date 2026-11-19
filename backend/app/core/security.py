@@ -16,6 +16,7 @@ import bcrypt
 from jose import JWTError, jwt
 
 from app.core.config import get_settings
+from app.core.reloj import zona_negocio
 
 settings = get_settings()
 
@@ -41,10 +42,57 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(subject: str, rol: str) -> str:
-    expire = datetime.now(UTC) + timedelta(minutes=settings.jwt_expire_minutes)
-    payload: dict[str, Any] = {"sub": subject, "rol": rol, "exp": expire}
+def create_access_token(subject: str, rol: str, emitido_ms_minimo: int | None = None) -> str:
+    """`emitido_ms_minimo` (TASK-033): el token nuevo del cambio de
+    contraseña tiene que quedar DESPUÉS de la marca que invalida los
+    anteriores, aunque el reloj no haya avanzado (ver token_revocado)."""
+    ahora = datetime.now(UTC)
+    expire = ahora + timedelta(minutes=settings.jwt_expire_minutes)
+    emitido_ms = int(ahora.timestamp() * 1000)
+    if emitido_ms_minimo is not None:
+        emitido_ms = max(emitido_ms, emitido_ms_minimo)
+    # `iat` e `iat_ms` (TASK-033): permiten rechazar los tokens emitidos antes
+    # de que la cuenta invalidara sus sesiones (ver token_revocado).
+    # python-jose exige `iat` entero, en segundos; con eso solo, un login y un
+    # cambio de contraseña en el mismo segundo serían indistinguibles, por eso
+    # va también en milisegundos.
+    payload: dict[str, Any] = {
+        "sub": subject,
+        "rol": rol,
+        "exp": expire,
+        "iat": int(ahora.timestamp()),
+        "iat_ms": emitido_ms,
+    }
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def marca_en_ms(tokens_validos_desde: datetime) -> int:
+    """USUARIOS.Tokens_Validos_Desde (TIMESTAMP sin zona, hora del negocio)
+    en milisegundos desde epoch, para comparar con `iat_ms`."""
+    return int(tokens_validos_desde.replace(tzinfo=zona_negocio()).timestamp() * 1000)
+
+
+def token_revocado(payload: dict[str, Any], tokens_validos_desde: datetime | None) -> bool:
+    """True si el token se emitió en o antes del momento en que la cuenta
+    invalidó sus sesiones (TASK-033: cambio de contraseña o desactivación).
+
+    "En o antes" (`<=`), no "antes": el reloj del sistema avanza a saltos
+    (unos 15 ms en Windows), así que un login y una baja hechos uno detrás
+    del otro pueden dar el MISMO milisegundo. Con `<` ese token viejo
+    sobrevivía. El token nuevo del cambio de contraseña se emite con
+    `emitido_ms_minimo = marca + 1` para no caer en la misma trampa.
+
+    Un token sin `iat` es anterior a TASK-033: si la cuenta ya invalidó
+    sesiones alguna vez, no sirve."""
+    if tokens_validos_desde is None:
+        return False
+    emitido_ms = payload.get("iat_ms")
+    if not isinstance(emitido_ms, int):
+        iat = payload.get("iat")
+        if not isinstance(iat, int):
+            return True
+        emitido_ms = iat * 1000
+    return emitido_ms <= marca_en_ms(tokens_validos_desde)
 
 
 def decode_access_token(token: str) -> dict[str, Any] | None:

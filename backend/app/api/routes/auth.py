@@ -7,7 +7,7 @@ from app.core.http import ip_del_cliente
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.auth import Token
-from app.schemas.usuario import UsuarioOut
+from app.schemas.usuario import CambioPassword, UsuarioOut
 from app.services.usuario import UsuarioService
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -26,6 +26,24 @@ async def login(
     return await UsuarioService(session).login(
         form_data.username,
         form_data.password,
+        ip=ip_del_cliente(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+
+
+@router.post("/cambiar-password", response_model=Token)
+async def cambiar_password(
+    data: CambioPassword,
+    request: Request,
+    usuario: Usuario = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> Token:
+    """Cambio de contraseña propio (TASK-033). Cualquier cuenta con sesión,
+    sin importar el rol. Cierra las demás sesiones y devuelve un token
+    nuevo para la actual."""
+    return await UsuarioService(session).cambiar_password(
+        usuario,
+        data,
         ip=ip_del_cliente(request),
         user_agent=request.headers.get("user-agent"),
     )

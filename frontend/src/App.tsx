@@ -7,6 +7,7 @@ import { GestionarPartidoPage } from "./pages/control-mesa/GestionarPartido";
 import { DashboardPage } from "./pages/Dashboard";
 import { LicenseRevokedScreen } from "./pages/LicenseRevokedScreen";
 import { LoginPage } from "./pages/Login";
+import { MiCuentaPage } from "./pages/MiCuenta";
 import { PartidoEnVivoPage } from "./pages/PartidoEnVivo";
 import { DetalleTorneoPublicoPage } from "./pages/publico/DetalleTorneoPublico";
 import { FeedPartidosPage } from "./pages/publico/FeedPartidos";
@@ -56,6 +57,15 @@ export function App() {
           <Route path="/" element={session ? <Navigate to="/dashboard" replace /> : <FeedPartidosPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/login" element={<LoginPage />} />
+          {/* TASK-033: cualquier cuenta con sesión, sin importar el rol. */}
+          <Route
+            path="/mi-cuenta"
+            element={
+              <RequireRole roles={["AdminGeneral", "TorneoAdmin", "Arbitro", "Publico"]}>
+                <MiCuentaPage />
+              </RequireRole>
+            }
+          />
           <Route
             path="/control-de-mesa"
             element={

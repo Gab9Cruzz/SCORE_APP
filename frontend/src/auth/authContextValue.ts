@@ -33,6 +33,10 @@ export interface AuthContextValue {
    * limpian (un login exitoso implica que la licencia ya no está
    * revocada, o el backend lo hubiera rechazado). */
   licenseRevoked: boolean;
+  /** TASK-033: tras cambiar la contraseña el backend invalida los tokens
+   * anteriores y devuelve uno nuevo; esto lo pone en uso sin cerrar la
+   * sesión. */
+  reemplazarToken: (token: string) => void;
 }
 
 /** El contexto y sus tipos viven acá, separados de `AuthContext.tsx`, por

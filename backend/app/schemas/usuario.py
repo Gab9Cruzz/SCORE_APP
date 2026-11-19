@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.core.politica_password import validar_password_nueva
 from app.schemas._tipos import Nombre50, Nombre100
 
 RolUsuario = Literal["AdminGeneral", "TorneoAdmin", "Arbitro", "Publico"]
@@ -29,9 +30,7 @@ class UsuarioCreate(BaseModel):
     @field_validator("password")
     @classmethod
     def password_minima(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("password debe tener al menos 8 caracteres.")
-        return v
+        return validar_password_nueva(v)  # TASK-033
 
 
 class UsuarioUpdate(BaseModel):
@@ -48,9 +47,19 @@ class UsuarioUpdate(BaseModel):
         # alcanzable llamando la API cruda, ahora es un click de distancia
         # con el form de edición de Usuarios. `None` (no tocar la
         # contraseña) sigue siendo válido, solo se valida si mandan algo.
-        if v is not None and len(v) < 8:
-            raise ValueError("password debe tener al menos 8 caracteres.")
-        return v
+        return validar_password_nueva(v) if v is not None else None  # TASK-033
+
+
+class CambioPassword(BaseModel):
+    """Body de POST /auth/cambiar-password (TASK-033)."""
+
+    password_actual: str
+    password_nueva: str
+
+    @field_validator("password_nueva")
+    @classmethod
+    def password_valida(cls, v: str) -> str:
+        return validar_password_nueva(v)
 
 
 class UsuarioOut(BaseModel):

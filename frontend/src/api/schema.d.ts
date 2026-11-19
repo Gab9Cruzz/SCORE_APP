@@ -27,6 +27,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/cambiar-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar Password
+         * @description Cambio de contraseña propio (TASK-033). Cualquier cuenta con sesión,
+         *     sin importar el rol. Cierra las demás sesiones y devuelve un token
+         *     nuevo para la actual.
+         */
+        post: operations["cambiar_password_api_v1_auth_cambiar_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/me": {
         parameters: {
             query?: never;
@@ -1762,6 +1784,16 @@ export interface components {
              * Format: password
              */
             client_secret?: string | null;
+        };
+        /**
+         * CambioPassword
+         * @description Body de POST /auth/cambiar-password (TASK-033).
+         */
+        CambioPassword: {
+            /** Password Actual */
+            password_actual: string;
+            /** Password Nueva */
+            password_nueva: string;
         };
         /**
          * CerrarTorneoRequest
@@ -3956,6 +3988,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/x-www-form-urlencoded": components["schemas"]["Body_login_api_v1_auth_login_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Token"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cambiar_password_api_v1_auth_cambiar_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CambioPassword"];
             };
         };
         responses: {

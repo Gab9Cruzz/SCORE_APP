@@ -678,7 +678,11 @@ CREATE TABLE USUARIOS (
     -- sin licencia, cero acceso administrativo aunque Estado='Activo'.
     -- Se chequea fresco en cada request (get_current_user/login), nunca
     -- vive en el JWT, para que la revocacion sea inmediata.
-    Licencia_Activa BOOLEAN NOT NULL DEFAULT TRUE
+    Licencia_Activa BOOLEAN NOT NULL DEFAULT TRUE,
+    -- TASK-033: un token emitido antes de esta marca (claim iat) ya no
+    -- sirve. Se actualiza al cambiar la contrasena o desactivar la cuenta.
+    -- NULL = nunca se invalido ninguna sesion.
+    Tokens_Validos_Desde TIMESTAMP
 );
 
 -- Asignacion N:M Usuario (TorneoAdmin) <-> Torneo
@@ -723,8 +727,8 @@ CREATE TABLE ACCESOS (
     Usuario_ID INT,
     Username VARCHAR(50) NOT NULL,
     Exitoso BOOLEAN NOT NULL,
-    -- NULL si Exitoso. Si no: 'credenciales', 'inactivo', 'bloqueado' o
-    -- 'licencia_revocada' (chk_accesos_motivo)
+    -- NULL si Exitoso. Si no: 'credenciales', 'inactivo', 'bloqueado',
+    -- 'licencia_revocada' o 'cambio_password' (chk_accesos_motivo)
     Motivo VARCHAR(30),
     -- 45 = largo maximo de una IPv6 en texto
     IP VARCHAR(45),

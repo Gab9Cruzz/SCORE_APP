@@ -8,9 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auditoria import set_actor
 from app.core.config import get_settings
 from app.core.http import ip_del_cliente
-from app.core.security import decode_access_token
+from app.core.security import decode_access_token, token_revocado
 from app.db.session import get_db
-from app.exceptions.errors import AuthError, ForbiddenError, LicenseRevokedError, NotFoundError
+from app.exceptions.errors import (
+    AuthError,
+    ForbiddenError,
+    LicenseRevokedError,
+    NotFoundError,
+)
 from app.models.usuario import Usuario
 from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
 from app.repositories.torneo import TorneoRepository
@@ -40,6 +45,10 @@ async def _resolver_usuario_autenticado(token: str | None, session: AsyncSession
         return None
     usuario = await UsuarioRepository(session).get_by_username(payload["sub"])
     if usuario is None or usuario.estado != "Activo":
+        return None
+    # TASK-033: cambiar la contraseña (o desactivar la cuenta) cierra las
+    # sesiones abiertas antes de ese momento.
+    if token_revocado(payload, usuario.tokens_validos_desde):
         return None
     return usuario
 

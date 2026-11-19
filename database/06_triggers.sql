@@ -1335,4 +1335,5 @@ INSERT INTO SCHEMA_MIGRATIONS (Nombre) VALUES
     ('39_migracion_tabla_posiciones.sql'),
     ('40_migracion_restricciones_coherencia.sql'),
     ('41_migracion_bloqueo_torneo_cerrado.sql'),
-    ('42_migracion_schema_migrations.sql');
+    ('42_migracion_schema_migrations.sql'),
+    ('43_migracion_invalidar_sesiones.sql');

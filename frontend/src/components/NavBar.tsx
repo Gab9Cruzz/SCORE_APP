@@ -83,9 +83,10 @@ export function NavBar() {
         <div className="nav-bar__session">
           {session ? (
             <>
-              <span className="nav-bar__user">
+              {/* TASK-033: el nombre lleva a "Mi cuenta" (cambio de contraseña). */}
+              <NavLink to="/mi-cuenta" className="nav-bar__user" title="Mi cuenta">
                 {session.username} <span className="badge">{session.rol}</span>
-              </span>
+              </NavLink>
               <button type="button" onClick={logout}>
                 Salir
               </button>

@@ -54,6 +54,7 @@ SOLO_ADMIN_GENERAL = ("401", "403", "403", "403", "403", "403", OK)
 CUALQUIER_TORNEO_ADMIN = ("401", "403", "403", "403", OK, OK, OK)
 ADMIN_DEL_TORNEO = ("401", "403", "403", "403", "403", OK, OK)
 MESA_DEL_PARTIDO = ("401", "403", "403", OK, "403", OK, OK)
+CON_SESION = ("401", OK, OK, OK, OK, OK, OK)
 
 # Rutas que no llevan autorización a propósito.
 EXENTAS = {("POST", "/api/v1/auth/login"): "Es el login: pública por definición."}
@@ -69,6 +70,8 @@ class Caso:
 
 
 MATRIZ: list[Caso] = [
+    # Cuenta propia (TASK-033): cualquier sesión. La actual incorrecta da 400.
+    Caso("POST", "/api/v1/auth/cambiar-password", CON_SESION, {"password_actual": "no-es-la-actual", "password_nueva": "otra-clave-larga-1"}),
     # Catálogos de sistema (TASK-013)
     Caso("PATCH", "/api/v1/disciplinas/1", SOLO_ADMIN_GENERAL, {"estado": "Activo"}),
     Caso("PATCH", "/api/v1/modalidades/1", SOLO_ADMIN_GENERAL, {"estado": "Activo"}),

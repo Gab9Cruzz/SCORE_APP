@@ -11,6 +11,7 @@ que el árbitro tiene asignado.
 
 | Método | Ruta | Anónimo | Publico | Árbitro (otro partido) | Árbitro (su partido) | TorneoAdmin (sin el torneo) | TorneoAdmin (con el torneo) | AdminGeneral | Nota |
 |---|---|---|---|---|---|---|---|---|---|
+| POST | `/api/v1/auth/cambiar-password` | 🔒 401 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |  |
 | PATCH | `/api/v1/disciplinas/{id}` | 🔒 401 | ⛔ 403 | ⛔ 403 | ⛔ 403 | ⛔ 403 | ⛔ 403 | ✅ |  |
 | PATCH | `/api/v1/modalidades/{id}` | 🔒 401 | ⛔ 403 | ⛔ 403 | ⛔ 403 | ⛔ 403 | ⛔ 403 | ✅ |  |
 | POST | `/api/v1/eventos` | 🔒 401 | ⛔ 403 | ⛔ 403 | ⛔ 403 | ⛔ 403 | ⛔ 403 | ✅ |  |

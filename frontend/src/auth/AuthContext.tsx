@@ -124,6 +124,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLicenseRevoked(false);
   }, [clearSession]);
 
+  const reemplazarToken = useCallback((token: string) => {
+    try {
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    } catch {
+      /* la sesión en memoria igual queda con el token nuevo */
+    }
+    setSession((actual) => (actual ? { ...actual, token } : actual));
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
@@ -133,8 +142,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginError,
       loggingIn,
       licenseRevoked,
+      reemplazarToken,
     }),
-    [session, login, logout, loginError, loggingIn, licenseRevoked],
+    [session, login, logout, loginError, loggingIn, licenseRevoked, reemplazarToken],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -97,7 +97,9 @@ async def test_marcar_hasta_da_de_alta_una_base_existente(base_nueva):
 
     marcadas, pendientes = await asyncio.to_thread(_correr)
     assert "41_migracion_bloqueo_torneo_cerrado.sql" in marcadas
-    assert pendientes == ["42_migracion_schema_migrations.sql"]
+    # La 42 primero, y después las que se hayan agregado desde TASK-031.
+    assert pendientes[0] == "42_migracion_schema_migrations.sql"
+    assert all(int(p[:2]) > 41 for p in pendientes)
 
 
 async def test_la_api_avisa_si_falta_alguna(db_session: AsyncSession, carpeta, caplog: pytest.LogCaptureFixture):

@@ -10,7 +10,7 @@ interface AccesoRow {
   usuario_id: number | null;
   username: string;
   exitoso: boolean;
-  motivo: "credenciales" | "inactivo" | "bloqueado" | null;
+  motivo: "credenciales" | "inactivo" | "bloqueado" | "licencia_revocada" | "cambio_password" | null;
   ip: string | null;
   user_agent: string | null;
   fecha: string;
@@ -29,6 +29,8 @@ const MOTIVO: Record<string, string> = {
   credenciales: "Usuario o contraseña incorrectos",
   inactivo: "Cuenta inactiva",
   bloqueado: "Bloqueado por intentos fallidos (rate limit)",
+  licencia_revocada: "Licencia revocada",
+  cambio_password: "Cambio de contraseña con la actual incorrecta",
 };
 
 /** Navegador y sistema, sacados del User-Agent. No es identificación: es

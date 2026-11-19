@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, String
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -32,3 +34,7 @@ class Usuario(TimestampMixin, Base):
     # vive en el JWT — así la revocación es inmediata, sin esperar a que
     # expire el token.
     licencia_activa: Mapped[bool] = mapped_column(Boolean, default=True)
+    # TASK-033: los tokens emitidos antes de esta marca ya no sirven (ver
+    # core/security.token_revocado). La escribe UsuarioService al cambiar la
+    # contraseña o desactivar la cuenta.
+    tokens_validos_desde: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)

@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import lru_cache
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.reloj import ahora_negocio
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import create_access_token, hash_password, marca_en_ms, verify_password
 from app.exceptions.errors import (
     AuthError,
+    DomainRuleError,
     ForbiddenError,
     LicenseRevokedError,
     NotFoundError,
@@ -20,7 +21,7 @@ from app.repositories.acceso import AccesoRepository
 from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
 from app.repositories.usuario import UsuarioRepository
 from app.schemas.auth import Token
-from app.schemas.usuario import UsuarioCreate, UsuarioUpdate
+from app.schemas.usuario import CambioPassword, UsuarioCreate, UsuarioUpdate
 
 
 @lru_cache
@@ -30,6 +31,14 @@ def _hash_de_relleno() -> str:
     caro). Sin esto la diferencia de tiempos revela qué usuarios existen
     (TASK-004, SEC-13). Se calcula una vez, en el primer login fallido."""
     return hash_password("hash-de-relleno-para-igualar-tiempos")
+
+
+def _marca_invalidacion() -> datetime:
+    """Valor para USUARIOS.Tokens_Validos_Desde (TASK-033). Truncado al
+    milisegundo, la resolución de `iat_ms` en el JWT: el token nuevo emitido
+    justo después tiene que seguir valiendo (ver security.token_revocado)."""
+    ahora = ahora_negocio()
+    return ahora.replace(microsecond=ahora.microsecond // 1000 * 1000)
 
 
 class UsuarioService:
@@ -76,6 +85,11 @@ class UsuarioService:
         payload = data.model_dump(exclude_unset=True, exclude={"password"})
         if data.password is not None:
             payload["password_hash"] = hash_password(data.password)
+        # TASK-033: cambiarle la contraseña a alguien o desactivarlo cierra
+        # sus sesiones abiertas (si después se lo reactiva, los tokens viejos
+        # no reviven).
+        if data.password is not None or data.estado == "Inactivo":
+            payload["tokens_validos_desde"] = _marca_invalidacion()
 
         objetivo = await self.repo.get_or_404(id_)
         rol_anterior = objetivo.rol
@@ -99,7 +113,54 @@ class UsuarioService:
     async def soft_delete(self, id_: int, usuario_actual: Usuario) -> Usuario:
         if id_ == usuario_actual.id:
             raise ForbiddenError("No podés desactivar tu propia cuenta.")
+        # TASK-033: se marca en el mismo objeto que soft_delete recupera del
+        # identity map, así baja y marca van en un solo commit.
+        objetivo = await self.repo.get_or_404(id_)
+        objetivo.tokens_validos_desde = _marca_invalidacion()
         return await self.repo.soft_delete(id_, estado_inactivo="Inactivo")
+
+    async def cambiar_password(
+        self,
+        usuario: Usuario,
+        data: CambioPassword,
+        ip: str | None = None,
+        user_agent: str | None = None,
+    ) -> Token:
+        """Cambio de contraseña propio (TASK-033, FUN-13).
+
+        Exige la actual: un token robado no alcanza para quedarse con la
+        cuenta. Un intento con la actual incorrecta queda en ACCESOS
+        (motivo 'cambio_password') y se commitea ANTES de lanzar, por lo
+        mismo que en login(): get_db hace rollback cuando sube la excepción.
+
+        Al cambiarla, Tokens_Validos_Desde cierra las demás sesiones y se
+        devuelve un token nuevo para que esta siga abierta."""
+        if not verify_password(data.password_actual, usuario.password_hash):
+            await self._registrar_acceso(
+                usuario_id=usuario.id,
+                username=usuario.username,
+                exitoso=False,
+                motivo="cambio_password",
+                ip=ip,
+                user_agent=user_agent,
+            )
+            await self.session.commit()
+            raise DomainRuleError("La contraseña actual no es correcta.")
+        if data.password_nueva == data.password_actual:
+            raise DomainRuleError("La contraseña nueva tiene que ser distinta de la actual.")
+
+        marca = _marca_invalidacion()
+        await self.repo.save_changes(
+            usuario,
+            password_hash=hash_password(data.password_nueva),
+            tokens_validos_desde=marca,
+        )
+        # Después de la marca aunque el reloj no haya avanzado (ver
+        # security.token_revocado).
+        token = create_access_token(
+            subject=usuario.username, rol=usuario.rol, emitido_ms_minimo=marca_en_ms(marca) + 1
+        )
+        return Token(access_token=token, rol=usuario.rol)
 
     async def bootstrap_admin_si_no_existe(
         self, username: str, password: str, nombre: str

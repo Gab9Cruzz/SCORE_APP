@@ -341,11 +341,13 @@ ALTER TABLE EVENTOS
 -- la contraseña es correcta, pero Licencia_Activa=FALSE — el login se
 -- rechaza igual que 'inactivo', con un motivo distinto para poder
 -- distinguir "cuenta desactivada" de "licencia revocada" en la bitácora.
+-- 'cambio_password' (TASK-033): POST /auth/cambiar-password con la
+-- contraseña actual incorrecta. No cuenta para el rate limit del login.
 ALTER TABLE ACCESOS
     ADD CONSTRAINT fk_accesos_usuario FOREIGN KEY (Usuario_ID) REFERENCES USUARIOS(ID),
     ADD CONSTRAINT chk_accesos_motivo CHECK (
         (Exitoso = TRUE AND Motivo IS NULL)
-     OR (Exitoso = FALSE AND Motivo IN ('credenciales', 'inactivo', 'bloqueado', 'licencia_revocada'))
+     OR (Exitoso = FALSE AND Motivo IN ('credenciales', 'inactivo', 'bloqueado', 'licencia_revocada', 'cambio_password'))
     );
 
 

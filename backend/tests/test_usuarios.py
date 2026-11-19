@@ -112,7 +112,7 @@ async def test_password_corta_es_rechazada(client: AsyncClient, admin_general_he
 
 async def test_patch_password_corta_es_rechazada(client: AsyncClient, admin_general_headers: dict[str, str]):
     # roles-3-modulos-plan.md, Fase 4, D3: UsuarioUpdate.password no tenía
-    # el mismo mínimo de 8 caracteres que UsuarioCreate — agujero
+    # el mismo mínimo que UsuarioCreate (10 desde TASK-033) — agujero
     # preexistente, alcanzable ahora desde el form de edición nuevo.
     creado = await client.post(
         "/api/v1/usuarios",
