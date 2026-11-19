@@ -1,0 +1,16 @@
+{
+  "name": "score-app-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Recorridos de extremo a extremo (TASK-046): navegador real contra la API y el frontend, sobre una base vacía.",
+  "scripts": {
+    "test": "playwright test",
+    "test:repetir": "playwright test --repeat-each=3 --workers=1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
