@@ -52,6 +52,8 @@ services:
       # TASK-005: con ENTORNO=produccion la API no arranca con secretos de
       # ejemplo ni con CORS_ORIGINS="*".
       ENTORNO: ${ENTORNO:-desarrollo}
+      # TASK-028: zona del negocio (la imagen de Postgres corre en UTC).
+      ZONA_HORARIA: ${ZONA_HORARIA:-America/Guayaquil}
       API_V1_PREFIX: /api/v1
     extra_hosts:
       - "host.docker.internal:host-gateway"
