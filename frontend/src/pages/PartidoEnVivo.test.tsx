@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { server } from "../test/msw-server";
 import { createTestQueryClient } from "../test/test-utils";
 import { PartidoEnVivoPage } from "./PartidoEnVivo";
+import { esperarSinInfracciones } from "../test/a11y";
 
 const PARTIDO_1 = "http://127.0.0.1:8000/api/v1/partidos/1";
 const RESULTADOS_1 = "http://127.0.0.1:8000/api/v1/estadisticas/torneos/1/resultados";
@@ -74,6 +75,13 @@ describe("PartidoEnVivoPage — generalizada a Detalle del Partido (control-mesa
     mockBase();
     renderEn("/partido/1/en-vivo", "/partido/:partidoId/en-vivo");
     expect(await screen.findByText("2 - 1")).toBeInTheDocument();
+  });
+
+  it("accesibilidad: Partido en vivo sin infracciones graves (TASK-044)", async () => {
+    mockBase();
+    renderEn("/partido/1/en-vivo", "/partido/:partidoId/en-vivo");
+    expect(await screen.findByText("2 - 1")).toBeInTheDocument();
+    await esperarSinInfracciones();
   });
 
   it("la ruta nueva /partidos/:id monta la misma página", async () => {

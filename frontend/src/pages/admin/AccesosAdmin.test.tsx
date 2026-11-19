@@ -6,6 +6,7 @@ import type { components } from "../../api/schema";
 import { server } from "../../test/msw-server";
 import { createWrapper } from "../../test/test-utils";
 import { AccesosAdminPage } from "./AccesosAdmin";
+import { esperarSinInfracciones } from "../../test/a11y";
 
 const ACCESOS = "http://127.0.0.1:8000/api/v1/accesos";
 
@@ -83,6 +84,15 @@ describe("AccesosAdminPage", () => {
     // Entrar acá es casi siempre por sospecha: el default es lo sospechoso.
     expect(await screen.findAllByText("Usuario o contraseña incorrectos")).toHaveLength(2);
     expect(screen.queryByText("Entró")).not.toBeInTheDocument();
+  });
+
+  it("accesibilidad: Accesos sin infracciones graves (TASK-044)", async () => {
+    montar([FALLIDO_CUENTA_REAL, FALLIDO_USUARIO_INEXISTENTE, EXITOSO]);
+
+    // Entrar acá es casi siempre por sospecha: el default es lo sospechoso.
+    expect(await screen.findAllByText("Usuario o contraseña incorrectos")).toHaveLength(2);
+    expect(screen.queryByText("Entró")).not.toBeInTheDocument();
+    await esperarSinInfracciones();
   });
 
   it("distingue un intento contra una cuenta real de uno contra un usuario inexistente", async () => {

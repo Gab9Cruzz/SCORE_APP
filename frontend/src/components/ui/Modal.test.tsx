@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { comprobarModalAccesible, esperarSinInfracciones } from "../../test/a11y";
 import { Modal } from "./Modal";
 
 // TASK-034 / TASK-035 (UX-03): el modal único.
@@ -186,5 +187,21 @@ describe("Modal", () => {
     render(<Padre />);
     await user.click(screen.getByRole("button", { name: "Sumar 0" }));
     expect(screen.getByRole("button", { name: "Sumar 1" })).toHaveFocus();
+  });
+
+  // TASK-044: el modal base y su confirmación "Hay datos sin guardar", que
+  // aparece dentro de todos los modales con datos cargados.
+  it("accesibilidad: modal base y confirmación de descarte (TASK-044)", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<ConDisparador />);
+    await comprobarModalAccesible(user, screen.getByRole("button", { name: "Abrir" }));
+    unmount();
+
+    render(<ConDisparador sinGuardar />);
+    await user.click(screen.getByRole("button", { name: "Abrir" }));
+    await user.keyboard("{Escape}");
+    expect(await screen.findByText(/Hay datos sin guardar/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Seguir editando" })).toHaveFocus();
+    await esperarSinInfracciones();
   });
 });

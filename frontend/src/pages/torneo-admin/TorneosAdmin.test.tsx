@@ -9,6 +9,7 @@ import { AuthProvider } from "../../auth/AuthContext";
 import { server } from "../../test/msw-server";
 import { createTestQueryClient, createWrapper } from "../../test/test-utils";
 import { TorneosAdminPage } from "./TorneosAdmin";
+import { esperarSinInfracciones } from "../../test/a11y";
 
 const mockNavigate = vi.fn();
 vi.mock("react-router-dom", async (importOriginal) => {
@@ -82,6 +83,55 @@ describe("TorneosAdminPage", () => {
     expect(screen.getByText(/Fútbol · 2 ediciones/)).toBeInTheDocument();
     // Abre la Activa (Edición 2), no la de numero_edicion más alto a ciegas.
     expect(screen.getByText(/Edición 2 — Activo/)).toBeInTheDocument();
+  });
+
+  it("accesibilidad: Torneos sin infracciones graves (TASK-044)", async () => {
+    mockCatalogos();
+    server.use(
+      http.get("http://127.0.0.1:8000/api/v1/torneo-grupos", () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            nombre: "Liga Relámpago",
+            ediciones: [
+              {
+                id: 20,
+                numero_edicion: 2,
+                disciplina_id: 1,
+                modalidad_id: 1,
+                estado: "Activo",
+                fecha_inicio: "2026-04-01",
+                fecha_fin: "2026-06-30",
+              },
+              {
+                id: 10,
+                numero_edicion: 1,
+                disciplina_id: 1,
+                modalidad_id: 1,
+                estado: "Finalizado",
+                fecha_inicio: "2026-03-01",
+                fecha_fin: "2026-05-15",
+              },
+            ],
+          },
+        ]),
+      ),
+    );
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <TorneosAdminPage />
+      </Wrapper>,
+    );
+
+    expect(await screen.findByText("Liga Relámpago")).toBeInTheDocument();
+    // El nombre de la disciplina aparece dos veces desde este plan: en el
+    // chip de la barra de navegación y en la tarjeta. Se busca el de la
+    // tarjeta, que es el que este test verifica.
+    expect(screen.getByText(/Fútbol · 2 ediciones/)).toBeInTheDocument();
+    // Abre la Activa (Edición 2), no la de numero_edicion más alto a ciegas.
+    expect(screen.getByText(/Edición 2 — Activo/)).toBeInTheDocument();
+    await esperarSinInfracciones();
   });
 
   it("Ver Torneo navega a la edición activa del grupo", async () => {

@@ -8,6 +8,7 @@ import { AuthProvider } from "../../auth/AuthContext";
 import { server } from "../../test/msw-server";
 import { createTestQueryClient } from "../../test/test-utils";
 import { UsuariosAdminPage } from "./UsuariosAdmin";
+import { comprobarModalAccesible, esperarSinInfracciones } from "../../test/a11y";
 
 const USUARIOS = "http://127.0.0.1:8000/api/v1/usuarios";
 // Mismo key privado que AuthContext.tsx (ver nota en MisPartidos.test.tsx).
@@ -45,6 +46,20 @@ describe("UsuariosAdminPage (roles-3-modulos-plan.md, Fase 4)", () => {
     renderPagina();
     expect(await screen.findByText("admin_test")).toBeInTheDocument();
     expect(screen.getByText("AdminGeneral")).toBeInTheDocument();
+  });
+
+  it("accesibilidad: Usuarios sin infracciones graves (TASK-044)", async () => {
+    server.use(
+      http.get(USUARIOS, () =>
+        HttpResponse.json([
+          { id: 1, username: "admin_test", nombre: "Admin", rol: "AdminGeneral", estado: "Activo", licencia_activa: true, fecha_registro: "2026-01-01T00:00:00" },
+        ]),
+      ),
+    );
+    renderPagina();
+    expect(await screen.findByText("admin_test")).toBeInTheDocument();
+    expect(screen.getByText("AdminGeneral")).toBeInTheDocument();
+    await esperarSinInfracciones();
   });
 
   it("crear: pide username, nombre, password y rol", async () => {
@@ -232,5 +247,20 @@ describe("UsuariosAdminPage — licencia y torneos (rbac-licencias-torneos-plan.
     await user.keyboard("{Escape}");
 
     expect(screen.queryByText("Copa Uno")).not.toBeInTheDocument();
+  });
+
+  it("accesibilidad: modal Gestionar torneos (TASK-044)", async () => {
+    server.use(
+      http.get(USUARIOS, () =>
+        HttpResponse.json([
+          { id: 5, username: "org_test", nombre: "Organizadora", rol: "TorneoAdmin", estado: "Activo", licencia_activa: true, fecha_registro: "2026-01-01T00:00:00" },
+        ]),
+      ),
+      http.get(`${USUARIOS}/5/torneos`, () => HttpResponse.json([])),
+      http.get("http://127.0.0.1:8000/api/v1/torneos", () => HttpResponse.json([{ id: 1, nombre: "Copa", numero_edicion: 1, estado: "Activo" }])),
+    );
+    renderPagina();
+    const user = userEvent.setup();
+    await comprobarModalAccesible(user, await screen.findByRole("button", { name: "Gestionar torneos" }));
   });
 });

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { server } from "../../test/msw-server";
 import { createWrapper } from "../../test/test-utils";
 import { EquiposAdminPage } from "./EquiposAdmin";
+import { esperarSinInfracciones } from "../../test/a11y";
 
 const mockNavigate = vi.fn();
 vi.mock("react-router-dom", async (importOriginal) => {
@@ -110,6 +111,19 @@ describe("EquiposAdminPage", () => {
     expect(screen.getByText("14 jug.")).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Dobles" })).toBeInTheDocument();
     expect(screen.getByText("2 jug.")).toBeInTheDocument();
+  });
+
+  it("accesibilidad: Equipos sin infracciones graves (TASK-044)", async () => {
+    montar([TIGRES, NADAL]);
+
+    expect(await screen.findByText("Los Tigres")).toBeInTheDocument();
+    // Con el icono del módulo iconosDisciplina delante (Decisión #8).
+    expect(screen.getByRole("cell", { name: "⚽ Fútbol" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Fútbol 11" })).toBeInTheDocument();
+    expect(screen.getByText("14 jug.")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Dobles" })).toBeInTheDocument();
+    expect(screen.getByText("2 jug.")).toBeInTheDocument();
+    await esperarSinInfracciones();
   });
 
   // EC-39 — 0 jugadores es válido, pero el vacío ofrece la salida.

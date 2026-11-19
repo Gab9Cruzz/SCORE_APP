@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { server } from "../../../test/msw-server";
 import { createWrapper } from "../../../test/test-utils";
 import { MotorFormatosPanel } from "./MotorFormatosPanel";
+import { comprobarModalAccesible } from "../../../test/a11y";
 
 const EQUIPOS = "http://127.0.0.1:8000/api/v1/equipos";
 const TORNEO_ID = 20;
@@ -275,5 +276,17 @@ describe("MotorFormatosPanel — Grupos + Playoffs", () => {
     const modal = input.closest(".modal-panel") as HTMLElement;
     expect(within(modal).getByRole("button", { name: "Generar Playoffs" })).toBeDisabled();
     expect(screen.getByText("Tiene que ser al menos 1.")).toBeInTheDocument();
+  });
+
+  it("accesibilidad: modal Configurar Siguiente Fase (TASK-044)", async () => {
+    mockEstadoFase({
+      partidos_total: 6,
+      partidos_finalizados: 6,
+      fase_completa: true,
+      acciones_disponibles: ["cerrar_directo", "generar_playoffs"],
+    });
+    renderPanel({ formato: "Liga" });
+    const user = userEvent.setup();
+    await comprobarModalAccesible(user, await screen.findByRole("button", { name: "Configurar Siguiente Fase" }));
   });
 });

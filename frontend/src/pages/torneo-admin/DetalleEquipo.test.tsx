@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { server } from "../../test/msw-server";
 import { createTestQueryClient } from "../../test/test-utils";
 import { DetalleEquipoPage } from "./DetalleEquipo";
+import { comprobarModalAccesible } from "../../test/a11y";
 
 /** C1 (docs/plans/cierre-pendientes-todos-plan.md): `DetalleEquipo` no
  * tenía archivo de test propio — este se escribe para cubrir búsqueda,
@@ -162,5 +163,12 @@ describe("DetalleEquipoPage", () => {
     await user.click(screen.getByRole("button", { name: "Crear y agregar" }));
 
     await waitFor(() => expect(bodyRecibido).toMatchObject({ jugador_id: 42, dorsal_sugerido: null }));
+  });
+
+  it("accesibilidad: modal Buscar o agregar jugador (TASK-044)", async () => {
+    mockBase();
+    const user = userEvent.setup();
+    renderConRuta();
+    await comprobarModalAccesible(user, await screen.findByRole("button", { name: "+ Buscar/Agregar jugador" }));
   });
 });

@@ -9,6 +9,7 @@ import { server } from "../test/msw-server";
 import { createTestQueryClient } from "../test/test-utils";
 import { limpiarEventoPendiente } from "../lib/colaOfflineEventos";
 import { MesaPanel } from "./MesaPanel";
+import { comprobarModalAccesible } from "../test/a11y";
 
 const PARTIDO_3 = "http://127.0.0.1:8000/api/v1/partidos/3";
 const EQUIPOS = "http://127.0.0.1:8000/api/v1/equipos";
@@ -467,6 +468,28 @@ describe("MesaPanel — CargaEvento sin la opción Cambio (C2b)", () => {
     expect(screen.getByRole("button", { name: /Tarjeta Amarilla/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Tarjeta Roja/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^🔄 Cambio$/ })).not.toBeInTheDocument();
+  });
+
+  it("accesibilidad: modal de sustitución (TASK-044)", async () => {
+    const user = userEvent.setup();
+    montarMesaPanel();
+    server.use(
+      http.get(PLANTILLA_1, () =>
+        HttpResponse.json([
+          { jugador_id: 5, jugador: "Andrés Vera", equipo_id: 1, equipo: "Tiburones FC", dorsal: 9, jugador_perfil_id: 50 },
+          { jugador_id: 6, jugador: "Bruno Ríos", equipo_id: 1, equipo: "Tiburones FC", dorsal: 10, jugador_perfil_id: 51 },
+        ]),
+      ),
+      http.get(EVENTOS, () =>
+        HttpResponse.json([
+          { id: 1, nombre: "Gol", estado: "Activo" },
+          { id: 4, nombre: "Cambio", estado: "Activo" },
+        ]),
+      ),
+    );
+    const filaAndres = (await screen.findByText(/Andrés Vera/)).closest("li");
+    if (!filaAndres) throw new Error("No se encontró la fila de Andrés Vera");
+    await comprobarModalAccesible(user, within(filaAndres).getByRole("button", { name: "Sacar" }));
   });
 });
 

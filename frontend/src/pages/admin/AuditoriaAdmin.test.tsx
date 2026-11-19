@@ -6,6 +6,7 @@ import type { components } from "../../api/schema";
 import { server } from "../../test/msw-server";
 import { createWrapper } from "../../test/test-utils";
 import { AuditoriaAdminPage } from "./AuditoriaAdmin";
+import { esperarSinInfracciones } from "../../test/a11y";
 
 const AUDITORIA = "http://127.0.0.1:8000/api/v1/auditoria";
 
@@ -93,6 +94,24 @@ describe("AuditoriaAdminPage", () => {
 
     const filaJugador = screen.getByText("jugadores #9").closest("tr");
     expect(within(filaJugador as HTMLElement).getByText("Baja")).toBeInTheDocument();
+  });
+
+  it("accesibilidad: Auditoría sin infracciones graves (TASK-044)", async () => {
+    montar([ALTA_TORNEO, MODIFICACION_EQUIPO, BAJA_JUGADOR]);
+
+    // "Alta"/"Modificación"/"Baja" también son las labels del <select> de
+    // filtro, así que hay que buscar el badge dentro de la fila, no el
+    // texto suelto (que matchea dos elementos: la opción y el badge).
+    const filaTorneo = (await screen.findByText("torneo #42")).closest("tr");
+    expect(filaTorneo).not.toBeNull();
+    expect(within(filaTorneo as HTMLElement).getByText("Alta")).toBeInTheDocument();
+
+    const filaEquipo = screen.getByText("equipos #5").closest("tr");
+    expect(within(filaEquipo as HTMLElement).getByText("Modificación")).toBeInTheDocument();
+
+    const filaJugador = screen.getByText("jugadores #9").closest("tr");
+    expect(within(filaJugador as HTMLElement).getByText("Baja")).toBeInTheDocument();
+    await esperarSinInfracciones();
   });
 
   it("resume el diff antes → después de una modificación", async () => {

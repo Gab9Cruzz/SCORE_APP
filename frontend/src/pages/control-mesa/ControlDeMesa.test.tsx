@@ -5,6 +5,7 @@ import { TOKEN_STORAGE_KEY } from "../../api/client";
 import { server } from "../../test/msw-server";
 import { createWrapper } from "../../test/test-utils";
 import { ControlDeMesaPage } from "./ControlDeMesa";
+import { esperarSinInfracciones } from "../../test/a11y";
 
 const EQUIPOS = "http://127.0.0.1:8000/api/v1/equipos";
 const TORNEOS = "http://127.0.0.1:8000/api/v1/torneos";
@@ -54,6 +55,23 @@ describe("ControlDeMesaPage — RBAC scoping (control-mesa-centralizacion-fixtur
     renderControlDeMesa();
 
     await waitFor(() => expect(queryRecibida?.get("solo_mios")).toBe("true"));
+  });
+
+  it("accesibilidad: Control de Mesa sin infracciones graves (TASK-044)", async () => {
+    sembrarSesion("TorneoAdmin", "torneo_admin_test", 7);
+    let queryRecibida: URLSearchParams | undefined;
+    server.use(
+      http.get(PARTIDOS, ({ request }) => {
+        queryRecibida = new URL(request.url).searchParams;
+        return HttpResponse.json([PARTIDO_TORNEO_1]);
+      }),
+      http.get(TORNEOS, () => HttpResponse.json([{ id: 1, nombre: "Copa Ecotec 2026" }])),
+      http.get(EQUIPOS, () => HttpResponse.json([{ id: 1, nombre: "Tiburones FC" }, { id: 2, nombre: "Águilas del Sur" }])),
+    );
+    renderControlDeMesa();
+
+    await waitFor(() => expect(queryRecibida?.get("solo_mios")).toBe("true"));
+    await esperarSinInfracciones();
   });
 
   it("pide al servidor solo Programado/En curso, ordenados por fecha (TASK-012)", async () => {

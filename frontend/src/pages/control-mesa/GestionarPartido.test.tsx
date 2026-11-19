@@ -9,6 +9,7 @@ import { AuthProvider } from "../../auth/AuthContext";
 import { server } from "../../test/msw-server";
 import { createTestQueryClient } from "../../test/test-utils";
 import { GestionarPartidoPage } from "./GestionarPartido";
+import { comprobarModalAccesible, esperarSinInfracciones } from "../../test/a11y";
 
 const BASE = "http://127.0.0.1:8000/api/v1";
 const SESSION_STORAGE_KEY = "score-app.session";
@@ -106,6 +107,17 @@ describe("GestionarPartido — deep-link y punto de entrada", () => {
     // Antes esto era un panel por useState sin URL: un refresh devolvía al
     // operador a la lista y le hacía perder el lugar.
     expect(await screen.findByRole("heading", { name: /Tiburones FC vs Águilas del Sur/ })).toBeInTheDocument();
+  });
+
+  it("accesibilidad: Gestionar partido sin infracciones graves (TASK-044)", async () => {
+    sembrarSesion();
+    sembrarBackend();
+    montar();
+
+    // Antes esto era un panel por useState sin URL: un refresh devolvía al
+    // operador a la lista y le hacía perder el lugar.
+    expect(await screen.findByRole("heading", { name: /Tiburones FC vs Águilas del Sur/ })).toBeInTheDocument();
+    await esperarSinInfracciones();
   });
 
   it("muestra el torneo en el header (la vista es deep-linkeable)", async () => {
@@ -427,5 +439,13 @@ describe("GestionarPartido — permisos del árbitro (TASK-021)", () => {
     montar();
 
     expect(await screen.findByText(/📅/)).toBeInTheDocument();
+  });
+
+  it("accesibilidad: modal Cargar resultado directo (TASK-044)", async () => {
+    sembrarSesion();
+    sembrarBackend();
+    const user = userEvent.setup();
+    montar();
+    await comprobarModalAccesible(user, await screen.findByRole("button", { name: /Cargar resultado directo/ }));
   });
 });

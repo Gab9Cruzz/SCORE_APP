@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { server } from "../../test/msw-server";
 import { createWrapper } from "../../test/test-utils";
 import { SimpleResourceAdminPage } from "./SimpleResourceAdminPage";
+import { esperarSinInfracciones } from "../../test/a11y";
 
 const BASE = "http://127.0.0.1:8000/api/v1/test-resource";
 
@@ -46,6 +47,12 @@ describe("SimpleResourceAdminPage", () => {
   it("lista los recursos existentes", async () => {
     renderPagina();
     expect(await screen.findByText("Uno")).toBeInTheDocument();
+  });
+
+  it("accesibilidad: Jugadores y usuarios (página CRUD genérica) sin infracciones graves (TASK-044)", async () => {
+    renderPagina();
+    expect(await screen.findByText("Uno")).toBeInTheDocument();
+    await esperarSinInfracciones();
   });
 
   it("crear: abre el form, envía, y vuelve a la lista", async () => {

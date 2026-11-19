@@ -8,6 +8,7 @@ import { App } from "./App";
 import { TOKEN_STORAGE_KEY } from "./api/client";
 import { AuthProvider } from "./auth/AuthContext";
 import { server } from "./test/msw-server";
+import { esperarSinInfracciones } from "./test/a11y";
 import { createTestQueryClient } from "./test/test-utils";
 
 // Mismo key privado que AuthContext.tsx (ver UsuariosAdmin.test.tsx).
@@ -170,6 +171,22 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
   it("anónimo tipeando /dashboard directo lo sigue alcanzando (F20: se esconde el link, no la ruta)", async () => {
     renderApp("/dashboard");
     expect(await screen.findByRole("heading", { name: "Dashboard de Torneo" })).toBeInTheDocument();
+  });
+
+  // TASK-044: Login y Dashboard no tienen archivo de pruebas propio; se
+  // revisan montados dentro de la app, con la barra de navegación.
+  it("accesibilidad: Dashboard sin infracciones graves (TASK-044)", async () => {
+    disciplinasDisponibles();
+    renderApp("/dashboard");
+    await screen.findByRole("heading", { name: "Dashboard de Torneo" });
+    await esperarSinInfracciones();
+  });
+
+  it("accesibilidad: Iniciar sesión sin infracciones graves (TASK-044)", async () => {
+    disciplinasDisponibles();
+    renderApp("/login");
+    await screen.findByRole("heading", { name: "Iniciar sesión" });
+    await esperarSinInfracciones();
   });
 
   it("anónimo no ve los links de Dashboard ni Control de Mesa en el NavBar (T1.1/T1.2, C7)", async () => {

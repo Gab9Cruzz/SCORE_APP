@@ -6,6 +6,7 @@ import { server } from "../../../test/msw-server";
 import { createWrapper } from "../../../test/test-utils";
 import { PlantillasDelTorneoPage } from "./PlantillasDelTorneo";
 import type { TorneoDashboardContext } from "./TorneoDashboard";
+import { comprobarModalAccesible } from "../../../test/a11y";
 
 const CONTEXTO: TorneoDashboardContext = {
   torneoId: 20,
@@ -429,5 +430,24 @@ describe("PlantillasDelTorneoPage — fix de datos fantasma (traspasos)", () => 
     expect(screen.getByText("Sin jugadores todavía —", { exact: false })).toBeInTheDocument();
     expect(screen.queryByText("Ex Jugador")).not.toBeInTheDocument();
     expect(screen.getByText("0 jugadores)", { exact: false })).toBeInTheDocument();
+  });
+
+  it("accesibilidad: modal Perfil del jugador (TASK-044)", async () => {
+    mockBase();
+    server.use(
+      http.get("http://127.0.0.1:8000/api/v1/jugadores/1/perfil", () =>
+        HttpResponse.json({
+          jugador_id: 1,
+          nombre: "Carlos Pérez",
+          foto_url: null,
+          cedula: "0900000001",
+          correo_electronico: "carlos.perez@example.com",
+          disciplinas: [],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPagina();
+    await comprobarModalAccesible(user, await screen.findByRole("button", { name: /Carlos Pérez/ }));
   });
 });

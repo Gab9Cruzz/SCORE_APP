@@ -7,6 +7,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { server } from "../../test/msw-server";
 import { createTestQueryClient } from "../../test/test-utils";
 import { FeedPartidosPage } from "./FeedPartidos";
+import { esperarSinInfracciones } from "../../test/a11y";
 
 const FEED = "http://127.0.0.1:8000/api/v1/partidos/feed";
 
@@ -62,6 +63,33 @@ describe("FeedPartidosPage (portal-publico-feed-partidos-plan.md, T4.1-T4.7)", (
     // 2 partidos dentro del bloque de Liga A.
     const linksPartido = screen.getAllByRole("link").filter((l) => l.getAttribute("href")?.startsWith("/partidos/"));
     expect(linksPartido).toHaveLength(3);
+  });
+
+  it("accesibilidad: Feed de partidos sin infracciones graves (TASK-044)", async () => {
+    server.use(
+      http.get(FEED, () =>
+        HttpResponse.json({
+          fecha_pedida: "2026-09-15",
+          fecha_efectiva: "2026-09-15",
+          total_disponible: 3,
+          partidos: [
+            partido({ partido_id: 1, torneo: { id: 10, nombre: "Liga A", grupo: "Liga A", pais: null, logo_url: null } }),
+            partido({ partido_id: 2, torneo: { id: 10, nombre: "Liga A", grupo: "Liga A", pais: null, logo_url: null } }),
+            partido({ partido_id: 3, torneo: { id: 20, nombre: "Liga B", grupo: "Liga B", pais: null, logo_url: null } }),
+          ],
+        }),
+      ),
+    );
+    renderFeed();
+
+    const bloques = await screen.findAllByRole("link", { name: /Liga (A|B)/ });
+    // El nombre accesible ignora el `aria-hidden` del escudo de iniciales
+    // (Escudo cae a iniciales sin logo_url) — solo importa el orden.
+    expect(bloques.map((b) => b.textContent?.replace(/^L[AB]/, ""))).toEqual(["Liga A", "Liga B"]);
+    // 2 partidos dentro del bloque de Liga A.
+    const linksPartido = screen.getAllByRole("link").filter((l) => l.getAttribute("href")?.startsWith("/partidos/"));
+    expect(linksPartido).toHaveLength(3);
+    await esperarSinInfracciones();
   });
 
   it("D2: Programado muestra la hora sin marcador", async () => {

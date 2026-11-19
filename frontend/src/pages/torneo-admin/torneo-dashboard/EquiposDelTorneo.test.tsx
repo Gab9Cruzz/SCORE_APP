@@ -6,6 +6,7 @@ import { server } from "../../../test/msw-server";
 import { createWrapper } from "../../../test/test-utils";
 import { EquiposDelTorneoPage } from "./EquiposDelTorneo";
 import type { TorneoDashboardContext } from "./TorneoDashboard";
+import { comprobarModalAccesible } from "../../../test/a11y";
 
 const CONTEXTO: TorneoDashboardContext = {
   torneoId: 20,
@@ -202,5 +203,31 @@ describe("EquiposDelTorneoPage — Individual (tamano_equipo == 1)", () => {
     expect(await screen.findByText("Jugadores inscritos")).toBeInTheDocument();
     expect(await screen.findByText("Micky Fernández")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "+ Agregar Jugador" })).toBeInTheDocument();
+  });
+
+  it("accesibilidad: modal Gestionar plantilla (TASK-044)", async () => {
+    server.use(
+      http.get(INSCRIPCIONES, () => HttpResponse.json([{ id: 1, torneo_id: 20, equipo_id: 1, jugador_perfil_id: null, estado: "Inscrito" }])),
+      http.get(EQUIPOS, () => HttpResponse.json([{ id: 1, nombre: "Halcones FC" }])),
+      http.get(MODALIDADES, () => HttpResponse.json(MODALIDAD_CONJUNTO)),
+      http.get(PLANTILLAS, () => HttpResponse.json([])),
+      http.get("http://127.0.0.1:8000/api/v1/jugadores", () => HttpResponse.json([])),
+      http.get("http://127.0.0.1:8000/api/v1/perfiles", () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    renderPagina();
+    await comprobarModalAccesible(user, await screen.findByRole("button", { name: "Gestionar plantilla" }));
+  });
+
+  it("accesibilidad: modal Agregar inscripción (TASK-044)", async () => {
+    server.use(
+      http.get(INSCRIPCIONES, () => HttpResponse.json([])),
+      http.get(MODALIDADES, () => HttpResponse.json(MODALIDAD_INDIVIDUAL)),
+      http.get(PERFILES, () => HttpResponse.json([])),
+      http.get(JUGADORES, () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    renderPagina();
+    await comprobarModalAccesible(user, await screen.findByRole("button", { name: "+ Agregar Jugador" }));
   });
 });

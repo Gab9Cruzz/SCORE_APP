@@ -9,6 +9,7 @@ import { AuthProvider } from "../../auth/AuthContext";
 import { server } from "../../test/msw-server";
 import { createTestQueryClient } from "../../test/test-utils";
 import { MisPartidosPage } from "./MisPartidos";
+import { esperarSinInfracciones } from "../../test/a11y";
 
 const PARTIDOS = "http://127.0.0.1:8000/api/v1/partidos";
 const PARTIDO_5 = "http://127.0.0.1:8000/api/v1/partidos/5";
@@ -70,6 +71,21 @@ describe("MisPartidosPage (roles-3-modulos-plan.md, Fase 3)", () => {
     renderPagina();
 
     await waitFor(() => expect(query).toContain("arbitro_id=42"));
+  });
+
+  it("accesibilidad: Mis partidos sin infracciones graves (TASK-044)", async () => {
+    let query: string | null = null;
+    server.use(
+      http.get(PARTIDOS, ({ request }) => {
+        query = new URL(request.url).search;
+        return HttpResponse.json([]);
+      }),
+    );
+    sembrarSesionArbitro(42);
+    renderPagina();
+
+    await waitFor(() => expect(query).toContain("arbitro_id=42"));
+    await esperarSinInfracciones();
   });
 
   it("sin session.id (falló /auth/me) no dispara la query y avisa en vez de romper", () => {

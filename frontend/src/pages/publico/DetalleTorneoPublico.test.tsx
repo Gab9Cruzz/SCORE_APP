@@ -7,6 +7,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { server } from "../../test/msw-server";
 import { createTestQueryClient } from "../../test/test-utils";
 import { DetalleTorneoPublicoPage } from "./DetalleTorneoPublico";
+import { esperarSinInfracciones } from "../../test/a11y";
 
 const TORNEO_1 = "http://127.0.0.1:8000/api/v1/torneos/1";
 const GRUPO_1 = "http://127.0.0.1:8000/api/v1/torneo-grupos/9";
@@ -57,6 +58,16 @@ describe("DetalleTorneoPublicoPage (portal-publico-feed-partidos-plan.md, T5.2)"
 
     expect(await screen.findByRole("heading", { name: "Liga Demo Grupo" })).toBeInTheDocument();
     expect(screen.getByText("Ecuador")).toBeInTheDocument();
+  });
+
+  it("accesibilidad: Detalle público del torneo sin infracciones graves (TASK-044)", async () => {
+    mockComunes();
+    server.use(http.get(TORNEO_1, () => HttpResponse.json(TORNEO_LIGA_FUTURO)));
+    renderEn();
+
+    expect(await screen.findByRole("heading", { name: "Liga Demo Grupo" })).toBeInTheDocument();
+    expect(screen.getByText("Ecuador")).toBeInTheDocument();
+    await esperarSinInfracciones();
   });
 
   it("D8a: un torneo Liga que todavía no empezó abre en Posiciones", async () => {
