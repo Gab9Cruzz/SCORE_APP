@@ -31,17 +31,6 @@ retomarlo — acá solo queda lo que sigue abierto.
   dos niveles de rol en la misma ruta); `Slug` no se edita desde la UI
   (lo consume el portal público); no se agrega un rol nuevo, `AdminGeneral`
   ya alcanza.
-- **Tests de concurrencia real para el tope de titulares y el doble
-  `Fin_Partido`** (T23/T24). La infraestructura para escribirlos ya existe
-  (`sesiones_paralelas`, ver Resuelto 2026-09-18), pero estos dos casos
-  puntuales no se escribieron en este cierre — ninguno tenía una fase de
-  fix asignada en el plan, y el de titulares (T23) probablemente EXPONDRÍA
-  una carrera real y sin arreglar: `ConvocadoAPartidoService.agregar`
-  (`backend/app/services/convocado_a_partido.py`) cuenta titulares con un
-  `SELECT` sin lock antes del `INSERT` — dos altas simultáneas de titulares
-  DISTINTOS podrían superar el tope sin que ninguna falle. Necesita su
-  propio diseño de fix (mismo tipo de trabajo que el row-locking de
-  `EventoPartidoService`, ver Resuelto 2026-09-18), no solo el test.
 - **Filtrar por asignación los LISTADOS de sub-recursos** dentro de un
   torneo específico (equipos/jugadores/partidos) en `torneo-admin/*` —
   heredan protección de escritura pero no filtran el listado. Prioridad P3.
@@ -78,6 +67,13 @@ retomarlo — acá solo queda lo que sigue abierto.
 - **`DESIGN.md`** (TASK-034, 2026-11-19). Estaba en el backlog sin urgencia
   ("recomendado por 5 planes, nunca ejecutado"). Describe la paleta, las
   escalas y los cuatro componentes base de `frontend/src/components/ui/`.
+- **Tests de concurrencia real: tope de titulares y doble `Fin_Partido`**
+  (T23/T24; TASK-024 y TASK-045, 2026-11-19). Las cuatro carreras de la
+  auditoría (PR-050 titulares, PR-051 doble inicio, PR-052 doble fin,
+  PR-053 doble sorteo) tienen prueba con dos conexiones reales, cada mitad
+  contenciosa bajo `asyncio.timeout`, en `test_concurrencia_convocados.py`
+  y `test_carreras.py`. Pasaron diez veces seguidas; `pytest -m
+  concurrencia` en verde (7).
 
 ## Resuelto (2026-09-18)
 
@@ -111,9 +107,9 @@ fases de `/autoplan` (CEO/eng/design/DX) antes de ejecutarse.
   default, `verificar.ps1 -Concurrencia` lo suma aparte. Con esto se
   escribió la prueba REAL (no simulada) de la carrera de doble amarilla
   (autogenera exactamente una roja) y de la contención de lock (409 +
-  log), ambas en `backend/tests/test_concurrencia_eventos.py`. **T23/T24
-  (tope de titulares, doble `Fin_Partido`) quedan pendientes** — ver
-  `## Pendiente`.
+  log), ambas en `backend/tests/test_concurrencia_eventos.py`. T23/T24
+  (tope de titulares, doble `Fin_Partido`) se cerraron después — ver
+  Resuelto (2026-11-18).
 - **Retirar el formulario de Cambio duplicado dentro de `CargaEvento`**.
   `ModalSustitucion` ganó primero un punto de entrada sin convocatoria
   (fallback a la plantilla completa del equipo, con caption "Sin
