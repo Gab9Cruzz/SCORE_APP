@@ -68,6 +68,10 @@ def _verificar_partido_en_curso(partido: Partido) -> None:
         )
 
 
+class _DeshacerPrueba(Exception):
+    """Sale del savepoint de `_verificar_llave_no_cambia` deshaciéndolo."""
+
+
 class EventoPartidoService:
     """Registro de goles/tarjetas/cambios de un partido (rol Arbitro).
 
@@ -330,7 +334,10 @@ class EventoPartidoService:
         evento = await self.repo.get_or_404(id_)
         evento_catalogo = await self.evento_catalogo_repo.get_or_404(evento.eventos_id)
         es_tarjeta = evento_catalogo.nombre in ("Tarjeta Amarilla", "Tarjeta Roja")
-        if es_tarjeta:
+        # TASK-009: los goles también toman el lock — anular uno puede cambiar
+        # quién avanza de llave (ver _verificar_llave_no_cambia).
+        es_gol = evento_catalogo.nombre in ("Gol", "Autogol")
+        if es_tarjeta or es_gol:
             settings = get_settings()
             try:
                 partido = await self._bloquear_partido_con_timeout(evento.partidos_id, usuario_actual.id, settings)
@@ -343,5 +350,43 @@ class EventoPartidoService:
         else:
             partido = await self.partido_repo.get_or_404(evento.partidos_id)
         verificar_arbitro_asignado(partido, usuario_actual)
+        if es_gol and partido.estado == "Finalizado":
+            await self._verificar_llave_no_cambia(partido, evento)
         return await self.repo.save_changes(evento, estado="Anulado")
+
+    async def _verificar_llave_no_cambia(self, partido: Partido, evento: EventoPartido) -> None:
+        """TASK-009 (FUN-03). Decisión del propietario: si un equipo ya avanzó
+        de llave, el resultado no se cambia anulando eventos (se resuelve por
+        reclamo). Anula el gol dentro de un savepoint, compara quién avanza
+        antes y después, y lo deshace; si cambió, rechaza.
+
+        Aplica al partido que propaga (único o vuelta) y a la ida cuando su
+        vuelta ya se cerró. Si la llave ya tiene un reclamo resuelto, el
+        ganador no depende de los goles y no hay nada que proteger."""
+        propagador: Partido | None = None
+        if partido.partido_siguiente_id is not None or partido.partido_perdedor_siguiente_id is not None:
+            propagador = partido
+        else:
+            vuelta = await self.partido_repo.vuelta_de(partido.id)
+            if vuelta is not None and vuelta.estado == "Finalizado":
+                propagador = vuelta
+        if propagador is None or propagador.ganador_reclamo_id is not None:
+            return
+
+        antes = await self.partido_repo.ganador_de_llave(propagador)
+        despues: int | None = None
+        try:
+            async with self.session.begin_nested():
+                evento.estado = "Anulado"
+                await self.session.flush()
+                despues = await self.partido_repo.ganador_de_llave(propagador)
+                raise _DeshacerPrueba()
+        except _DeshacerPrueba:
+            pass
+        await self.session.refresh(evento)
+        if despues != antes:
+            raise DomainRuleError(
+                "No se puede anular este gol: cambia quién avanzó en la llave, y ese equipo ya pasó a la "
+                "ronda siguiente. Si corresponde cambiar el resultado, resolvelo con un reclamo."
+            )
 

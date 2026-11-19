@@ -282,6 +282,14 @@ ALTER TABLE PARTIDOS
     ADD CONSTRAINT chk_partidos_slot_perdedor_siguiente CHECK (Slot_Perdedor_Siguiente IS NULL OR Slot_Perdedor_Siguiente IN ('Local', 'Visitante')),
     ADD CONSTRAINT unique_partido UNIQUE (Torneo_ID, EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE, Fecha_Partido),
     ADD CONSTRAINT fk_partidos_walkover_ausente FOREIGN KEY (Walkover_Equipo_Ausente_ID) REFERENCES EQUIPOS(ID),
+    -- Reclamo (TASK-009): los tres campos van juntos, y el favorecido es
+    -- uno de los dos equipos del partido.
+    ADD CONSTRAINT fk_partidos_ganador_reclamo FOREIGN KEY (Ganador_Reclamo_ID) REFERENCES EQUIPOS(ID),
+    ADD CONSTRAINT chk_partidos_reclamo CHECK (
+        (Ganador_Reclamo_ID IS NULL AND Reclamo_Motivo IS NULL AND Reclamo_Fecha IS NULL)
+     OR (Ganador_Reclamo_ID IS NOT NULL AND Reclamo_Motivo IS NOT NULL AND Reclamo_Fecha IS NOT NULL
+         AND Ganador_Reclamo_ID IN (EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE))
+    ),
     -- 3B-13: Walkover_Equipo_Ausente_ID va DE LA MANO con Es_Walkover — ni
     -- un walkover sin decir quién faltó, ni un partido normal con un
     -- "ausente" fantasma colgando.

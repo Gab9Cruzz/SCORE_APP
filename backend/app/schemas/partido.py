@@ -1,7 +1,7 @@
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator, model_validator
 
 EstadoPartido = Literal["Programado", "En curso", "Finalizado", "Cancelado"]
 FasePartido = Literal[
@@ -150,8 +150,22 @@ class PartidoOut(PartidoBase):
     # 3B-13 (docs/plans/cierre-backlog-todos-plan.md).
     es_walkover: bool = False
     walkover_equipo_ausente_id: int | None = None
+    # Reclamo (TASK-009).
+    ganador_reclamo_id: int | None = None
+    reclamo_motivo: str | None = None
+    reclamo_fecha: datetime | None = None
     fecha_registro: datetime
     fecha_modificacion: datetime
+
+
+class ReclamoRequest(BaseModel):
+    """POST /partidos/{id}/reclamo (TASK-009): resuelve un reclamo a favor
+    del equipo que perdió en cancha. Ver PartidoService.resolver_reclamo."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    equipo_id: int
+    motivo: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 
 
 class WalkoverRequest(BaseModel):

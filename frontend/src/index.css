@@ -2450,3 +2450,37 @@ td:first-child {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Reclamo sobre un partido de llave cerrado (TASK-009, ReclamoPartido.tsx).
+ * Acción poco frecuente y con consecuencias: discreta en el nodo del cuadro,
+ * con el formulario a ancho completo cuando se abre. */
+.reclamo-partido__abrir {
+  margin-top: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.reclamo-partido {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.reclamo-partido select,
+.reclamo-partido textarea {
+  width: 100%;
+  min-height: 2.5rem;
+}
+
+.reclamo-partido__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

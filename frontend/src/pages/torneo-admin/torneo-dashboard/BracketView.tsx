@@ -1,10 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { Equipo as EquipoRow } from "../../../api/types";
 import { api, apiErrorMessage } from "../../../api/client";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
 import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
 import { badgePenales } from "../../../lib/desempate";
+import { ReclamoPartido } from "./ReclamoPartido";
 
 interface PartidoBracket {
   id: number;
@@ -29,6 +30,9 @@ interface PartidoBracket {
   hubo_tiempo_extra?: boolean;
   penales_local?: number | null;
   penales_visitante?: number | null;
+  // Reclamo (TASK-009): el equipo que avanza por un reclamo resuelto.
+  ganador_reclamo_id?: number | null;
+  reclamo_motivo?: string | null;
 }
 
 interface ResultadoRow {
@@ -66,7 +70,16 @@ const ETIQUETA_ESTADO_PIERNA: Record<string, string> = {
  * la tabla de posiciones, donde el usuario lo espera) — un componente,
  * dos puntos de montaje, para no forkear la lógica de resolución de
  * "Ganador Partido N"/"Perdedor Semifinal N" (byes, TBD, Tercer Lugar). */
-export function BracketView({ torneoId }: { torneoId: number }) {
+export function BracketView({
+  torneoId,
+  permitirReclamo = false,
+}: {
+  torneoId: number;
+  /** Solo el panel de administración: el portal público ve el cuadro sin
+   * acciones (TASK-009). */
+  permitirReclamo?: boolean;
+}) {
+  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["bracket", torneoId],
     queryFn: async () => {
@@ -231,6 +244,38 @@ export function BracketView({ torneoId }: { torneoId: number }) {
     );
   }
 
+  // Reclamo (TASK-009): marca el ganador por reclamo y, en el panel de
+  // administración, ofrece resolver uno en el partido que define quién
+  // avanza (único o vuelta), ya cerrado y con los dos equipos.
+  function seccionReclamo(p: PartidoBracket) {
+    if (p.ganador_reclamo_id != null) {
+      return (
+        <p className="muted--cuerpo">
+          <span className="badge" title={p.reclamo_motivo ?? undefined}>
+            Reclamo
+          </span>{" "}
+          avanza {nombreEquipo.get(p.ganador_reclamo_id) ?? `Equipo #${p.ganador_reclamo_id}`}
+        </p>
+      );
+    }
+    const propaga = p.partido_siguiente_id != null || p.partido_perdedor_siguiente_id != null;
+    if (!permitirReclamo || !propaga || p.estado !== "Finalizado") return null;
+    if (p.equipos_id_local == null || p.equipos_id_visitante == null) return null;
+    return (
+      <ReclamoPartido
+        partidoId={p.id}
+        equipos={[p.equipos_id_local, p.equipos_id_visitante].map((id) => ({
+          id,
+          nombre: nombreEquipo.get(id) ?? `Equipo #${id}`,
+        }))}
+        onResuelto={() => {
+          queryClient.invalidateQueries({ queryKey: ["bracket", torneoId] });
+          queryClient.invalidateQueries({ queryKey: ["resultados", torneoId] });
+        }}
+      />
+    );
+  }
+
   function renderPartido(p: PartidoBracket) {
     const marcador = marcadorDePierna(p);
     if (p.partido_ida_id == null) {
@@ -247,6 +292,7 @@ export function BracketView({ torneoId }: { torneoId: number }) {
               {badgeWalkover(p)}
             </p>
           )}
+          {seccionReclamo(p)}
         </div>
       );
     }
@@ -285,6 +331,7 @@ export function BracketView({ torneoId }: { torneoId: number }) {
         {ida && ida.estado !== "Programado" && ida.estado !== "En curso" && p.estado === "Programado" && (
           <p className="bracket__agregado">Ida jugada · Vuelta pendiente</p>
         )}
+        {seccionReclamo(p)}
       </div>
     );
   }

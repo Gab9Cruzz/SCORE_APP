@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import Select, and_, not_, select
+from sqlalchemy import Select, and_, not_, select, text
 
 from app.exceptions.errors import NotFoundError
 from app.models.partido import Partido
@@ -72,6 +72,22 @@ class PartidoRepository(BaseRepository[Partido]):
         stmt = stmt.offset(skip).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def ganador_de_llave(self, partido: Partido) -> int | None:
+        """Quién avanza desde este partido, con los datos de la transacción
+        en curso (TASK-009): el agregado de la llave si es una vuelta, el
+        marcador del partido si no. Mismo criterio que
+        fn_propagar_ganador_bracket."""
+        funcion = "fn_resolver_llave" if partido.partido_ida_id is not None else "fn_marcador_partido"
+        result = await self.session.execute(
+            text(f"SELECT ganador_equipo_id FROM {funcion}(:id)"), {"id": partido.id}
+        )
+        return result.scalar_one_or_none()
+
+    async def vuelta_de(self, partido_id: int) -> Partido | None:
+        """El partido de vuelta cuya ida es `partido_id`, si existe."""
+        result = await self.session.execute(select(Partido).where(Partido.partido_ida_id == partido_id))
+        return result.scalars().first()
 
     async def contar(
         self,

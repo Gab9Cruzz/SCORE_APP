@@ -35,6 +35,7 @@ from app.schemas.partido import (
     PartidoOut,
     PartidoUpdate,
     ResultadoDirectoCreate,
+    ReclamoRequest,
     WalkoverRequest,
 )
 from app.services.convocado_a_partido import ConvocadoAPartidoService
@@ -217,6 +218,25 @@ async def cancelar_partido(partido_id: int, session: AsyncSession = Depends(get_
     """Borrado lógico -> Estado='Cancelado' (no 'Inactivo': no es un valor
     válido para partidos.estado, ver chk_partidos_estado)."""
     return await PartidoService(session).soft_delete(partido_id)
+
+
+@router.post(
+    "/{partido_id}/reclamo",
+    response_model=PartidoOut,
+    dependencies=[
+        Depends(require_roles("TorneoAdmin")),
+        Depends(require_torneo_access_de(_torneo_id_de_partido)),
+    ],
+)
+async def resolver_reclamo(
+    partido_id: int, data: ReclamoRequest, session: AsyncSession = Depends(get_db)
+) -> PartidoOut:
+    """TASK-009: resuelve un reclamo sobre un partido de llave ya cerrado a
+    favor del equipo que perdió en cancha; ese equipo pasa a avanzar. El
+    marcador no cambia. Solo AdminGeneral o el TorneoAdmin del torneo, y solo
+    mientras el partido siguiente no haya empezado (ver
+    PartidoService.resolver_reclamo)."""
+    return await PartidoService(session).resolver_reclamo(partido_id, data)
 
 
 @router.post(

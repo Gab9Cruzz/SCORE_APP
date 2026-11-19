@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.metricas import registrar_evento
@@ -18,7 +19,7 @@ from app.repositories.fase import FaseRepository
 from app.repositories.partido import PartidoRepository
 from app.repositories.torneo import TorneoRepository
 from app.repositories.torneo_grupo import TorneoGrupoRepository
-from app.schemas.partido import PartidoCreate, PartidoOut, PartidoUpdate, ResultadoDirectoCreate
+from app.schemas.partido import PartidoCreate, PartidoOut, PartidoUpdate, ReclamoRequest, ResultadoDirectoCreate
 from app.services.desempate import (
     completar_metodo_manual,
     es_escape_manual_sobre_metodo_configurado,
@@ -132,7 +133,85 @@ class PartidoService:
         return await self._a_salida(await self.repo.save_changes(partido, **payload))
 
     async def soft_delete(self, id_: int) -> PartidoOut:
+        # TASK-009 (FUN-19): un partido de llave cancelado deja el cuadro sin
+        # nadie que avance. Se resuelve por walkover.
+        partido = await self.repo.get_or_404(id_)
+        if partido.partido_siguiente_id is not None or partido.partido_perdedor_siguiente_id is not None:
+            raise DomainRuleError(
+                "Un partido de llave no se cancela: si un equipo no se presenta, marcá walkover "
+                "para que el otro avance."
+            )
         return await self._a_salida(await self.repo.soft_delete(id_, estado_inactivo="Cancelado"))
+
+    async def resolver_reclamo(self, id_: int, data: ReclamoRequest) -> PartidoOut:
+        """TASK-009. Decisión del propietario (2026-11-18): un partido de
+        llave ya cerrado no cambia de ganador anulando eventos; si prospera
+        un reclamo, se da a favor del equipo que perdió en cancha y ese
+        equipo pasa a avanzar.
+
+        Solo sobre el partido que propaga (único, o la vuelta de una llave a
+        dos partidos), cerrado, con un reclamo a favor del que hoy NO avanza,
+        y mientras los partidos siguientes no hayan empezado: después ya no
+        hay un "lugar" que devolverle. El marcador no cambia; el ganador lo
+        dan fn_marcador_partido/fn_resolver_llave leyendo Ganador_Reclamo_ID.
+        Reemplaza a los equipos en el partido siguiente (y en su ida si es
+        una vuelta) y en el del perdedor (tercer puesto)."""
+        partido = await self.repo.get_or_404(id_)
+        if partido.estado != "Finalizado":
+            raise DomainRuleError("Solo se puede resolver un reclamo sobre un partido finalizado.")
+        if partido.partido_siguiente_id is None and partido.partido_perdedor_siguiente_id is None:
+            vuelta = await self.repo.vuelta_de(partido.id)
+            if vuelta is not None:
+                raise DomainRuleError(
+                    "La llave se define en el partido de vuelta: resolvé el reclamo sobre ese partido."
+                )
+            raise DomainRuleError("El reclamo solo aplica a partidos de llave, que definen quién avanza.")
+        if partido.ganador_reclamo_id is not None:
+            raise DomainRuleError("Este partido ya tiene un reclamo resuelto.")
+        if data.equipo_id not in (partido.equipos_id_local, partido.equipos_id_visitante):
+            raise DomainRuleError("El equipo favorecido debe ser uno de los dos que disputaron el partido.")
+        if data.equipo_id == await self.repo.ganador_de_llave(partido):
+            raise DomainRuleError("Ese equipo ya es el que avanza: el reclamo debe ser a favor del que perdió.")
+
+        destinos: list[tuple[int, str | None, int]] = []
+        perdedor = (
+            partido.equipos_id_visitante if data.equipo_id == partido.equipos_id_local else partido.equipos_id_local
+        )
+        if partido.partido_siguiente_id is not None:
+            destinos.append((partido.partido_siguiente_id, partido.slot_siguiente, data.equipo_id))
+        if partido.partido_perdedor_siguiente_id is not None:
+            destinos.append((partido.partido_perdedor_siguiente_id, partido.slot_perdedor_siguiente, perdedor))
+
+        # Cada destino, y la ida si el destino es una vuelta (el ganador entra
+        # a los dos partidos de la llave, en slots invertidos: mismo criterio
+        # que fn_propagar_ganador_bracket).
+        a_escribir: list[tuple[Partido, str | None, int]] = []
+        for destino_id, slot, equipo in destinos:
+            destino = await self.repo.get_or_404(destino_id)
+            a_escribir.append((destino, slot, equipo))
+            if destino.partido_ida_id is not None:
+                ida = await self.repo.get_or_404(destino.partido_ida_id)
+                a_escribir.append((ida, "Visitante" if slot == "Local" else "Local", equipo))
+        for destino, _, _ in a_escribir:
+            hitos = await self.session.execute(
+                select(HitoPartido.id).where(HitoPartido.partido_id == destino.id).limit(1)
+            )
+            if destino.estado != "Programado" or hitos.first() is not None:
+                raise DomainRuleError(
+                    "El partido siguiente de la llave ya empezó: el reclamo ya no puede cambiar quién avanza."
+                )
+
+        partido.ganador_reclamo_id = data.equipo_id
+        partido.reclamo_motivo = data.motivo
+        partido.reclamo_fecha = datetime.now()
+        for destino, slot, equipo in a_escribir:
+            if slot == "Local":
+                destino.equipos_id_local = equipo
+            elif slot == "Visitante":
+                destino.equipos_id_visitante = equipo
+        await self.session.commit()
+        await self.session.refresh(partido)
+        return await self._a_salida(partido)
 
     async def marcar_walkover(self, id_: int, equipo_ausente_id: int, usuario_actual: Usuario) -> PartidoOut:
         """3B-13 (docs/plans/cierre-backlog-todos-plan.md): cierra el

@@ -386,12 +386,13 @@ async def test_deadlock_persistente_agota_el_reintento_y_devuelve_409(
     assert resp.json()["detail"] == "evento_conflicto_concurrente"
 
 
-async def test_anular_toma_lock_solo_si_el_evento_es_una_tarjeta(
+async def test_anular_toma_lock_si_el_evento_es_tarjeta_o_gol(
     client: AsyncClient, arbitro_headers: dict[str, str], convocar_titulares, monkeypatch
 ):
-    """`anular()` solo necesita el lock del partido cuando el evento
-    objetivo es una tarjeta (amarilla o roja) — es la columna que cuenta
-    `procesar_doble_amarilla`. Un gol no participa de esa carrera."""
+    """`anular()` toma el lock del partido cuando el evento objetivo es una
+    tarjeta (amarilla o roja) — es la columna que cuenta
+    `procesar_doble_amarilla` — o, desde TASK-009, un gol: anularlo puede
+    cambiar quién avanza de llave y esa verificación lee el marcador."""
     await _empezar_partido(client, arbitro_headers, convocar_titulares)
 
     resp_amarilla = await client.post(
@@ -419,11 +420,11 @@ async def test_anular_toma_lock_solo_si_el_evento_es_una_tarjeta(
 
     resp = await client.post(f"/api/v1/eventos-partido/{gol_id}/anular", headers=arbitro_headers)
     assert resp.status_code == 200, resp.text
-    assert llamadas == []
+    assert llamadas == [3]
 
     resp = await client.post(f"/api/v1/eventos-partido/{amarilla_id}/anular", headers=arbitro_headers)
     assert resp.status_code == 200, resp.text
-    assert llamadas == [3]
+    assert llamadas == [3, 3]
 
 
 async def test_espera_larga_de_for_update_se_loguea_con_partido_y_usuario(

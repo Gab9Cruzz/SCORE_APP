@@ -613,6 +613,15 @@ CREATE TABLE PARTIDOS (
     -- esos resuelven CÓMO terminó un partido que SÍ se jugó.
     Es_Walkover BOOLEAN NOT NULL DEFAULT FALSE,
     Walkover_Equipo_Ausente_ID INT,
+    -- Reclamo (TASK-009, docs/audit/11_BACKLOG_IMPLEMENTACION.md): un
+    -- partido de llave ya cerrado no cambia de ganador anulando eventos; si
+    -- prospera un reclamo, se resuelve a favor del equipo que perdió en
+    -- cancha y ese equipo pasa a avanzar. El marcador de goles no se toca:
+    -- fn_marcador_partido y fn_resolver_llave devuelven Ganador_Reclamo_ID
+    -- como ganador cuando está seteado (PartidoService.resolver_reclamo).
+    Ganador_Reclamo_ID INT,
+    Reclamo_Motivo VARCHAR(500),
+    Reclamo_Fecha TIMESTAMP,
     -- Cierre de Fase Regular + Llaves + Playoffs (Fase A3): encadenamiento
     -- de una llave a DOS partidos (Ida/Vuelta) — una sola columna
     -- autorreferencial, mismo patrón que Partido_Siguiente_ID. Solo el

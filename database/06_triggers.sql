@@ -613,21 +613,23 @@ DECLARE
     v_walkover_ausente INT;
     v_ganador_desempate INT;
     v_ganador_corrido INT;
+    v_ganador_reclamo INT;
     v_torneo_id INT;
     v_tipo_cronometro VARCHAR(20);
     v_gl INT;
     v_gv INT;
 BEGIN
     SELECT EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE, Es_Walkover, Walkover_Equipo_Ausente_ID,
-           Ganador_Desempate_ID, Ganador_Corrido_ID, Torneo_ID
+           Ganador_Desempate_ID, Ganador_Corrido_ID, Torneo_ID, Ganador_Reclamo_ID
       INTO v_local, v_visitante, v_es_walkover, v_walkover_ausente,
-           v_ganador_desempate, v_ganador_corrido, v_torneo_id
+           v_ganador_desempate, v_ganador_corrido, v_torneo_id, v_ganador_reclamo
       FROM PARTIDOS WHERE ID = p_partido_id;
 
     IF v_es_walkover THEN
         ganador_equipo_id := CASE WHEN v_walkover_ausente = v_local THEN v_visitante ELSE v_local END;
         goles_local := CASE WHEN v_walkover_ausente = v_local THEN 0 ELSE 3 END;
         goles_visitante := CASE WHEN v_walkover_ausente = v_visitante THEN 0 ELSE 3 END;
+        ganador_equipo_id := COALESCE(v_ganador_reclamo, ganador_equipo_id);  -- TASK-009: reclamo
         RETURN NEXT;
         RETURN;
     END IF;
@@ -638,6 +640,7 @@ BEGIN
         ganador_equipo_id := v_ganador_corrido;   -- puede ser NULL (pierna sin ganador todavía / Cancelada)
         goles_local := NULL;
         goles_visitante := NULL;
+        ganador_equipo_id := COALESCE(v_ganador_reclamo, ganador_equipo_id);  -- TASK-009: reclamo
         RETURN NEXT;
         RETURN;
     END IF;
@@ -656,6 +659,7 @@ BEGIN
         WHEN goles_visitante > goles_local THEN v_visitante
         ELSE v_ganador_desempate   -- NULL si el empate no está resuelto todavía
     END;
+    ganador_equipo_id := COALESCE(v_ganador_reclamo, ganador_equipo_id);  -- TASK-009: reclamo
     RETURN NEXT;
     RETURN;
 END;
@@ -689,6 +693,7 @@ DECLARE
     v_local_vta INT;
     v_visit_vta INT;
     v_ganador_desempate INT;
+    v_ganador_reclamo INT;
     v_tipo_cronometro VARCHAR(20);
     ida_ganador INT; ida_gl INT; ida_gv INT;
     vta_ganador INT; vta_gl INT; vta_gv INT;
@@ -697,9 +702,18 @@ DECLARE
     v_victorias_local INT := 0;
     v_victorias_visit INT := 0;
 BEGIN
-    SELECT Partido_Ida_ID, Torneo_ID, EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE, Ganador_Desempate_ID
-      INTO v_ida_id, v_torneo_id, v_local_vta, v_visit_vta, v_ganador_desempate
+    SELECT Partido_Ida_ID, Torneo_ID, EQUIPOS_ID_LOCAL, EQUIPOS_ID_VISITANTE, Ganador_Desempate_ID,
+           Ganador_Reclamo_ID
+      INTO v_ida_id, v_torneo_id, v_local_vta, v_visit_vta, v_ganador_desempate, v_ganador_reclamo
       FROM PARTIDOS WHERE ID = p_partido_vuelta_id;
+
+    -- TASK-009: un reclamo resuelto sobre la vuelta decide la llave entera,
+    -- sin importar el agregado.
+    IF v_ganador_reclamo IS NOT NULL THEN
+        ganador_equipo_id := v_ganador_reclamo;
+        RETURN NEXT;
+        RETURN;
+    END IF;
 
     IF p_ganador_desempate_override IS NOT NULL THEN
         v_ganador_desempate := p_ganador_desempate_override;

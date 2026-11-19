@@ -811,6 +811,30 @@ export interface paths {
         patch: operations["actualizar_partido_api_v1_partidos__partido_id__patch"];
         trace?: never;
     };
+    "/api/v1/partidos/{partido_id}/reclamo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolver Reclamo
+         * @description TASK-009: resuelve un reclamo sobre un partido de llave ya cerrado a
+         *     favor del equipo que perdió en cancha; ese equipo pasa a avanzar. El
+         *     marcador no cambia. Solo AdminGeneral o el TorneoAdmin del torneo, y solo
+         *     mientras el partido siguiente no haya empezado (ver
+         *     PartidoService.resolver_reclamo).
+         */
+        post: operations["resolver_reclamo_api_v1_partidos__partido_id__reclamo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/partidos/{partido_id}/walkover": {
         parameters: {
             query?: never;
@@ -3013,6 +3037,12 @@ export interface components {
             es_walkover: boolean;
             /** Walkover Equipo Ausente Id */
             walkover_equipo_ausente_id?: number | null;
+            /** Ganador Reclamo Id */
+            ganador_reclamo_id?: number | null;
+            /** Reclamo Motivo */
+            reclamo_motivo?: string | null;
+            /** Reclamo Fecha */
+            reclamo_fecha?: string | null;
             /**
              * Fecha Registro
              * Format: date-time
@@ -3268,6 +3298,17 @@ export interface components {
             grupo: string | null;
             /** Estado */
             estado: string;
+        };
+        /**
+         * ReclamoRequest
+         * @description POST /partidos/{id}/reclamo (TASK-009): resuelve un reclamo a favor
+         *     del equipo que perdió en cancha. Ver PartidoService.resolver_reclamo.
+         */
+        ReclamoRequest: {
+            /** Equipo Id */
+            equipo_id: number;
+            /** Motivo */
+            motivo: string;
         };
         /** RegistroLoteFila */
         RegistroLoteFila: {
@@ -5742,6 +5783,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PartidoUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolver_reclamo_api_v1_partidos__partido_id__reclamo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partido_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReclamoRequest"];
             };
         };
         responses: {

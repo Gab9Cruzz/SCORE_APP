@@ -198,7 +198,7 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
         )}
         {!hayAccion && fase.tipo !== "Eliminacion" && <p className="muted">La tabla de partidos está más abajo.</p>}
       </div>
-      {fase.tipo === "Eliminacion" && <BracketView torneoId={torneoId} />}
+      {fase.tipo === "Eliminacion" && <BracketView torneoId={torneoId} permitirReclamo />}
       {modalAbierto && !torneoQuery.isLoading && (
         <ModalSiguienteFase
           torneoId={torneoId}

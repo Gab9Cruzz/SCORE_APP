@@ -82,6 +82,12 @@ class Partido(TimestampMixin, Base):
     # comentario completo en 01_schema.sql.
     es_walkover: Mapped[bool] = mapped_column(default=False)
     walkover_equipo_ausente_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id"))
+    # Reclamo (TASK-009): ganador resuelto por reclamo en un partido de llave
+    # ya cerrado. Ver el comentario en 01_schema.sql y
+    # PartidoService.resolver_reclamo.
+    ganador_reclamo_id: Mapped[int | None] = mapped_column(ForeignKey("equipos.id"))
+    reclamo_motivo: Mapped[str | None] = mapped_column(String(500))
+    reclamo_fecha: Mapped[datetime | None]
     # Cierre de Fase Regular + Llaves + Playoffs (Fase A3): encadenamiento
     # de una llave a dos partidos. Solo el partido de VUELTA lo tiene
     # seteado (apunta a su IDA) — "es ida" se deriva (otro partido lo
