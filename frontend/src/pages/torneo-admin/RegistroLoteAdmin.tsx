@@ -6,6 +6,7 @@ import { api, apiErrorMessage } from "../../api/client";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
 import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
 import { hoyISO } from "../../lib/fechas";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 /** Contexto que llega desde el modal "Agregar Equipo" (torneos-admin-plan.md,
  * Fase 2, journey paso 5): el torneo/equipo ya se resolvieron ahí (se creó
@@ -101,6 +102,7 @@ function filasParaEnvio(filas: Fila[]) {
  * (POST /validar y /confirmar no son un create/update de un recurso —
  * devuelven 200 siempre con resultados mixtos, no un objeto creado). */
 export function RegistroLoteAdminPage() {
+  useTituloPagina("Registro por lote");
   const navigate = useNavigate();
   const location = useLocation();
   const preResuelto = esPreResuelto(location.state) ? location.state : null;
@@ -255,11 +257,13 @@ export function RegistroLoteAdminPage() {
           <table>
             <thead>
               <tr>
-                <th>Cédula</th>
-                <th>Nombre</th>
-                <th>Dorsal</th>
-                <th>Correo</th>
-                <th></th>
+                <th scope="col">Cédula</th>
+                <th scope="col">Nombre</th>
+                <th scope="col">Dorsal</th>
+                <th scope="col">Correo</th>
+                <th scope="col">
+                <span className="sr-only">Acciones</span>
+              </th>
               </tr>
             </thead>
             <tbody>
@@ -349,10 +353,10 @@ export function RegistroLoteAdminPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>Cédula</th>
-                    <th>Nombre</th>
-                    <th>Dorsal</th>
-                    <th>Correo</th>
+                    <th scope="col">Cédula</th>
+                    <th scope="col">Nombre</th>
+                    <th scope="col">Dorsal</th>
+                    <th scope="col">Correo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -377,9 +381,9 @@ export function RegistroLoteAdminPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>Cédula</th>
-                    <th>Nombre</th>
-                    <th>Motivo</th>
+                    <th scope="col">Cédula</th>
+                    <th scope="col">Nombre</th>
+                    <th scope="col">Motivo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -436,9 +440,9 @@ export function RegistroLoteAdminPage() {
           <table>
             <thead>
               <tr>
-                <th>Cédula</th>
-                <th>Nombre</th>
-                <th>Motivo</th>
+                <th scope="col">Cédula</th>
+                <th scope="col">Nombre</th>
+                <th scope="col">Motivo</th>
               </tr>
             </thead>
             <tbody>

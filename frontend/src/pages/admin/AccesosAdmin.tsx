@@ -4,6 +4,7 @@ import { FiltrosRecurso } from "../../components/admin/FiltrosRecurso";
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
 import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 interface AccesoRow {
   id: number;
@@ -69,6 +70,7 @@ function resumirUserAgent(ua: string | null): string {
  * siempre por sospecha, no por curiosidad. Los exitosos están a un click
  * de distancia. */
 export function AccesosAdminPage() {
+  useTituloPagina("Accesos");
   const [exitosoFiltro, setExitosoFiltro] = useState("false");
   const [busqueda, setBusqueda] = useState("");
   const [desde, setDesde] = useState("");

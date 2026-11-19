@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { LIMITE_EVENTOS_PARTIDO } from "../hooks/useResourceCrud";
 import { formatearResultadoDesempate, fraseResultadoDesempate } from "../lib/desempate";
+import { useTituloPagina } from "../hooks/useTituloPagina";
 
 // Intervalo de refresco para lo "en vivo" — arranca en 5s, ver Recommended
 // Approach del design doc. Fácil de ajustar acá si en la práctica se siente
@@ -189,6 +190,11 @@ export function PartidoEnVivoPage() {
   );
   const hayConvocatoria = (convocadosQuery.data ?? []).length > 0;
 
+  const resultadoTitulo = resultadosQuery.data?.find((r) => r.partido_id === id);
+  useTituloPagina(
+    resultadoTitulo ? `${resultadoTitulo.equipo_local} vs ${resultadoTitulo.equipo_visitante}` : "Partido",
+  );
+
   if (!Number.isFinite(id)) {
     return (
       <div className="page">
@@ -200,7 +206,7 @@ export function PartidoEnVivoPage() {
   if (partidoQuery.isLoading) {
     return (
       <div className="page">
-        <p>Cargando partido...</p>
+        <p role="status">Cargando partido...</p>
       </div>
     );
   }
@@ -208,7 +214,7 @@ export function PartidoEnVivoPage() {
   if (partidoQuery.isError || !partidoQuery.data) {
     return (
       <div className="page">
-        <p className="error-text">No se pudo cargar el partido.</p>
+        <p role="alert" className="error-text">No se pudo cargar el partido.</p>
       </div>
     );
   }
@@ -245,6 +251,10 @@ export function PartidoEnVivoPage() {
           {grupoHeaderQuery.data.pais && <span className="muted"> · {grupoHeaderQuery.data.pais}</span>}
         </p>
       )}
+      {/* UX-22: sin h1, la página arrancaba con el texto del marcador. */}
+      <h1 className="sr-only">
+        {resultado?.equipo_local ?? "Local"} vs {resultado?.equipo_visitante ?? "Visitante"}
+      </h1>
       <div className="marcador">
         <div className="marcador__equipo">
           <span>{resultado?.equipo_local ?? "Local"}</span>

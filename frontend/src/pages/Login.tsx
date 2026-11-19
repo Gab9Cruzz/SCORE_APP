@@ -4,12 +4,14 @@ import { landingPorRol } from "../auth/landing";
 import { useAuth } from "../auth/useAuth";
 import { Button } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
+import { useTituloPagina } from "../hooks/useTituloPagina";
 
 // roles-3-modulos-plan.md, Fase 2, D2: landing por default después de
 // loguearse (auth/landing.ts). `from` (si existe) siempre gana — si alguien
 // fue redirigido acá desde una ruta protegida específica (RequireRole,
 // TASK-036), volver ahí importa más que el landing genérico del rol.
 export function LoginPage() {
+  useTituloPagina("Iniciar sesión");
   const { login, loginError, loggingIn, isAuthenticated, session } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");

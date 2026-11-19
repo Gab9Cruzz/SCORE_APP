@@ -196,7 +196,7 @@ describe("TraspasosDelTorneoPage", () => {
     const user = userEvent.setup();
     renderPagina();
 
-    await user.click(await screen.findByRole("button", { name: "Anular" }));
+    await user.click(await screen.findByRole("button", { name: /^Anular/ }));
     // TASK-038: la baja pide confirmación.
     await user.click(screen.getByRole("button", { name: "Confirmar" }));
 
@@ -224,6 +224,6 @@ describe("TraspasosDelTorneoPage", () => {
     renderPagina();
 
     await screen.findByText("Carlos Pérez");
-    expect(screen.queryByRole("button", { name: "Anular" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Anular/ })).not.toBeInTheDocument();
   });
 });

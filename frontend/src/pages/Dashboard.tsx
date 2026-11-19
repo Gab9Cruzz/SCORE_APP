@@ -3,8 +3,10 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { LOCALE, parsearFecha } from "../lib/fechas";
+import { useTituloPagina } from "../hooks/useTituloPagina";
 
 export function DashboardPage() {
+  useTituloPagina("Dashboard");
   const torneosQuery = useQuery({
     queryKey: ["torneos"],
     queryFn: async () => {
@@ -22,8 +24,8 @@ export function DashboardPage() {
     <div className="page">
       <h1>Dashboard de Torneo</h1>
 
-      {torneosQuery.isLoading && <p>Cargando torneos...</p>}
-      {torneosQuery.isError && <p className="error-text">No se pudieron cargar los torneos.</p>}
+      {torneosQuery.isLoading && <p role="status">Cargando torneos...</p>}
+      {torneosQuery.isError && <p role="alert" className="error-text">No se pudieron cargar los torneos.</p>}
 
       {torneos.length > 0 && (
         <label className="torneo-picker">
@@ -69,23 +71,23 @@ function TablaPosiciones({ torneoId }: { torneoId: number }) {
   return (
     <section className="card">
       <h2>Tabla de posiciones</h2>
-      {query.isLoading && <p>Cargando...</p>}
-      {query.isError && <p className="error-text">No se pudo cargar la tabla.</p>}
+      {query.isLoading && <p role="status">Cargando...</p>}
+      {query.isError && <p role="alert" className="error-text">No se pudo cargar la tabla.</p>}
       {query.data && query.data.length === 0 && <p>Todavía no hay equipos inscriptos en este torneo.</p>}
       {query.data && query.data.length > 0 && (
-        <div className="table-scroll">
+        <div className="table-scroll" tabIndex={0} role="region" aria-label="Tabla de posiciones">
           <table>
             <thead>
               <tr>
-                <th>Equipo</th>
-                <th>PJ</th>
-                <th>PG</th>
-                <th>PE</th>
-                <th>PP</th>
-                <th>GF</th>
-                <th>GC</th>
-                <th>DG</th>
-                <th>Pts</th>
+                <th scope="col">Equipo</th>
+                <th scope="col">PJ</th>
+                <th scope="col">PG</th>
+                <th scope="col">PE</th>
+                <th scope="col">PP</th>
+                <th scope="col">GF</th>
+                <th scope="col">GC</th>
+                <th scope="col">DG</th>
+                <th scope="col">Pts</th>
               </tr>
             </thead>
             <tbody>
@@ -127,8 +129,8 @@ function Goleadores({ torneoId }: { torneoId: number }) {
   return (
     <section className="card">
       <h2>Goleadores</h2>
-      {query.isLoading && <p>Cargando...</p>}
-      {query.isError && <p className="error-text">No se pudieron cargar los goleadores.</p>}
+      {query.isLoading && <p role="status">Cargando...</p>}
+      {query.isError && <p role="alert" className="error-text">No se pudieron cargar los goleadores.</p>}
       {query.data && query.data.length === 0 && <p>Todavía no hay goles cargados.</p>}
       {query.data && query.data.length > 0 && (
         <ol className="goleadores-list">
@@ -160,8 +162,8 @@ function ProximosPartidos({ torneoId }: { torneoId: number }) {
   return (
     <section className="card">
       <h2>Próximos partidos</h2>
-      {query.isLoading && <p>Cargando...</p>}
-      {query.isError && <p className="error-text">No se pudieron cargar los próximos partidos.</p>}
+      {query.isLoading && <p role="status">Cargando...</p>}
+      {query.isError && <p role="alert" className="error-text">No se pudieron cargar los próximos partidos.</p>}
       {query.data && query.data.length === 0 && <p>No hay partidos programados.</p>}
       {query.data && query.data.length > 0 && (
         <ul className="partidos-list">

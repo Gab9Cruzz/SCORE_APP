@@ -45,8 +45,21 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {/* TASK-037 (UX-23): con teclado, el AdminGeneral tabulaba todo el menú
+          antes de llegar a la página. Primer elemento enfocable; visible
+          solo con foco. */}
+      <a
+        className="saltar-contenido"
+        href="#contenido"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById("contenido")?.focus();
+        }}
+      >
+        Saltar al contenido
+      </a>
       <NavBar />
-      <main>
+      <main id="contenido" tabIndex={-1}>
         <Routes>
           {/* portal-publico-feed-partidos-plan.md, T4.1/C16: "/" decide
               por sesión — es el único cambio de esta entrega que toca a

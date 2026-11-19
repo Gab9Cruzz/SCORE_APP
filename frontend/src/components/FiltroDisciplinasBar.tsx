@@ -56,7 +56,8 @@ interface FiltroDisciplinasBarProps {
  *    aplanarlas obligaría a leer "Fútbol 11" como hermana de "Tenis". La
  *    segunda fila es condicional.
  *
- * 3. `<button>` reales dentro de un `role="tablist"`, con `aria-pressed` y
+ * 3. `<button>` reales con `aria-pressed` dentro de un `role="group"` (no
+ *    `tablist`: una pestaña controla un panel y no lleva aria-pressed), y
  *    flechas ←→ para mover el foco. Un `<div onClick>` deja el filtro
  *    inalcanzable sin mouse, y el estado activo se marca con fondo sólido
  *    además del color (el color solo falla en monocromo y en WCAG).
@@ -82,7 +83,7 @@ export function FiltroDisciplinasBar(props: FiltroDisciplinasBarProps) {
   const filaEstados = useRef<HTMLDivElement>(null);
 
   /** Flechas ←→ mueven el foco entre los chips de la misma fila, que es lo
-   * que un `role="tablist"` promete. Sin esto el `role` es una mentira
+   * que un grupo de chips promete. Sin esto el teclado no llega
    * para un lector de pantalla. */
   function moverFoco(e: React.KeyboardEvent, contenedor: HTMLDivElement | null) {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
@@ -98,17 +99,15 @@ export function FiltroDisciplinasBar(props: FiltroDisciplinasBarProps) {
     <div className="filtro-disciplinas">
       <div
         className="filtro-disciplinas__fila"
-        role="tablist"
+        role="group"
         aria-label="Filtrar por disciplina"
         ref={filaDisciplinas}
         onKeyDown={(e) => moverFoco(e, filaDisciplinas.current)}
       >
         <button
           type="button"
-          role="tab"
           className={`chip-disciplina${disciplinaSeleccionada === null ? " chip-disciplina--activo" : ""}`}
           aria-pressed={disciplinaSeleccionada === null}
-          aria-selected={disciplinaSeleccionada === null}
           onClick={() => onSeleccionarDisciplina(null)}
         >
           <span className="chip-disciplina__icono" aria-hidden="true">
@@ -123,10 +122,8 @@ export function FiltroDisciplinasBar(props: FiltroDisciplinasBarProps) {
             <button
               key={d.id}
               type="button"
-              role="tab"
               className={`chip-disciplina${activo ? " chip-disciplina--activo" : ""}`}
               aria-pressed={activo}
-              aria-selected={activo}
               onClick={() => onSeleccionarDisciplina(activo ? null : d.id)}
             >
               <span className="chip-disciplina__icono" aria-hidden="true">
@@ -143,17 +140,15 @@ export function FiltroDisciplinasBar(props: FiltroDisciplinasBarProps) {
       {disciplinaSeleccionada !== null && modalidades.length > 1 && (
         <div
           className="filtro-disciplinas__fila filtro-disciplinas__fila--modalidades"
-          role="tablist"
+          role="group"
           aria-label="Filtrar por modalidad"
           ref={filaModalidades}
           onKeyDown={(e) => moverFoco(e, filaModalidades.current)}
         >
           <button
             type="button"
-            role="tab"
             className={`chip-modalidad${modalidadSeleccionada === null ? " chip-modalidad--activo" : ""}`}
             aria-pressed={modalidadSeleccionada === null}
-            aria-selected={modalidadSeleccionada === null}
             onClick={() => onSeleccionarModalidad(null)}
           >
             Todas
@@ -164,10 +159,8 @@ export function FiltroDisciplinasBar(props: FiltroDisciplinasBarProps) {
               <button
                 key={m.id}
                 type="button"
-                role="tab"
                 className={`chip-modalidad${activo ? " chip-modalidad--activo" : ""}`}
                 aria-pressed={activo}
-                aria-selected={activo}
                 onClick={() => onSeleccionarModalidad(activo ? null : m.id)}
               >
                 {m.nombre}
@@ -183,17 +176,15 @@ export function FiltroDisciplinasBar(props: FiltroDisciplinasBarProps) {
       {onSeleccionarEstado && estados.length > 1 && (
         <div
           className="filtro-disciplinas__fila filtro-disciplinas__fila--estados"
-          role="tablist"
+          role="group"
           aria-label="Filtrar por estado"
           ref={filaEstados}
           onKeyDown={(e) => moverFoco(e, filaEstados.current)}
         >
           <button
             type="button"
-            role="tab"
             className={`chip-modalidad${estadoSeleccionado === null ? " chip-modalidad--activo" : ""}`}
             aria-pressed={estadoSeleccionado === null}
-            aria-selected={estadoSeleccionado === null}
             onClick={() => onSeleccionarEstado(null)}
           >
             Todos los estados
@@ -204,10 +195,8 @@ export function FiltroDisciplinasBar(props: FiltroDisciplinasBarProps) {
               <button
                 key={e.valor}
                 type="button"
-                role="tab"
                 className={`chip-modalidad${activo ? " chip-modalidad--activo" : ""}`}
                 aria-pressed={activo}
-                aria-selected={activo}
                 onClick={() => onSeleccionarEstado(activo ? null : e.valor)}
               >
                 {e.nombre}

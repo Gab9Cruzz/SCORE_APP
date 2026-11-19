@@ -8,6 +8,7 @@ import { iconoDisciplina } from "../../components/iconosDisciplina";
 import { SelectorJugadorBuscable, type JugadorBuscadoRow } from "../../components/admin/SelectorJugadorBuscable";
 import { Modal } from "../../components/ui/Modal";
 import type { Esquema } from "../../api/types";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 interface EquipoDetalle {
   id: number;
@@ -75,11 +76,13 @@ export function DetalleEquipoPage() {
   const filas = plantillaBase.listQuery.data ?? [];
   const sinInscripciones = (inscripciones.listQuery.data ?? []).length === 0;
 
-  if (equipoQuery.isLoading) return <div className="page"><p>Cargando...</p></div>;
+  useTituloPagina(equipoQuery.data?.nombre ?? "Equipo");
+
+  if (equipoQuery.isLoading) return <div className="page"><p role="status">Cargando...</p></div>;
   if (equipoQuery.isError || !equipoQuery.data) {
     return (
       <div className="page">
-        <p className="error-text">No se pudo cargar el equipo.</p>
+        <p role="alert" className="error-text">No se pudo cargar el equipo.</p>
       </div>
     );
   }
@@ -114,8 +117,8 @@ export function DetalleEquipoPage() {
           <p className="error-text">{apiErrorMessage(plantillaBase.softDelete.error)}</p>
         )}
 
-        {plantillaBase.listQuery.isLoading && <p>Cargando...</p>}
-        {plantillaBase.listQuery.isError && <p className="error-text">No se pudo cargar la plantilla base.</p>}
+        {plantillaBase.listQuery.isLoading && <p role="status">Cargando...</p>}
+        {plantillaBase.listQuery.isError && <p role="alert" className="error-text">No se pudo cargar la plantilla base.</p>}
         {!plantillaBase.listQuery.isLoading && filas.length === 0 && (
           <p className="muted">Sin jugadores todavía. Buscá o creá el primero.</p>
         )}
@@ -124,10 +127,12 @@ export function DetalleEquipoPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Cédula</th>
-                  <th>Nombre</th>
-                  <th>Dorsal sugerido</th>
-                  <th></th>
+                  <th scope="col">Cédula</th>
+                  <th scope="col">Nombre</th>
+                  <th scope="col">Dorsal sugerido</th>
+                  <th scope="col">
+                <span className="sr-only">Acciones</span>
+              </th>
                 </tr>
               </thead>
               <tbody>

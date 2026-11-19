@@ -5,6 +5,7 @@ import { FiltrosRecurso } from "../../components/admin/FiltrosRecurso";
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
 import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 // Tipado desde el contrato GENERADO del backend (ver AccesosAdmin.test.tsx
 // para el mismo criterio): si AuditoriaOut gana o pierde un campo, esta
@@ -136,6 +137,7 @@ function resumirCambios(fila: AuditoriaRow): { resumen: string; completo: string
  * CUALQUIER entidad del sistema — por eso el filtro central es "Tabla" en
  * vez de "Resultado". */
 export function AuditoriaAdminPage() {
+  useTituloPagina("Auditoría");
   const [tablaFiltro, setTablaFiltro] = useState("");
   const [accionFiltro, setAccionFiltro] = useState("");
   const [registroIdFiltro, setRegistroIdFiltro] = useState("");

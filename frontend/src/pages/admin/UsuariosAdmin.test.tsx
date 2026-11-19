@@ -74,7 +74,7 @@ describe("UsuariosAdminPage (roles-3-modulos-plan.md, Fase 4)", () => {
     renderPagina();
     await screen.findByText("arbitro1");
 
-    await user.click(screen.getByRole("button", { name: "Editar" }));
+    await user.click(screen.getByRole("button", { name: /^Editar/ }));
 
     expect(screen.getByLabelText("Nueva contraseña (dejar en blanco para no cambiar)")).toHaveValue("");
     // El resto de los campos SÍ vienen precargados.
@@ -95,7 +95,7 @@ describe("UsuariosAdminPage (roles-3-modulos-plan.md, Fase 4)", () => {
     await screen.findByText("admin_test");
 
     // Solo una fila (la de "arbitro1") tiene botón de baja — la propia no.
-    expect(screen.getAllByRole("button", { name: "Dar de baja" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /^Dar de baja/ })).toHaveLength(1);
   });
 });
 

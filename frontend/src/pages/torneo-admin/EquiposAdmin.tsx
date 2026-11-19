@@ -8,6 +8,7 @@ import { ResourceTable, type ResourceTableColumn } from "../../components/admin/
 import { useCatalogo } from "../../hooks/useCatalogo";
 import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
 import { iconoDisciplina } from "../../components/iconosDisciplina";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 type Modo = { tipo: "lista" } | { tipo: "crear" } | { tipo: "editar"; fila: EquipoRow };
 
@@ -25,6 +26,7 @@ type Modo = { tipo: "lista" } | { tipo: "crear" } | { tipo: "editar"; fila: Equi
  * entrada más en `columnas` + un campo más en `EquipoOut`, no una
  * refactorización. */
 export function EquiposAdminPage() {
+  useTituloPagina("Equipos");
   const navigate = useNavigate();
   const catalogo = useCatalogo();
   const [modo, setModo] = useState<Modo>({ tipo: "lista" });

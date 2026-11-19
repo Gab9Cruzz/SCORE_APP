@@ -339,7 +339,7 @@ describe("TorneosAdminPage — barra de disciplinas (Fase 2 parte D)", () => {
     await screen.findByText("Liga Relámpago");
     expect(screen.getByText("Abierto de Tenis")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /Tenis/ }));
+    await user.click(screen.getByRole("button", { name: /Tenis/ }));
 
     expect(screen.getByText("Abierto de Tenis")).toBeInTheDocument();
     expect(screen.queryByText("Liga Relámpago")).not.toBeInTheDocument();
@@ -353,8 +353,8 @@ describe("TorneosAdminPage — barra de disciplinas (Fase 2 parte D)", () => {
   it("solo muestra chips de disciplinas que tienen torneos", async () => {
     montarConGrupos([GRUPOS_MIXTOS[2]]); // solo el de Tenis
 
-    expect(await screen.findByRole("tab", { name: /Tenis/ })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /Fútbol/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Tenis/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Fútbol/ })).not.toBeInTheDocument();
   });
 
   // T20 — segunda fila condicional: con una sola modalidad presente,
@@ -364,16 +364,16 @@ describe("TorneosAdminPage — barra de disciplinas (Fase 2 parte D)", () => {
     const user = userEvent.setup();
 
     await screen.findByText("Liga Relámpago");
-    expect(screen.queryByRole("tablist", { name: "Filtrar por modalidad" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Filtrar por modalidad" })).not.toBeInTheDocument();
 
     // Tenis tiene una sola modalidad con torneos → sin segunda fila.
-    await user.click(screen.getByRole("tab", { name: /Tenis/ }));
-    expect(screen.queryByRole("tablist", { name: "Filtrar por modalidad" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Tenis/ }));
+    expect(screen.queryByRole("group", { name: "Filtrar por modalidad" })).not.toBeInTheDocument();
 
     // Fútbol tiene dos → aparece, y filtra.
-    await user.click(screen.getByRole("tab", { name: /Fútbol/ }));
-    expect(screen.getByRole("tablist", { name: "Filtrar por modalidad" })).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "Fútbol 5" }));
+    await user.click(screen.getByRole("button", { name: /Fútbol/ }));
+    expect(screen.getByRole("group", { name: "Filtrar por modalidad" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Fútbol 5" }));
     expect(screen.getByText("Copa Fútbol 5")).toBeInTheDocument();
     expect(screen.queryByText("Liga Relámpago")).not.toBeInTheDocument();
   });
@@ -384,7 +384,7 @@ describe("TorneosAdminPage — barra de disciplinas (Fase 2 parte D)", () => {
     montarConGrupos(GRUPOS_MIXTOS);
     const user = userEvent.setup();
 
-    const todos = await screen.findByRole("tab", { name: /Todos/ });
+    const todos = await screen.findByRole("button", { name: /Todos/ });
     expect(todos).toHaveAttribute("aria-pressed", "true");
 
     todos.focus();
@@ -395,7 +395,7 @@ describe("TorneosAdminPage — barra de disciplinas (Fase 2 parte D)", () => {
     // Nombre exacto: al activar Fútbol aparece la segunda fila, y /Fútbol/
     // pasaría a matchear también el chip de modalidad "Fútbol 5". El emoji
     // no entra en el nombre accesible — va con aria-hidden, como debe ser.
-    expect(screen.getByRole("tab", { name: "Fútbol" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Fútbol" })).toHaveAttribute("aria-pressed", "true");
     expect(todos).toHaveAttribute("aria-pressed", "false");
   });
 
@@ -404,7 +404,7 @@ describe("TorneosAdminPage — barra de disciplinas (Fase 2 parte D)", () => {
     montarConGrupos([]);
 
     expect(await screen.findByText("No hay torneos creados todavía.")).toBeInTheDocument();
-    expect(screen.queryByRole("tablist", { name: "Filtrar por disciplina" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Filtrar por disciplina" })).not.toBeInTheDocument();
   });
 });
 
@@ -517,7 +517,7 @@ describe("TorneosAdminPage — filtro de Estado + persistencia en URL (3A-9/3A-1
     await screen.findByText("Liga Relámpago");
     expect(screen.getByText("Copa Fútbol 5")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Finalizado" }));
+    await user.click(screen.getByRole("button", { name: "Finalizado" }));
 
     expect(screen.getByText("Copa Fútbol 5")).toBeInTheDocument();
     expect(screen.queryByText("Liga Relámpago")).not.toBeInTheDocument();
@@ -529,7 +529,7 @@ describe("TorneosAdminPage — filtro de Estado + persistencia en URL (3A-9/3A-1
     const user = userEvent.setup();
 
     await screen.findByText("Liga Relámpago");
-    await user.click(screen.getByRole("tab", { name: /Fútbol/ }));
+    await user.click(screen.getByRole("button", { name: /Fútbol/ }));
 
     expect(screen.getByTestId("querystring")).toHaveTextContent("disciplina_id=1");
   });
@@ -550,11 +550,11 @@ describe("TorneosAdminPage — filtro de Estado + persistencia en URL (3A-9/3A-1
     // modalidad=3 (la de Copa Fútbol 5) para forzar el vacío real y
     // ejercitar los tres resets a la vez.
     await screen.findByText("Copa Fútbol 5");
-    await user.click(screen.getByRole("tab", { name: "Fútbol 5" }));
+    await user.click(screen.getByRole("button", { name: "Fútbol 5" }));
     // Fútbol 5 (modalidad_id=3, estado Finalizado) sigue matcheando Copa
     // Fútbol 5 — el vacío real se fuerza sumando un estado que ningún
     // grupo de Fútbol 5 tiene.
-    await user.click(screen.getByRole("tab", { name: "Activo" }));
+    await user.click(screen.getByRole("button", { name: "Activo" }));
 
     expect(await screen.findByText(/Ningún torneo de/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Ver todos" }));

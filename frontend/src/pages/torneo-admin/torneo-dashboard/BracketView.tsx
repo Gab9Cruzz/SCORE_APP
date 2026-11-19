@@ -127,7 +127,7 @@ export function BracketView({
   );
   const nombreEquipo = useNombrePorIdConFaltantes("/api/v1/equipos", nombreEquipoBase, idsEquiposBracket);
 
-  if (query.isLoading) return <p>Cargando bracket...</p>;
+  if (query.isLoading) return <p role="status">Cargando bracket...</p>;
   if (query.isError) return <p className="error-text">{apiErrorMessage(query.error)}</p>;
   const partidos = query.data ?? [];
   if (partidos.length === 0) return null;

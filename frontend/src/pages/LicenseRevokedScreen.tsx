@@ -1,3 +1,5 @@
+import { useTituloPagina } from "../hooks/useTituloPagina";
+
 /** Pantalla de bloqueo por licencia revocada (rbac-licencias-torneos-plan.md,
  * §5.2) — clon del patrón de `LoginPrompt` (`pages/Login.tsx`): nunca un
  * error crudo, una pantalla completa explicando qué pasó. `App.tsx` la
@@ -10,6 +12,7 @@
  * página entera, lo que resetea `licenseRevoked` a su valor inicial sin
  * tener que limpiarlo a mano acá. */
 export function LicenseRevokedScreen() {
+  useTituloPagina("Licencia inactiva");
   return (
     <div className="login-page">
       <div className="login-form login-form--prompt">

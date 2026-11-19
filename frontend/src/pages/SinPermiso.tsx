@@ -2,11 +2,13 @@ import { Link } from "react-router-dom";
 import type { Rol } from "../auth/authContextValue";
 import { landingPorRol } from "../auth/landing";
 import { useAuth } from "../auth/useAuth";
+import { useTituloPagina } from "../hooks/useTituloPagina";
 
 /** TASK-036 (UX-02): lo que ve alguien CON sesión que entra a una página
  * de otro rol. Antes leía "Necesitás iniciar sesión" con un enlace al
  * login, como si no la tuviera. */
 export function SinPermisoPage({ rolesRequeridos }: { rolesRequeridos: Rol[] }) {
+  useTituloPagina("Sin permiso");
   const { session } = useAuth();
   return (
     <div className="page estado-acceso">

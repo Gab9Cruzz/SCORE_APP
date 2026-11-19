@@ -195,7 +195,7 @@ export function ModalGestionarPlantilla(props: ModalGestionarPlantillaProps) {
       <p className="muted">{torneoContexto}</p>
 
       <h3>Jugadores actuales ({roster.length})</h3>
-      {cargandoRoster && <p>Cargando...</p>}
+      {cargandoRoster && <p role="status">Cargando...</p>}
       {!cargandoRoster && roster.length === 0 && (
         <p className="muted">Este equipo todavía no tiene jugadores en este torneo.</p>
       )}
@@ -204,10 +204,12 @@ export function ModalGestionarPlantilla(props: ModalGestionarPlantillaProps) {
           <table>
             <thead>
               <tr>
-                <th>Jugador</th>
-                <th>Dorsal</th>
-                <th>Estado</th>
-                <th></th>
+                <th scope="col">Jugador</th>
+                <th scope="col">Dorsal</th>
+                <th scope="col">Estado</th>
+                <th scope="col">
+                <span className="sr-only">Acciones</span>
+              </th>
               </tr>
             </thead>
             <tbody>

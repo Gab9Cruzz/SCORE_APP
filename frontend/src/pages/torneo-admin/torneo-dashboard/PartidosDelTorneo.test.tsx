@@ -114,11 +114,12 @@ describe("PartidosDelTorneoPage", () => {
     renderPagina();
     await screen.findByText("Halcones FC vs Tiburones FC");
 
-    expect(screen.queryByRole("button", { name: "Editar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Editar/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Walkover" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Detalle del Partido" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Asignar árbitro" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
+    // TASK-037: el nombre accesible dice qué partido se cancela.
+    expect(screen.getByRole("button", { name: "Cancelar partido Halcones FC vs Tiburones FC" })).toBeInTheDocument();
   });
 
   it("'Detalle del Partido' navega a /partidos/:id", async () => {

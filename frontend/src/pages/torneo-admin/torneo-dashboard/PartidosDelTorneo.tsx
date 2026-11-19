@@ -192,6 +192,12 @@ export function PartidosDelTorneoPage() {
             fila.equipos_id_visitante != null ? (nombreEquipo.get(fila.equipos_id_visitante) ?? "?") : "Por definir"
           }?`
         }
+        nombreFila={(fila) =>
+          `partido ${fila.equipos_id_local != null ? (nombreEquipo.get(fila.equipos_id_local) ?? "?") : "Por definir"} vs ${
+            fila.equipos_id_visitante != null ? (nombreEquipo.get(fila.equipos_id_visitante) ?? "?") : "Por definir"
+          }`
+        }
+        etiqueta="Partidos del torneo"
         softDeletePending={crud.softDelete.isPending}
         estadosDeBaja={["Cancelado"]}
         extraActions={(fila) => (

@@ -19,6 +19,7 @@ import {
   seleccionInicial,
 } from "./alineacion";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 /** Distingue "no hay red" de "el backend rechazó la request" — mismo criterio
  * que `MesaPanel`: `fetch` tira `TypeError` cuando no llega a conectar, un
@@ -348,15 +349,17 @@ export function GestionarPartidoPage() {
 
   const empezar = useEmpezarPartido(Number.isFinite(id) ? id : null);
 
+  useTituloPagina("Gestionar partido");
+
   if (!Number.isFinite(id)) return <div className="page"><p className="error-text">Partido inválido.</p></div>;
-  if (partidoQuery.isLoading) return <div className="page"><p>Cargando partido…</p></div>;
+  if (partidoQuery.isLoading) return <div className="page"><p role="status">Cargando partido…</p></div>;
   if (partidoQuery.isError || !partido) {
     return (
       <div className="page">
         <button type="button" className="link-button" onClick={volverALista}>
           ← Volver a la lista
         </button>
-        <p className="error-text">No se pudo cargar el partido.</p>
+        <p role="alert" className="error-text">No se pudo cargar el partido.</p>
         <button type="button" onClick={() => partidoQuery.refetch()}>Reintentar</button>
       </div>
     );
@@ -491,7 +494,7 @@ export function GestionarPartidoPage() {
               query, así que un equipo que falla no se lleva puesto al otro. */}
           {convocadosQuery.isError ? (
             <div className="card">
-              <p className="error-text">No se pudo cargar la convocatoria de este partido.</p>
+              <p role="alert" className="error-text">No se pudo cargar la convocatoria de este partido.</p>
               <button type="button" onClick={() => convocadosQuery.refetch()}>
                 Reintentar
               </button>

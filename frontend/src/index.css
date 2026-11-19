@@ -74,6 +74,34 @@ select {
   max-width: 100%;
 }
 
+/* TASK-037: un <button> sin clase quedaba con el gris nativo del navegador
+   (#6b6b6b, 4,46:1 con el texto: no llega a 4,5:1) y .link-button fuera de
+   .mesa/.filtros-recurso no tenía estilo. Ahora son la variante secundaria
+   y la de enlace de DESIGN.md. Van al principio: cualquier regla por
+   contexto (.page__header button, .table-actions button…) sigue ganando. */
+button:not([class]) {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: var(--espacio-1) 0;
+  cursor: pointer;
+}
+
+button:not([class]):disabled,
+.link-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* UX-24: los enlaces sin clase propia usaban el azul y el morado de
    "visitado" del navegador, fuera de la paleta. Va antes que las reglas por
    contexto (.nav-bar__links a, .admin-nav a…), que siguen ganando. */
@@ -368,6 +396,10 @@ main {
 
 .table-scroll {
   overflow-x: auto;
+  /* TASK-037: los encabezados "Acciones" van en .sr-only (absolute); sin
+     un ancestro posicionado se ubican respecto de la página, escapan del
+     scroll y ensanchan el documento en el celular. */
+  position: relative;
 }
 
 /* Cierre de Fase Regular + Llaves + Playoffs (Design review, Pass 2):
@@ -2256,6 +2288,36 @@ td:first-child {
 
 /* Solo para lectores de pantalla: la región aria-live que anuncia los
    movimientos. */
+/* TASK-037: un solo indicador de foco para toda la app, con el acento.
+   Solo con teclado (:focus-visible); el clic no deja el contorno. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* TASK-037 (UX-23): fuera de la pantalla hasta que recibe el foco. */
+.saltar-contenido {
+  position: absolute;
+  left: var(--espacio-4);
+  top: -100px;
+  z-index: 100;
+  padding: var(--espacio-2) var(--espacio-4);
+  background: var(--accent);
+  color: var(--texto-sobre-acento);
+  font-weight: 600;
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+
+.saltar-contenido:focus {
+  top: var(--espacio-2);
+}
+
+/* El destino del salto toma el foco por programa; no necesita contorno. */
+main:focus {
+  outline: none;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -2770,14 +2832,6 @@ td:first-child {
   margin: 0;
   font-size: var(--texto-sm);
   color: var(--danger);
-}
-
-/* <Table>: el encabezado "Acciones" va en .sr-only (position: absolute).
-   Sin un ancestro posicionado, ese span se ubica respecto de la página,
-   escapa del scroll horizontal de .table-scroll y ensancha el documento
-   en el celular. */
-.tabla {
-  position: relative;
 }
 
 /* Login y la página genérica de recursos ya ponían sus reglas a `label`

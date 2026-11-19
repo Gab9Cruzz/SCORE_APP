@@ -95,8 +95,8 @@ export function AsignarTorneosModal({ usuarioId, nombreUsuario, onClose }: Asign
 
   return (
     <Modal titulo={`Gestionar torneos — ${nombreUsuario}`} onCerrar={onClose}>
-      {cargando && <p>Cargando...</p>}
-      {!cargando && errorCarga && <p className="error-text">No se pudo cargar la lista.</p>}
+      {cargando && <p role="status">Cargando...</p>}
+      {!cargando && errorCarga && <p role="alert" className="error-text">No se pudo cargar la lista.</p>}
       {/* Estado vacío explícito (Design review, Pass 2 — T13): sin esto,
             un sistema sin torneos activos mostraba una lista en blanco sin
             explicación. */}

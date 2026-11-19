@@ -178,7 +178,7 @@ export function EstadisticasDelTorneoPage() {
       </div>
 
       <h3>Tabla de posiciones</h3>
-      {posicionesQuery.isLoading && <p>Cargando...</p>}
+      {posicionesQuery.isLoading && <p role="status">Cargando...</p>}
       {posicionesQuery.isError && <p className="error-text">{apiErrorMessage(posicionesQuery.error)}</p>}
       {definirOrdenManual.isError && <p className="error-text">{apiErrorMessage(definirOrdenManual.error)}</p>}
       {posicionesQuery.data?.length === 0 && <p className="muted">Sin partidos jugados todavía en esta edición.</p>}
@@ -218,13 +218,13 @@ export function EstadisticasDelTorneoPage() {
         <p className="muted">Mostrando los primeros {LIMITE_GOLEADORES} goleadores.</p>
       )}
       {!!goleadoresQuery.data?.length && (
-        <div className="table-scroll">
+        <div className="table-scroll" tabIndex={0} role="region" aria-label="Goleadores">
           <table>
             <thead>
               <tr>
-                <th>Jugador</th>
-                <th>Equipo</th>
-                <th>Goles</th>
+                <th scope="col">Jugador</th>
+                <th scope="col">Equipo</th>
+                <th scope="col">Goles</th>
               </tr>
             </thead>
             <tbody>
@@ -277,20 +277,20 @@ function TablaPosiciones({
   const hayColumnaDesempate = Boolean(onDefinirOrdenManual);
 
   return (
-    <div className="table-scroll">
+    <div className="table-scroll" tabIndex={0} role="region" aria-label="Tabla de posiciones">
       <table>
         <thead>
           <tr>
-            <th>Equipo</th>
-            <th>PJ</th>
-            <th>PG</th>
-            <th>PE</th>
-            <th>PP</th>
-            <th>GF</th>
-            <th>GC</th>
-            <th>DG</th>
-            <th>Pts</th>
-            {hayColumnaDesempate && <th>Desempate</th>}
+            <th scope="col">Equipo</th>
+            <th scope="col">PJ</th>
+            <th scope="col">PG</th>
+            <th scope="col">PE</th>
+            <th scope="col">PP</th>
+            <th scope="col">GF</th>
+            <th scope="col">GC</th>
+            <th scope="col">DG</th>
+            <th scope="col">Pts</th>
+            {hayColumnaDesempate && <th scope="col">Desempate</th>}
           </tr>
         </thead>
         <tbody>

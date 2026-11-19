@@ -6,6 +6,7 @@ import { useAuth } from "../../auth/useAuth";
 import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
 import { ESTADOS_OPERABLES, totalDeRespuesta } from "../../lib/partidosOperables";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 /** Dashboard de Control de Mesa: la lista de partidos operables.
  *
@@ -19,6 +20,7 @@ import { LOCALE, parsearFecha } from "../../lib/fechas";
  * sola vez, adentro del partido que el operador abrió.
  */
 export function ControlDeMesaPage() {
+  useTituloPagina("Control de Mesa");
   const { session } = useAuth();
   const navigate = useNavigate();
   const [torneoIdSeleccionado, setTorneoIdSeleccionado] = useState<number | null>(null);
@@ -121,8 +123,8 @@ export function ControlDeMesaPage() {
           </select>
         </label>
       )}
-      {partidosQuery.isLoading && <p>Cargando partidos...</p>}
-      {partidosQuery.isError && <p className="error-text">No se pudieron cargar los partidos.</p>}
+      {partidosQuery.isLoading && <p role="status">Cargando partidos...</p>}
+      {partidosQuery.isError && <p role="alert" className="error-text">No se pudieron cargar los partidos.</p>}
       {!partidosQuery.isLoading && seleccionables.length === 0 && (
         <p>No hay partidos programados ni en curso ahora mismo.</p>
       )}

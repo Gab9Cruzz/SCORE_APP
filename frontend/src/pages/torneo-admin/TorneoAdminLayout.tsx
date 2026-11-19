@@ -26,7 +26,7 @@ export function TorneoAdminLayout() {
     <RequireRole roles={["TorneoAdmin", "AdminGeneral"]}>
       <div className="page">
         <h1>Torneo Admin</h1>
-        <nav className="admin-nav">
+        <nav className="admin-nav" aria-label="Secciones de Torneo Admin">
           {PESTANIAS.map((p) => (
             <NavLink key={p.to} to={p.to} className={({ isActive }) => (isActive ? "active" : undefined)}>
               {p.label}

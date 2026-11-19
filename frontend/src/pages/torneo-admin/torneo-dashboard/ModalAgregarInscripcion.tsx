@@ -75,7 +75,7 @@ export function ModalAgregarInscripcion(props: ModalAgregarInscripcionProps) {
   if (tamanoEquipo == null) {
     return (
       <Modal etiqueta="Agregar inscripción" onCerrar={onClose}>
-        <p>Cargando...</p>
+        <p role="status">Cargando...</p>
       </Modal>
     );
   }
@@ -431,7 +431,7 @@ function ModalEquipo(props: {
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
             />
-            {equipos.listQuery.isLoading && <p>Cargando...</p>}
+            {equipos.listQuery.isLoading && <p role="status">Cargando...</p>}
             {!equipos.listQuery.isLoading && equiposDisponibles.length === 0 && (
               <p className="muted">
                 No hay {esPareja ? "parejas" : "equipos"} de {nombreDisciplina} con ese nombre.
@@ -497,10 +497,10 @@ function ModalEquipo(props: {
               <table>
                 <thead>
                   <tr>
-                    <th>Cédula</th>
-                    <th>Nombre</th>
-                    <th>Correo</th>
-                    <th>Dorsal</th>
+                    <th scope="col">Cédula</th>
+                    <th scope="col">Nombre</th>
+                    <th scope="col">Correo</th>
+                    <th scope="col">Dorsal</th>
                   </tr>
                 </thead>
                 <tbody>

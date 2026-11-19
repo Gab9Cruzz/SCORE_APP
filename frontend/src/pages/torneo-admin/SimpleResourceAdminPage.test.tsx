@@ -71,7 +71,7 @@ describe("SimpleResourceAdminPage", () => {
     renderPagina();
     await screen.findByText("Uno");
 
-    await user.click(screen.getByRole("button", { name: "Editar" }));
+    await user.click(screen.getByRole("button", { name: /^Editar/ }));
 
     expect(screen.getByLabelText("Nombre")).toHaveValue("Uno");
   });
@@ -88,7 +88,7 @@ describe("SimpleResourceAdminPage", () => {
     renderPagina();
     await screen.findByText("Uno");
 
-    await user.click(screen.getByRole("button", { name: "Dar de baja" }));
+    await user.click(screen.getByRole("button", { name: /^Dar de baja/ }));
     // TASK-038: la baja pide confirmación.
     await user.click(screen.getByRole("button", { name: "Confirmar" }));
 
@@ -101,7 +101,7 @@ describe("SimpleResourceAdminPage", () => {
     renderPagina();
     await screen.findByText("Uno");
 
-    await user.click(screen.getByRole("button", { name: "Dar de baja" }));
+    await user.click(screen.getByRole("button", { name: /^Dar de baja/ }));
     // TASK-038: la baja pide confirmación.
     await user.click(screen.getByRole("button", { name: "Confirmar" }));
 
@@ -112,9 +112,9 @@ describe("SimpleResourceAdminPage", () => {
     renderPagina((row) => row.id === 1);
     await screen.findByText("Uno");
 
-    expect(screen.queryByRole("button", { name: "Dar de baja" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Dar de baja/ })).not.toBeInTheDocument();
     // Editar sigue disponible — isSelf solo afecta la baja.
-    expect(screen.getByRole("button", { name: "Editar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Editar/ })).toBeInTheDocument();
   });
 
   it("muestra el error del backend inline al fallar la creación", async () => {

@@ -72,7 +72,7 @@ export function BarraDisciplinasPublica(props: BarraDisciplinasPublicaProps) {
   if (chips.length <= 1) return null;
 
   return (
-    <div className="barra-disciplinas-publica" role="tablist" aria-label="Filtrar por deporte">
+    <div className="barra-disciplinas-publica" role="group" aria-label="Filtrar por deporte">
       {chips.map((d) => {
         const activo = deporteSeleccionado === d.slug;
         const emoji = iconoDisciplina(d.nombre);
@@ -80,10 +80,8 @@ export function BarraDisciplinasPublica(props: BarraDisciplinasPublicaProps) {
           <button
             key={d.slug}
             type="button"
-            role="tab"
             className={`chip-disciplina chip-disciplina--publico${activo ? " chip-disciplina--activo" : ""}`}
             aria-pressed={activo}
-            aria-selected={activo}
             onClick={() => onSeleccionar(activo ? null : d.slug)}
           >
             <span className="chip-disciplina__icono" aria-hidden="true">

@@ -52,7 +52,7 @@ describe("ResourceTable", () => {
     render(
       <ResourceTable<Fila> rows={rows} columns={columnas} isLoading={false} isError={false} onSelect={onSelect} />,
     );
-    await user.click(screen.getByRole("button", { name: "Editar" }));
+    await user.click(screen.getByRole("button", { name: /^Editar/ }));
     expect(onSelect).toHaveBeenCalledWith(rows[0]);
   });
 
@@ -70,7 +70,7 @@ describe("ResourceTable", () => {
         onSoftDelete={() => {}}
       />,
     );
-    expect(screen.getAllByRole("button", { name: "Dar de baja" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /^Dar de baja/ })).toHaveLength(1);
   });
 
   it("isSelf oculta el botón de baja solo para la fila que matchea (Fase 4, D2a)", () => {
@@ -88,7 +88,7 @@ describe("ResourceTable", () => {
         isSelf={(row) => row.id === 1}
       />,
     );
-    expect(screen.getAllByRole("button", { name: "Dar de baja" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /^Dar de baja/ })).toHaveLength(1);
   });
 
   // TASK-038 (UX-06): la baja pide confirmación en la misma fila.
@@ -115,7 +115,7 @@ describe("ResourceTable", () => {
     const user = userEvent.setup();
     const { onSoftDelete, rows } = renderConBaja();
 
-    await user.click(screen.getAllByRole("button", { name: "Dar de baja" })[0]);
+    await user.click(screen.getAllByRole("button", { name: /^Dar de baja/ })[0]);
     expect(onSoftDelete).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Confirmar" }));
@@ -125,21 +125,21 @@ describe("ResourceTable", () => {
   it("la confirmación nombra el elemento afectado, o usa el texto de la pantalla", async () => {
     const user = userEvent.setup();
     renderConBaja();
-    await user.click(screen.getAllByRole("button", { name: "Dar de baja" })[0]);
+    await user.click(screen.getAllByRole("button", { name: /^Dar de baja/ })[0]);
     expect(screen.getByRole("alert")).toHaveTextContent("¿Dar de baja «Halcones FC»?");
   });
 
   it("acepta un texto propio con la consecuencia", async () => {
     const user = userEvent.setup();
     renderConBaja({ confirmacion: (r) => `Se cancela ${r.nombre}; sus jugadores quedan libres.` });
-    await user.click(screen.getAllByRole("button", { name: "Dar de baja" })[1]);
+    await user.click(screen.getAllByRole("button", { name: /^Dar de baja/ })[1]);
     expect(screen.getByRole("alert")).toHaveTextContent("Se cancela Tiburones FC; sus jugadores quedan libres.");
   });
 
   it("funciona solo con teclado: el foco va a 'Volver' y Escape cierra devolviendo el foco", async () => {
     const user = userEvent.setup();
     const { onSoftDelete } = renderConBaja();
-    const boton = screen.getAllByRole("button", { name: "Dar de baja" })[0];
+    const boton = screen.getAllByRole("button", { name: /^Dar de baja/ })[0];
 
     boton.focus();
     await user.keyboard("{Enter}");
@@ -147,7 +147,7 @@ describe("ResourceTable", () => {
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Dar de baja" })[0]).toHaveFocus();
+    expect(screen.getAllByRole("button", { name: /^Dar de baja/ })[0]).toHaveFocus();
     expect(onSoftDelete).not.toHaveBeenCalled();
 
     // Y confirmar también se puede con teclado.
@@ -158,12 +158,31 @@ describe("ResourceTable", () => {
     expect(onSoftDelete).toHaveBeenCalledTimes(1);
   });
 
+  // TASK-037 (UX-04): diez "Editar" iguales no le dicen nada a un lector de
+  // pantalla; el nombre accesible lleva la fila.
+  it("los botones de cada fila se anuncian con el nombre de la fila", () => {
+    renderConBaja({ onSelect: vi.fn() });
+    expect(screen.getByRole("button", { name: "Editar Halcones FC" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dar de baja Tiburones FC" })).toBeInTheDocument();
+  });
+
+  it("nombreFila reemplaza el nombre por defecto", () => {
+    renderConBaja({ onSelect: vi.fn(), nombreFila: (r) => `equipo ${r.id}` });
+    expect(screen.getByRole("button", { name: "Editar equipo 2" })).toBeInTheDocument();
+  });
+
+  it("la tabla tiene caption y encabezados de columna con scope", () => {
+    renderConBaja({ etiqueta: "Equipos inscritos" });
+    expect(screen.getByRole("table", { name: "Equipos inscritos" })).toBeInTheDocument();
+    for (const th of screen.getAllByRole("columnheader")) expect(th).toHaveAttribute("scope", "col");
+  });
+
   it("'Volver' cierra sin ejecutar", async () => {
     const user = userEvent.setup();
     const { onSoftDelete } = renderConBaja();
-    await user.click(screen.getAllByRole("button", { name: "Dar de baja" })[0]);
+    await user.click(screen.getAllByRole("button", { name: /^Dar de baja/ })[0]);
     await user.click(screen.getByRole("button", { name: "Volver" }));
     expect(onSoftDelete).not.toHaveBeenCalled();
-    expect(screen.getAllByRole("button", { name: "Dar de baja" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /^Dar de baja/ })).toHaveLength(2);
   });
 });

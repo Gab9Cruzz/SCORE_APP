@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { api, apiErrorMessage } from "../api/client";
 import { useAuth } from "../auth/useAuth";
+import { useTituloPagina } from "../hooks/useTituloPagina";
 
 /** Mínimo del backend (app/core/politica_password.py). Se repite acá solo
  * para avisar antes de enviar; quien decide es el backend. */
@@ -10,6 +11,7 @@ const LARGO_MINIMO = 10;
  * su contraseña. Cambiarla cierra las demás sesiones; esta sigue abierta con
  * el token nuevo que devuelve el backend. */
 export function MiCuentaPage() {
+  useTituloPagina("Mi cuenta");
   const { session, reemplazarToken } = useAuth();
   const [actual, setActual] = useState("");
   const [nueva, setNueva] = useState("");

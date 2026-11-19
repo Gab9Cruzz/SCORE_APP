@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../api/client";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 interface EquipoActivo {
   inscripcion_torneo_id: number;
@@ -63,7 +64,9 @@ export function PerfilJugadorAdminPage() {
     },
   });
 
-  if (query.isLoading) return <p>Cargando...</p>;
+  useTituloPagina(query.data?.nombre ?? "Jugador");
+
+  if (query.isLoading) return <p role="status">Cargando...</p>;
   if (query.isError) return <p className="error-text">{apiErrorMessage(query.error)}</p>;
   const perfil = query.data;
   if (!perfil) return null;
@@ -103,15 +106,15 @@ export function PerfilJugadorAdminPage() {
           {d.trayectoria.length === 0 ? (
             <p className="muted">Sin traspasos registrados en esta disciplina.</p>
           ) : (
-            <div className="table-scroll">
+            <div className="table-scroll" tabIndex={0} role="region" aria-label="Trayectoria">
               <table>
                 <thead>
                   <tr>
-                    <th>Fecha</th>
-                    <th>Origen</th>
-                    <th>Destino</th>
-                    <th>Motivo</th>
-                    <th>Estado</th>
+                    <th scope="col">Fecha</th>
+                    <th scope="col">Origen</th>
+                    <th scope="col">Destino</th>
+                    <th scope="col">Motivo</th>
+                    <th scope="col">Estado</th>
                   </tr>
                 </thead>
                 <tbody>

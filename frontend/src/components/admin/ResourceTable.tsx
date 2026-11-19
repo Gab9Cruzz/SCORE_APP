@@ -14,12 +14,13 @@ interface RowConEstado {
   estado?: string;
 }
 
-/** Cómo se nombra una fila en la confirmación cuando la pantalla no da un
- * texto propio: el primer campo que tenga entre nombre/username, o el id. */
-function nombreDeFila(row: RowConEstado): string {
+/** Cómo se nombra una fila cuando la pantalla no da `nombreFila`: el
+ * primer campo que tenga entre nombre/username, o el id. Se usa en la
+ * confirmación de baja y en el nombre accesible de los botones. */
+function nombrePorDefecto(row: RowConEstado): string {
   const r = row as unknown as Record<string, unknown>;
   for (const campo of ["nombre", "username"]) {
-    if (typeof r[campo] === "string" && r[campo] !== "") return `«${r[campo] as string}»`;
+    if (typeof r[campo] === "string" && r[campo] !== "") return r[campo] as string;
   }
   return `#${row.id}`;
 }
@@ -55,6 +56,12 @@ interface ResourceTableProps<T extends RowConEstado> {
    * pantalla explique la consecuencia ("Se cancelará la inscripción; sus
    * jugadores quedarán libres"). Default: "¿<softDeleteLabel> <nombre>?". */
   confirmacion?: (row: T) => string;
+  /** TASK-037 (UX-04): nombre de la fila para lectores de pantalla — los
+   * botones se anuncian "Editar Halcones FC", no diez "Editar" iguales.
+   * Default: `nombre`, `username` o `#id`. */
+  nombreFila?: (row: T) => string;
+  /** Nombre de la tabla (caption oculto). */
+  etiqueta?: string;
 }
 
 /** Tabla genérica de listado para el módulo Torneo Admin
@@ -77,6 +84,8 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
     puedeSoftDelete,
     extraActions,
     confirmacion,
+    nombreFila = nombrePorDefecto,
+    etiqueta,
   } = props;
 
   // TASK-038 (UX-06): la baja no se ejecuta con un clic. El botón abre una
@@ -119,6 +128,7 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
       error={isError}
       vacio={rows.length === 0}
       mensajeVacio={emptyMessage}
+      etiqueta={etiqueta}
     >
       {rows.map((row) => (
         <tr key={row.id}>
@@ -128,7 +138,7 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
           {tieneAcciones && confirmandoId === row.id && onSoftDelete && (
             <td className="table-actions table-actions--confirmando" onKeyDown={(e) => alPresionarTecla(e, row.id)}>
               <span role="alert" className="table-actions__pregunta">
-                {confirmacion ? confirmacion(row) : `¿${softDeleteLabel} ${nombreDeFila(row)}?`}
+                {confirmacion ? confirmacion(row) : `¿${softDeleteLabel} «${nombreFila(row)}»?`}
               </span>
               <Button
                 variante="peligro"
@@ -147,12 +157,17 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
           )}
           {tieneAcciones && confirmandoId !== row.id && (
             <td className="table-actions">
-              {onSelect && <Button onClick={() => onSelect(row)}>Editar</Button>}
+              {onSelect && (
+                <Button aria-label={`Editar ${nombreFila(row)}`} onClick={() => onSelect(row)}>
+                  Editar
+                </Button>
+              )}
               {onSoftDelete &&
                 !estadosDeBaja.includes(row.estado ?? "") &&
                 !isSelf?.(row) &&
                 (puedeSoftDelete?.(row) ?? true) && (
                   <Button
+                    aria-label={`${softDeleteLabel} ${nombreFila(row)}`}
                     ref={(el) => {
                       if (el) disparadores.current.set(row.id, el);
                       else disparadores.current.delete(row.id);

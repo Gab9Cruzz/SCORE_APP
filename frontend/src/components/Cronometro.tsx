@@ -324,11 +324,11 @@ export function Cronometro(props: {
   const segundosRestantes = deshacerHastaMs != null ? Math.ceil((deshacerHastaMs - now) / 1000) : null;
   const dentroDeVentanaDeshacer = segundosRestantes != null && segundosRestantes > 0;
 
-  if (estadoQuery.isLoading) return <section className="card cronometro"><p>Cargando cronómetro...</p></section>;
+  if (estadoQuery.isLoading) return <section className="card cronometro"><p role="status">Cargando cronómetro...</p></section>;
   if (estadoQuery.isError || !estadoQuery.data) {
     return (
       <section className="card cronometro">
-        <p className="error-text">No se pudo cargar el cronómetro (¿el torneo tiene configuración de tiempos?).</p>
+        <p role="alert" className="error-text">No se pudo cargar el cronómetro (¿el torneo tiene configuración de tiempos?).</p>
       </section>
     );
   }

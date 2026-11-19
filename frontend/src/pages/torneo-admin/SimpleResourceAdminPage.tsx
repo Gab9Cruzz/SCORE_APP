@@ -5,6 +5,7 @@ import { ResourceForm, type ResourceFieldValue, type ResourceFormField, type Val
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
 import { Button } from "../../components/ui/Button";
 import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 interface RowBase {
   id: number;
@@ -41,6 +42,8 @@ export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResou
     props;
   const crud = useResourceCrud<TOut, ValoresFormulario, ValoresFormulario>({ resourceKey, basePath });
   const [modo, setModo] = useState<Modo<TOut>>({ tipo: "lista" });
+
+  useTituloPagina(modo.tipo === "crear" ? `Nuevo — ${title}` : modo.tipo === "editar" ? `Editar — ${title}` : title);
 
   function volver() {
     setModo({ tipo: "lista" });
@@ -120,6 +123,7 @@ export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResou
         isSelf={isSelf}
         extraActions={renderRowExtra}
         confirmacion={confirmacionBaja}
+        etiqueta={title}
       />
     </div>
   );

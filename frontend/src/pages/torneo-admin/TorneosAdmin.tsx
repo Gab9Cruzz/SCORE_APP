@@ -8,6 +8,7 @@ import { Button } from "../../components/ui/Button";
 import { useCatalogo } from "../../hooks/useCatalogo";
 import { FiltroDisciplinasBar } from "../../components/FiltroDisciplinasBar";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 interface EdicionResumen {
   id: number;
@@ -115,6 +116,7 @@ function edicionParaAbrir(grupo: TorneoGrupo): EdicionResumen {
 }
 
 export function TorneosAdminPage() {
+  useTituloPagina("Torneos");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { session } = useAuth();
@@ -778,7 +780,7 @@ export function TorneosAdminPage() {
         />
       )}
 
-      {gruposQuery.isLoading && <p>Cargando...</p>}
+      {gruposQuery.isLoading && <p role="status">Cargando...</p>}
       {gruposQuery.isError && <p className="error-text">{apiErrorMessage(gruposQuery.error)}</p>}
       {grupos.length === 0 && !gruposQuery.isLoading && (
         <p className="muted">No hay torneos creados todavía.</p>
@@ -924,9 +926,9 @@ function PanelEditarDesempate(props: {
     },
   });
 
-  if (torneoQuery.isLoading) return <div className="page"><p>Cargando...</p></div>;
+  if (torneoQuery.isLoading) return <div className="page"><p role="status">Cargando...</p></div>;
   if (torneoQuery.isError || !torneoQuery.data) {
-    return <div className="page"><p className="error-text">No se pudo cargar el torneo.</p></div>;
+    return <div className="page"><p role="alert" className="error-text">No se pudo cargar el torneo.</p></div>;
   }
   const torneo = torneoQuery.data;
   const tipoCronometro = torneo.config_tiempo?.tipo_cronometro ?? "Periodos";

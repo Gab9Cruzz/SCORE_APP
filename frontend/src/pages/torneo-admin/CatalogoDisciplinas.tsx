@@ -2,6 +2,7 @@ import type { Modalidad as ModalidadRow } from "../../api/types";
 import { apiErrorMessage } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 interface DisciplinaRow {
   id: number;
@@ -24,6 +25,7 @@ interface DisciplinaRow {
  * criterio que PerfilJugadorAdmin.tsx para una vista de solo lectura que
  * no encaja en el molde CRUD genérico. */
 export function CatalogoDisciplinasPage() {
+  useTituloPagina("Catálogo de disciplinas");
   // TASK-013 (SEC-04): catálogo de sistema, afecta a todos los torneos.
   // Solo AdminGeneral lo modifica; el backend responde 403 al resto.
   const { session } = useAuth();
@@ -70,8 +72,8 @@ export function CatalogoDisciplinasPage() {
       {catalogo.customAction.isError && (
         <p className="error-text">{apiErrorMessage(catalogo.customAction.error)}</p>
       )}
-      {catalogo.listQuery.isLoading && <p>Cargando...</p>}
-      {catalogo.listQuery.isError && <p className="error-text">No se pudo cargar el catálogo.</p>}
+      {catalogo.listQuery.isLoading && <p role="status">Cargando...</p>}
+      {catalogo.listQuery.isError && <p role="alert" className="error-text">No se pudo cargar el catálogo.</p>}
 
       <div className="catalogo-disciplinas">
         {catalogo.listQuery.data?.map((d) => (
@@ -94,10 +96,12 @@ export function CatalogoDisciplinasPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Modalidad</th>
-                      <th>Tamaño de equipo</th>
-                      <th>Estado</th>
-                      <th></th>
+                      <th scope="col">Modalidad</th>
+                      <th scope="col">Tamaño de equipo</th>
+                      <th scope="col">Estado</th>
+                      <th scope="col">
+                <span className="sr-only">Acciones</span>
+              </th>
                     </tr>
                   </thead>
                   <tbody>

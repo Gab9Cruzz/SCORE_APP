@@ -5,6 +5,7 @@ import { api, apiErrorMessage } from "../../../api/client";
 import { ResourceForm, type ResourceFormField } from "../../../components/admin/ResourceForm";
 import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
 import { LOCALE, parsearFecha } from "../../../lib/fechas";
+import { useTituloPagina } from "../../../hooks/useTituloPagina";
 
 interface TorneoRow {
   id: number;
@@ -181,10 +182,16 @@ export function TorneoDashboardPage() {
     estadoAnteriorRef.current = estadoActual;
   }, [torneoQuery.data?.estado]);
 
+  useTituloPagina(
+    torneoQuery.data && grupoQuery.data
+      ? `${grupoQuery.data.nombre} — Edición ${torneoQuery.data.numero_edicion}`
+      : "Torneo",
+  );
+
   if (torneoQuery.isLoading) {
     return (
       <div className="page">
-        <p>Cargando...</p>
+        <p role="status">Cargando...</p>
       </div>
     );
   }
@@ -282,7 +289,7 @@ export function TorneoDashboardPage() {
           />
         )}
       </div>
-      <nav className="admin-nav">
+      <nav className="admin-nav" aria-label="Secciones del torneo">
         {SUBPESTANIAS.map((p) => (
           <NavLink key={p.to} to={p.to} className={({ isActive }) => (isActive ? "active" : undefined)}>
             {p.label}

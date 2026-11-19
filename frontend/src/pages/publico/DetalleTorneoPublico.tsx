@@ -7,6 +7,7 @@ import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
 import { BracketView } from "../torneo-admin/torneo-dashboard/BracketView";
 import { formatearResultadoDesempate, fraseResultadoDesempate } from "../../lib/desempate";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 interface TorneoDetalle {
   id: number;
@@ -149,6 +150,8 @@ export function DetalleTorneoPublicoPage() {
     enabled: torneoQuery.isSuccess,
   });
 
+  useTituloPagina(grupoQuery.data?.nombre ?? torneoQuery.data?.nombre);
+
   if (!Number.isFinite(id)) {
     return (
       <div className="page publico">
@@ -160,7 +163,7 @@ export function DetalleTorneoPublicoPage() {
   if (torneoQuery.isLoading) {
     return (
       <div className="page publico">
-        <p>Cargando torneo...</p>
+        <p role="status">Cargando torneo...</p>
       </div>
     );
   }
@@ -230,7 +233,7 @@ export function DetalleTorneoPublicoPage() {
 
       {tabEfectiva === "posiciones" && formato !== "Eliminacion" && (
         <section className="card">
-          {posicionesQuery.isLoading && <p>Cargando...</p>}
+          {posicionesQuery.isLoading && <p role="status">Cargando...</p>}
           {posicionesQuery.isError && <p className="error-text">{apiErrorMessage(posicionesQuery.error)}</p>}
           {/* D8c: un torneo recién creado no muestra tres tablas de ceros
               — la primera impresión honesta es que todavía no hay nada
@@ -245,7 +248,7 @@ export function DetalleTorneoPublicoPage() {
 
       {tabEfectiva === "resultados" && (
         <section className="card">
-          {resultadosQuery.isLoading && <p>Cargando...</p>}
+          {resultadosQuery.isLoading && <p role="status">Cargando...</p>}
           {resultadosQuery.isError && <p className="error-text">{apiErrorMessage(resultadosQuery.error)}</p>}
           {resultadosQuery.data?.length === 0 && (
             <p className="muted">Todavía no hay partidos programados en este torneo.</p>
@@ -296,17 +299,17 @@ export function DetalleTorneoPublicoPage() {
 
       {tabEfectiva === "goleadores" && (
         <section className="card">
-          {goleadoresQuery.isLoading && <p>Cargando...</p>}
+          {goleadoresQuery.isLoading && <p role="status">Cargando...</p>}
           {goleadoresQuery.isError && <p className="error-text">{apiErrorMessage(goleadoresQuery.error)}</p>}
           {goleadoresQuery.data?.length === 0 && <p className="muted">Todavía no hay goles registrados.</p>}
           {!!goleadoresQuery.data?.length && (
-            <div className="table-scroll">
+            <div className="table-scroll" tabIndex={0} role="region" aria-label="Goleadores">
               <table>
                 <thead>
                   <tr>
-                    <th>Jugador</th>
-                    <th>Equipo</th>
-                    <th>Goles</th>
+                    <th scope="col">Jugador</th>
+                    <th scope="col">Equipo</th>
+                    <th scope="col">Goles</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -358,19 +361,25 @@ function TablaPosicionesPublica({ filas }: { filas: PosicionRow[] }) {
       {[...porGrupo.values()].map((grupoFilas) => {
         const empatados = idsEmpatadosPublico(grupoFilas);
         return (
-          <div className="table-scroll" key={grupoFilas[0]?.equipo_id}>
+          <div
+            className="table-scroll"
+            key={grupoFilas[0]?.equipo_id}
+            tabIndex={0}
+            role="region"
+            aria-label="Tabla de posiciones"
+          >
             <table>
               <thead>
                 <tr>
-                  <th>Equipo</th>
-                  <th>PJ</th>
-                  <th>PG</th>
-                  <th>PE</th>
-                  <th>PP</th>
-                  <th>GF</th>
-                  <th>GC</th>
-                  <th>DG</th>
-                  <th>Pts</th>
+                  <th scope="col">Equipo</th>
+                  <th scope="col">PJ</th>
+                  <th scope="col">PG</th>
+                  <th scope="col">PE</th>
+                  <th scope="col">PP</th>
+                  <th scope="col">GF</th>
+                  <th scope="col">GC</th>
+                  <th scope="col">DG</th>
+                  <th scope="col">Pts</th>
                 </tr>
               </thead>
               <tbody>

@@ -6,6 +6,7 @@ import { useAuth } from "../../auth/useAuth";
 import { useNavigate } from "react-router-dom";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
 import { Button } from "../../components/ui/Button";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 /** Landing del módulo Árbitro (roles-3-modulos-plan.md, Fase 3).
  *
@@ -18,6 +19,7 @@ import { Button } from "../../components/ui/Button";
  * reusa `MesaPanel` tal cual (D4) — sin duplicar la carga de eventos.
  */
 export function MisPartidosPage() {
+  useTituloPagina("Mis partidos");
   const { session, recargarUsuario } = useAuth();
   const navigate = useNavigate();
   const [reintentando, setReintentando] = useState(false);
@@ -66,8 +68,8 @@ export function MisPartidosPage() {
           </Button>
         </div>
       )}
-      {partidosQuery.isLoading && <p>Cargando tus partidos...</p>}
-      {partidosQuery.isError && <p className="error-text">No se pudieron cargar tus partidos.</p>}
+      {partidosQuery.isLoading && <p role="status">Cargando tus partidos...</p>}
+      {partidosQuery.isError && <p role="alert" className="error-text">No se pudieron cargar tus partidos.</p>}
       {!partidosQuery.isLoading && session?.id !== undefined && activos.length === 0 && (
         <p>No tenés partidos asignados por ahora.</p>
       )}

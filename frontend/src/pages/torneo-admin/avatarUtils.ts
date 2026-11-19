@@ -13,8 +13,8 @@ const PALETA_AVATAR = [
   "#3a5a8c",
   "#8c4a3a",
   "#6b4a8c",
-  "#4a8c7c",
-  "#8c7a3a",
+  "#427d6f", // TASK-037: era #4a8c7c, 3,9:1 con el blanco de las iniciales
+  "#837236", // TASK-037: era #8c7a3a, 4,2:1
   "#3a748c",
   "#8c3a6b",
 ];

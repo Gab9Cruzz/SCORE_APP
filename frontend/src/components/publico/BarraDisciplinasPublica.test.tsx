@@ -40,8 +40,8 @@ describe("BarraDisciplinasPublica (portal-publico-feed-partidos-plan.md, T2.2/C8
       ),
     );
     renderBarra();
-    expect(await screen.findByRole("tab", { name: /Fútbol/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Tenis/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Fútbol/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tenis/ })).toBeInTheDocument();
   });
 
   it("clickear una pill activa llama onSeleccionar(null) — toggle apaga el filtro", async () => {
@@ -55,8 +55,8 @@ describe("BarraDisciplinasPublica (portal-publico-feed-partidos-plan.md, T2.2/C8
     );
     const user = userEvent.setup();
     const { onSeleccionar } = renderBarra("futbol");
-    const pill = await screen.findByRole("tab", { name: /Fútbol/ });
-    expect(pill).toHaveAttribute("aria-selected", "true");
+    const pill = await screen.findByRole("button", { name: /Fútbol/ });
+    expect(pill).toHaveAttribute("aria-pressed", "true");
     await user.click(pill);
     expect(onSeleccionar).toHaveBeenCalledWith(null);
   });
@@ -71,7 +71,7 @@ describe("BarraDisciplinasPublica (portal-publico-feed-partidos-plan.md, T2.2/C8
       ),
     );
     renderBarra("baloncesto");
-    const pill = await screen.findByRole("tab", { name: /baloncesto/i });
-    expect(pill).toHaveAttribute("aria-selected", "true");
+    const pill = await screen.findByRole("button", { name: /baloncesto/i });
+    expect(pill).toHaveAttribute("aria-pressed", "true");
   });
 });

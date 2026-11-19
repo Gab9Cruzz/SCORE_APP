@@ -495,12 +495,12 @@ export function MesaPanel({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["eventos-partido", partidoId] }),
   });
 
-  if (partidoQuery.isLoading) return <div className="page"><p>Cargando partido...</p></div>;
+  if (partidoQuery.isLoading) return <div className="page"><p role="status">Cargando partido...</p></div>;
   if (partidoQuery.isError || !partidoQuery.data) {
     return (
       <div className="page">
         {onVolver && <button type="button" onClick={onVolver}>← Volver</button>}
-        <p className="error-text">No se pudo cargar el partido.</p>
+        <p role="alert" className="error-text">No se pudo cargar el partido.</p>
       </div>
     );
   }

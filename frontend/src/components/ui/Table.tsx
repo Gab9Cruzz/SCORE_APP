@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Estado } from "./Estado";
 
 interface TableProps {
   /** Títulos de columna. `null` deja la celda de encabezado vacía a la
@@ -28,17 +29,20 @@ export function Table({
   mensajeVacio = "No hay elementos.",
   etiqueta,
 }: TableProps) {
-  if (cargando) return <p>Cargando...</p>;
-  if (error) return <p className="error-text">{typeof error === "string" ? error : "No se pudo cargar la lista."}</p>;
-  if (vacio) return <p>{mensajeVacio}</p>;
+  if (cargando) return <Estado tipo="cargando" />;
+  if (error) return <Estado tipo="error">{typeof error === "string" ? error : undefined}</Estado>;
+  if (vacio) return <Estado tipo="vacio">{mensajeVacio}</Estado>;
 
   return (
-    <div className="table-scroll tabla">
-      <table aria-label={etiqueta}>
+    <div className="table-scroll">
+      <table>
+        {etiqueta && <caption className="sr-only">{etiqueta}</caption>}
         <thead>
           <tr>
             {encabezados.map((e, i) => (
-              <th key={i}>{e ?? <span className="sr-only">Acciones</span>}</th>
+              <th key={i} scope="col">
+                {e ?? <span className="sr-only">Acciones</span>}
+              </th>
             ))}
           </tr>
         </thead>

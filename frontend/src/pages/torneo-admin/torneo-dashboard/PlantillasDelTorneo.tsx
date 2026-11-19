@@ -309,7 +309,7 @@ export function PlantillasDelTorneoPage() {
         </div>
       </div>
 
-      {cargando && <p>Cargando...</p>}
+      {cargando && <p role="status">Cargando...</p>}
       {/* 3A-5: LIMITE_LISTA es sobre los vínculos (crud), no sobre los
           equipos agrupados — un torneo con muchos equipos chicos puede
           tocar el techo aunque `gruposPorEquipo.length` sea bajo. */}

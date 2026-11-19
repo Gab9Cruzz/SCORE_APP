@@ -151,6 +151,8 @@ function VistaIndividual(props: {
         softDeletePending={inscripciones.update.isPending}
         estadosDeBaja={["Cancelado"]}
         confirmacion={(fila) => `¿Cancelar la inscripción de «${nombrePorPerfilId(fila.jugador_perfil_id)}»?`}
+        nombreFila={(fila) => nombrePorPerfilId(fila.jugador_perfil_id)}
+        etiqueta="Jugadores inscritos"
       />
       {modalAbierto && (
         <ModalAgregarInscripcion
@@ -273,6 +275,8 @@ function VistaEquipo(props: {
         confirmacion={(fila) =>
           `¿Cancelar la inscripción de «${nombreEquipo.get(fila.equipo_id ?? -1) ?? `#${fila.equipo_id}`}»? Sus jugadores quedan libres en esta edición.`
         }
+        nombreFila={(fila) => nombreEquipo.get(fila.equipo_id ?? -1) ?? `#${fila.equipo_id}`}
+        etiqueta={esPareja ? "Parejas inscritas" : "Equipos inscritos"}
         extraActions={(fila) => (
           <>
             <button type="button" className="link-button" onClick={() => setGestionandoPlantillaDe(fila)}>

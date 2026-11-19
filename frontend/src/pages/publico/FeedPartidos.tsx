@@ -5,6 +5,7 @@ import { api, apiErrorMessage } from "../../api/client";
 import { BloqueTorneo, type BloqueTorneoData } from "../../components/publico/BloqueTorneo";
 import type { FilaPartidoData } from "../../components/publico/FilaPartido";
 import { LOCALE, hoyISO, sumarDias } from "../../lib/fechas";
+import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 interface FeedResponse {
   fecha_pedida: string;
@@ -41,6 +42,7 @@ function nombreDeporte(slug: string): string {
  * cual, con su propio empty state si no tiene partidos.
  */
 export function FeedPartidosPage() {
+  useTituloPagina("Partidos");
   const [searchParams, setSearchParams] = useSearchParams();
   const deporteSlug = searchParams.get("deporte");
   const fechaUrl = searchParams.get("fecha");
@@ -101,6 +103,9 @@ export function FeedPartidosPage() {
 
   return (
     <div className="page publico feed-partidos">
+      {/* UX-22: la página no tenía h1; la fecha y las tarjetas ya dicen qué
+          es a la vista, el encabezado es para lectores de pantalla. */}
+      <h1 className="sr-only">Partidos</h1>
       <div className="feed-partidos__toolbar">
         <div className="feed-partidos__selector-fecha">
           <button type="button" className="link-button" onClick={() => navegarDia(-1)} aria-label="Día anterior">

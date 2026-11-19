@@ -121,7 +121,7 @@ export function ModalPerfilJugador(props: ModalPerfilJugadorProps) {
       sinGuardar={editando}
       cierreBloqueado={jugadores.update.isPending}
     >
-      {query.isLoading && <p>Cargando...</p>}
+      {query.isLoading && <p role="status">Cargando...</p>}
       {query.isError && <p className="error-text">{apiErrorMessage(query.error)}</p>}
 
       {perfil && !editando && (
@@ -166,15 +166,15 @@ export function ModalPerfilJugador(props: ModalPerfilJugadorProps) {
               {d.trayectoria.length === 0 ? (
                 <p className="muted">Sin traspasos registrados en esta disciplina.</p>
               ) : (
-                <div className="table-scroll">
+                <div className="table-scroll" tabIndex={0} role="region" aria-label="Trayectoria">
                   <table>
                     <thead>
                       <tr>
-                        <th>Fecha</th>
-                        <th>Origen</th>
-                        <th>Destino</th>
-                        <th>Motivo</th>
-                        <th>Estado</th>
+                        <th scope="col">Fecha</th>
+                        <th scope="col">Origen</th>
+                        <th scope="col">Destino</th>
+                        <th scope="col">Motivo</th>
+                        <th scope="col">Estado</th>
                       </tr>
                     </thead>
                     <tbody>
