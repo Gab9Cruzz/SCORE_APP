@@ -3,6 +3,11 @@
   --surface: #171f30;
   --surface-alt: #1f2a40;
   --border: #2b3654;
+  /* TASK-034: borde de los campos de formulario. --border (1,2:1 sobre
+     --surface-alt) no alcanza el 3:1 que pide WCAG 1.4.11 para el contorno
+     de un control; este da 3,4:1 sobre --surface-alt y 3,9:1 sobre
+     --surface. Solo para campos: tarjetas y tablas siguen con --border. */
+  --border-campo: #6b7ba3;
   --text: #e6ebf5;
   --text-muted: #93a0bd;
   --accent: #4fd1c5;
@@ -10,6 +15,25 @@
   --danger: #ef6a6a;
   --warning: #e0b23a;
   --radius: 10px;
+  /* Texto sobre --accent (botón primario): 9:1. */
+  --texto-sobre-acento: #05201d;
+
+  /* TASK-034 — escalas de DESIGN.md. Para código nuevo y para lo que se
+     migre; las reglas viejas siguen con sus valores hasta que se toquen. */
+  --espacio-1: 0.25rem;
+  --espacio-2: 0.5rem;
+  --espacio-3: 0.75rem;
+  --espacio-4: 1rem;
+  --espacio-5: 1.5rem;
+  --espacio-6: 2rem;
+  --espacio-7: 3rem;
+
+  --texto-xs: 0.75rem;
+  --texto-sm: 0.85rem;
+  --texto-md: 1rem;
+  --texto-lg: 1.25rem;
+  --texto-xl: 1.5rem;
+  --texto-2xl: 2rem;
   /* Cierre de Fase Regular + Llaves + Playoffs (Design review, Pass 1) —
      colores del podio como tokens, nunca hardcodeados en el componente. */
   --podio-oro: #d4af37;
@@ -305,7 +329,7 @@ td:first-child {
 
 .torneo-picker select {
   background: var(--surface-alt);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-campo);
   color: var(--text);
   padding: 0.4rem 0.6rem;
   border-radius: var(--radius);
@@ -410,7 +434,7 @@ td:first-child {
 
 .login-form input {
   background: var(--surface-alt);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-campo);
   border-radius: var(--radius);
   padding: 0.6rem 0.7rem;
 }
@@ -693,7 +717,7 @@ td:first-child {
 
 .confirmar-evento input {
   background: var(--surface-alt);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-campo);
   color: var(--text);
   padding: 0.6rem;
   border-radius: var(--radius);
@@ -807,7 +831,7 @@ td:first-child {
 
 .editor-fecha-partido input {
   background: var(--surface-alt);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-campo);
   color: var(--text);
   padding: 0.4rem;
   border-radius: var(--radius);
@@ -1037,7 +1061,7 @@ td:first-child {
   color: var(--text);
 }
 
-.table-actions button.button-danger {
+.table-actions .boton--peligro {
   border-color: var(--danger);
   color: var(--danger);
 }
@@ -1080,7 +1104,7 @@ td:first-child {
 .resource-form input,
 .resource-form select {
   background: var(--surface-alt);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-campo);
   color: var(--text);
   padding: 0.55rem 0.6rem;
   border-radius: var(--radius);
@@ -1321,7 +1345,7 @@ td:first-child {
 .filtros-recurso select,
 .filtros-recurso input {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-campo);
   border-radius: var(--radius);
   color: var(--text);
   padding: 0.45rem 0.55rem;
@@ -2499,4 +2523,107 @@ td:first-child {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+/* ==========================================================================
+   TASK-034 — componentes base (src/components/ui/). Ver DESIGN.md.
+
+   Especificidad baja a propósito (una clase): las reglas por contexto que
+   ya existen (`.page__header button`, `.table-actions button`,
+   `.resource-form__actions button[type="submit"]`, `.login-form button`)
+   siguen ganando, así una pantalla que pasa a usar <Button> se ve igual.
+   ========================================================================== */
+
+.boton {
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 0.55rem var(--espacio-4);
+  cursor: pointer;
+}
+
+.boton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.boton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.boton--primario {
+  background: var(--accent);
+  color: var(--texto-sobre-acento);
+  font-weight: 600;
+}
+
+.boton--secundario {
+  background: var(--surface-alt);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.boton--peligro {
+  background: var(--surface-alt);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.boton--enlace {
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: var(--espacio-2) 0;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.campo__etiqueta {
+  font-size: var(--texto-sm);
+}
+
+.campo__control {
+  background: var(--surface-alt);
+  border: 1px solid var(--border-campo);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 0.55rem 0.6rem;
+}
+
+.campo__control[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.campo__ayuda {
+  margin: 0;
+  font-size: var(--texto-sm);
+  color: var(--text-muted);
+}
+
+.campo__error {
+  margin: 0;
+  font-size: var(--texto-sm);
+  color: var(--danger);
+}
+
+/* <Table>: el encabezado "Acciones" va en .sr-only (position: absolute).
+   Sin un ancestro posicionado, ese span se ubica respecto de la página,
+   escapa del scroll horizontal de .table-scroll y ensancha el documento
+   en el celular. */
+.tabla {
+  position: relative;
+}
+
+/* Login y la página genérica de recursos ya ponían sus reglas a `label`
+   envolviendo el control; con <Field> la etiqueta es hermana del control y
+   el contenedor de los dos es .campo. */
+/* Antes el control vivía dentro del <label> y heredaba su 0.9rem; se
+   conserva en estas dos zonas para que la migración no cambie el aspecto. */
+.login-form .campo,
+.resource-form .campo {
+  font-size: 0.9rem;
 }

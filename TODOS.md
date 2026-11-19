@@ -74,6 +74,9 @@ retomarlo — acá solo queda lo que sigue abierto.
   quedó desactualizada (`QA-02`) sin que nadie lo notara. Corre backend
   (con PostgreSQL 16), frontend y el contrato de `schema.d.ts` en cada
   push y PR. `verificar.ps1` sigue siendo la verificación local.
+- **`DESIGN.md`** (TASK-034, 2026-11-19). Estaba en el backlog sin urgencia
+  ("recomendado por 5 planes, nunca ejecutado"). Describe la paleta, las
+  escalas y los cuatro componentes base de `frontend/src/components/ui/`.
 
 ## Resuelto (2026-09-18)
 
@@ -220,8 +223,6 @@ fases de `/autoplan` (CEO/eng/design/DX) antes de ejecutarse.
   convocatoria guardada (esa métrica no existe hoy).
 - Restaurar desde `localStorage` un batch de Resultado Directo no guardado
   tras un refresh accidental.
-- `DESIGN.md` formal del proyecto vía `/design-consultation` — recomendado
-  por 5 planes consecutivos, nunca ejecutado.
 - Sanciones disciplinarias que acumulan tarjetas ENTRE partidos (ej. 3
   amarillas en el torneo = suspensión).
 - Palmarés a través de las ediciones de un `TORNEO_GRUPO` — bloqueado por

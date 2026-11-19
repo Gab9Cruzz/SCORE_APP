@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../../auth/useAuth";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
+import { Button } from "../../components/ui/Button";
 import { SimpleResourceAdminPage } from "../torneo-admin/SimpleResourceAdminPage";
 import { AsignarTorneosModal } from "./AsignarTorneosModal";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
@@ -142,9 +143,9 @@ export function UsuariosAdminPage() {
         // backend, acá evita el viaje redondo).
         renderRowExtra={(r) =>
           r.rol === "TorneoAdmin" ? (
-            <button type="button" className="link-button" onClick={() => setModalUsuario(r)}>
+            <Button variante="enlace" onClick={() => setModalUsuario(r)}>
               Gestionar torneos
-            </button>
+            </Button>
           ) : null
         }
       />

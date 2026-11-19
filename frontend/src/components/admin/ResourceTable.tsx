@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Button } from "../ui/Button";
+import { Table } from "../ui/Table";
 
 export interface ResourceTableColumn<T> {
   key: string;
@@ -106,80 +108,66 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
     }
   }
 
-  if (isLoading) return <p>Cargando...</p>;
-  if (isError) return <p className="error-text">No se pudo cargar la lista.</p>;
-  if (rows.length === 0) return <p>{emptyMessage}</p>;
-
   const tieneAcciones = Boolean(onSelect || onSoftDelete || extraActions);
+  const encabezados: (ReactNode | null)[] = columns.map((c) => c.label);
+  if (tieneAcciones) encabezados.push(null);
 
   return (
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            {columns.map((c) => (
-              <th key={c.key}>{c.label}</th>
-            ))}
-            {tieneAcciones && <th></th>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}>
-              {columns.map((c) => (
-                <td key={c.key}>{c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key] ?? "")}</td>
-              ))}
-              {tieneAcciones && confirmandoId === row.id && onSoftDelete && (
-                <td className="table-actions table-actions--confirmando" onKeyDown={(e) => alPresionarTecla(e, row.id)}>
-                  <span role="alert" className="table-actions__pregunta">
-                    {confirmacion ? confirmacion(row) : `¿${softDeleteLabel} ${nombreDeFila(row)}?`}
-                  </span>
-                  <button
-                    type="button"
-                    className="button-danger"
-                    disabled={softDeletePending}
-                    onClick={() => {
-                      setConfirmandoId(null);
-                      onSoftDelete(row);
-                    }}
-                  >
-                    Confirmar
-                  </button>
-                  <button type="button" ref={volverRef} onClick={() => cerrarConfirmacion(row.id)}>
-                    Volver
-                  </button>
-                </td>
-              )}
-              {tieneAcciones && confirmandoId !== row.id && (
-                <td className="table-actions">
-                  {onSelect && (
-                    <button type="button" onClick={() => onSelect(row)}>
-                      Editar
-                    </button>
-                  )}
-                  {onSoftDelete &&
-                    !estadosDeBaja.includes(row.estado ?? "") &&
-                    !isSelf?.(row) &&
-                    (puedeSoftDelete?.(row) ?? true) && (
-                      <button
-                        type="button"
-                        ref={(el) => {
-                          if (el) disparadores.current.set(row.id, el);
-                          else disparadores.current.delete(row.id);
-                        }}
-                        onClick={() => setConfirmandoId(row.id)}
-                        disabled={softDeletePending}
-                      >
-                        {softDeleteLabel}
-                      </button>
-                    )}
-                  {extraActions?.(row)}
-                </td>
-              )}
-            </tr>
+    <Table
+      encabezados={encabezados}
+      cargando={isLoading}
+      error={isError}
+      vacio={rows.length === 0}
+      mensajeVacio={emptyMessage}
+    >
+      {rows.map((row) => (
+        <tr key={row.id}>
+          {columns.map((c) => (
+            <td key={c.key}>{c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key] ?? "")}</td>
           ))}
-        </tbody>
-      </table>
-    </div>
+          {tieneAcciones && confirmandoId === row.id && onSoftDelete && (
+            <td className="table-actions table-actions--confirmando" onKeyDown={(e) => alPresionarTecla(e, row.id)}>
+              <span role="alert" className="table-actions__pregunta">
+                {confirmacion ? confirmacion(row) : `¿${softDeleteLabel} ${nombreDeFila(row)}?`}
+              </span>
+              <Button
+                variante="peligro"
+                disabled={softDeletePending}
+                onClick={() => {
+                  setConfirmandoId(null);
+                  onSoftDelete(row);
+                }}
+              >
+                Confirmar
+              </Button>
+              <Button ref={volverRef} onClick={() => cerrarConfirmacion(row.id)}>
+                Volver
+              </Button>
+            </td>
+          )}
+          {tieneAcciones && confirmandoId !== row.id && (
+            <td className="table-actions">
+              {onSelect && <Button onClick={() => onSelect(row)}>Editar</Button>}
+              {onSoftDelete &&
+                !estadosDeBaja.includes(row.estado ?? "") &&
+                !isSelf?.(row) &&
+                (puedeSoftDelete?.(row) ?? true) && (
+                  <Button
+                    ref={(el) => {
+                      if (el) disparadores.current.set(row.id, el);
+                      else disparadores.current.delete(row.id);
+                    }}
+                    onClick={() => setConfirmandoId(row.id)}
+                    disabled={softDeletePending}
+                  >
+                    {softDeleteLabel}
+                  </Button>
+                )}
+              {extraActions?.(row)}
+            </td>
+          )}
+        </tr>
+      ))}
+    </Table>
   );
 }

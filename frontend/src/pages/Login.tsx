@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { type Rol } from "../auth/authContextValue";
 import { useAuth } from "../auth/useAuth";
+import { Button } from "../components/ui/Button";
+import { Field } from "../components/ui/Field";
 
 // roles-3-modulos-plan.md, Fase 2, D2: landing por default después de
 // loguearse. `from` (si existe) siempre gana — si alguien fue redirigido
@@ -48,28 +50,32 @@ export function LoginPage() {
     <div className="login-page">
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Iniciar sesión</h1>
-        <label>
-          Usuario
-          <input
-            autoFocus
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
-          />
-        </label>
-        <label>
-          Contraseña
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-          />
-        </label>
+        <Field etiqueta="Usuario">
+          {(p) => (
+            <input
+              {...p}
+              autoFocus
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+            />
+          )}
+        </Field>
+        <Field etiqueta="Contraseña">
+          {(p) => (
+            <input
+              {...p}
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          )}
+        </Field>
         {loginError && <p className="error-text">{loginError}</p>}
-        <button type="submit" disabled={loggingIn || !username || !password}>
+        <Button variante="primario" type="submit" disabled={loggingIn || !username || !password}>
           {loggingIn ? "Ingresando..." : "Ingresar"}
-        </button>
+        </Button>
       </form>
     </div>
   );

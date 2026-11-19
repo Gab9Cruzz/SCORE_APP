@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from "react";
+import { Button } from "../ui/Button";
+import { Field } from "../ui/Field";
 
 export type ResourceFieldValue = string | number | boolean | null;
 
@@ -50,15 +52,7 @@ interface ResourceFormProps {
  * `apiErrorMessage(mutation.error)` desde afuera, este componente no sabe
  * nada de la API. */
 export function ResourceForm(props: ResourceFormProps) {
-  const {
-    fields,
-    initialValues,
-    onSubmit,
-    submitting,
-    submitError,
-    submitLabel = "Guardar",
-    onCancel,
-  } = props;
+  const { fields, initialValues, onSubmit, submitting, submitError, submitLabel = "Guardar", onCancel } = props;
 
   const [values, setValues] = useState<Record<string, ResourceFieldValue>>(() => initialValues ?? {});
 
@@ -95,39 +89,43 @@ export function ResourceForm(props: ResourceFormProps) {
       {resolvedFields.map((f) => {
         if (f.type === "reference") {
           return (
-            <label key={f.name}>
-              {f.label}
-              <select
-                value={(values[f.name] as string | number | null | undefined) ?? ""}
-                onChange={(e) => setField(f.name, e.target.value ? Number(e.target.value) : null)}
-                disabled={f.optionsLoading}
-              >
-                <option value="">{f.optionsLoading ? "Cargando..." : "Elegir..."}</option>
-                {(f.options ?? []).map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Field key={f.name} etiqueta={f.label}>
+              {(p) => (
+                <select
+                  {...p}
+                  value={(values[f.name] as string | number | null | undefined) ?? ""}
+                  onChange={(e) => setField(f.name, e.target.value ? Number(e.target.value) : null)}
+                  disabled={f.optionsLoading}
+                >
+                  <option value="">{f.optionsLoading ? "Cargando..." : "Elegir..."}</option>
+                  {(f.options ?? []).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
           );
         }
         if (f.type === "select") {
           return (
-            <label key={f.name}>
-              {f.label}
-              <select
-                value={(values[f.name] as string | number | null | undefined) ?? ""}
-                onChange={(e) => setField(f.name, e.target.value || null)}
-              >
-                <option value="">Elegir...</option>
-                {(f.choices ?? []).map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Field key={f.name} etiqueta={f.label}>
+              {(p) => (
+                <select
+                  {...p}
+                  value={(values[f.name] as string | number | null | undefined) ?? ""}
+                  onChange={(e) => setField(f.name, e.target.value || null)}
+                >
+                  <option value="">Elegir...</option>
+                  {(f.choices ?? []).map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
           );
         }
         if (f.type === "checkbox") {
@@ -144,38 +142,40 @@ export function ResourceForm(props: ResourceFormProps) {
         }
         const inputType = f.type === "datetime" ? "datetime-local" : f.type;
         return (
-          <label key={f.name}>
-            {f.label}
-            <input
-              type={inputType}
-              value={(values[f.name] as string | number | null | undefined) ?? ""}
-              onChange={(e) => {
-                if (f.type === "number") {
-                  setField(f.name, e.target.value ? Number(e.target.value) : null);
-                  return;
-                }
-                // Vacío -> null, no "" (portal-publico-feed-partidos-plan.md,
-                // C3): mismo criterio que "reference"/"select" arriba —
-                // antes de esto ningún campo type:"text" era opcional, así
-                // que este caso no existía. Un logo_url="" mandado al
-                // backend fallaría el validador de esquema https:// que
-                // solo tolera string-con-https o None.
-                setField(f.name, e.target.value || null);
-              }}
-            />
-          </label>
+          <Field key={f.name} etiqueta={f.label}>
+            {(p) => (
+              <input
+                {...p}
+                type={inputType}
+                value={(values[f.name] as string | number | null | undefined) ?? ""}
+                onChange={(e) => {
+                  if (f.type === "number") {
+                    setField(f.name, e.target.value ? Number(e.target.value) : null);
+                    return;
+                  }
+                  // Vacío -> null, no "" (portal-publico-feed-partidos-plan.md,
+                  // C3): mismo criterio que "reference"/"select" arriba —
+                  // antes de esto ningún campo type:"text" era opcional, así
+                  // que este caso no existía. Un logo_url="" mandado al
+                  // backend fallaría el validador de esquema https:// que
+                  // solo tolera string-con-https o None.
+                  setField(f.name, e.target.value || null);
+                }}
+              />
+            )}
+          </Field>
         );
       })}
       {submitError && <p className="error-text">{submitError}</p>}
       <div className="resource-form__actions">
         {onCancel && (
-          <button type="button" className="link-button" onClick={onCancel}>
+          <Button variante="enlace" onClick={onCancel}>
             Cancelar
-          </button>
+          </Button>
         )}
-        <button type="submit" disabled={!puedeEnviar || submitting}>
+        <Button variante="primario" type="submit" disabled={!puedeEnviar || submitting}>
           {submitting ? "Guardando..." : submitLabel}
-        </button>
+        </Button>
       </div>
     </form>
   );

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { apiErrorMessage } from "../../api/client";
 import { ResourceForm, type ResourceFieldValue, type ResourceFormField, type ValoresFormulario } from "../../components/admin/ResourceForm";
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
+import { Button } from "../../components/ui/Button";
 import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
 
 interface RowBase {
@@ -88,9 +89,9 @@ export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResou
     <div className="page">
       <div className="page__header">
         <h1>{title}</h1>
-        <button type="button" onClick={() => setModo({ tipo: "crear" })}>
+        <Button variante="primario" onClick={() => setModo({ tipo: "crear" })}>
           + Nuevo
-        </button>
+        </Button>
       </div>
       {/* roles-3-modulos-plan.md, Fase 4, D2b: gap preexistente — un
           softDelete fallido (self-lockout, red, 500) no mostraba nada acá.
