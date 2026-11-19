@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
+from app.models.usuario import Usuario
 from app.schemas.torneo_grupo import TorneoGrupoConEdiciones, TorneoGrupoOut, TorneoGrupoUpdate
+from app.services.permisos_catalogo import exigir_admin_del_grupo
 from app.services.torneo_grupo import TorneoGrupoService
 
 # Un TORNEO_GRUPO se CREA implícitamente vía POST /torneos con
@@ -48,9 +50,16 @@ async def obtener_torneo_grupo(
     dependencies=[Depends(require_roles("TorneoAdmin"))],
 )
 async def renombrar_torneo_grupo(
-    torneo_grupo_id: int, data: TorneoGrupoUpdate, session: AsyncSession = Depends(get_db)
+    torneo_grupo_id: int,
+    data: TorneoGrupoUpdate,
+    session: AsyncSession = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
 ) -> TorneoGrupoOut:
     """EC-25: renombrar un grupo con ediciones ya finalizadas está
     permitido sin restricción — el nombre se compone en runtime en cada
-    edición, así que esto alcanza a todas de una."""
+    edición, así que esto alcanza a todas de una.
+
+    TASK-013 (SEC-04): solo quien administra alguna de sus ediciones (o un
+    AdminGeneral). Archivar oculta todas las ediciones."""
+    await exigir_admin_del_grupo(usuario, torneo_grupo_id, session)
     return await TorneoGrupoService(session).update(torneo_grupo_id, data)

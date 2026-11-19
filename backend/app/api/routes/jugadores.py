@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_optional, require_roles
+from app.api.deps import get_current_user, get_current_user_optional, require_roles
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.jugador import EstadoJugador, JugadorCreate, JugadorOut, JugadorPublicOut, JugadorUpdate
 from app.schemas.perfil_jugador import PerfilJugadorOut, PerfilJugadorPublicOut
 from app.services.jugador import JugadorService
+from app.services.permisos_catalogo import exigir_admin_de_torneos_del_jugador
 from app.services.perfil_jugador import PerfilJugadorService
 
 router = APIRouter(prefix="/jugadores", tags=["Jugadores"])
@@ -88,11 +89,19 @@ async def crear_jugador(data: JugadorCreate, session: AsyncSession = Depends(get
 
 @router.patch("/{jugador_id}", response_model=JugadorOut, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def actualizar_jugador(
-    jugador_id: int, data: JugadorUpdate, session: AsyncSession = Depends(get_db)
+    jugador_id: int, data: JugadorUpdate, session: AsyncSession = Depends(get_db), usuario: Usuario = Depends(get_current_user)
 ) -> JugadorOut:
+    # TASK-013: editar es compartido; cambiar el estado es una baja.
+    if data.estado is not None:
+        await exigir_admin_de_torneos_del_jugador(usuario, jugador_id, session)
     return await JugadorService(session).update(jugador_id, data)
 
 
 @router.delete("/{jugador_id}", response_model=JugadorOut, dependencies=[Depends(require_roles("TorneoAdmin"))])
-async def dar_de_baja_jugador(jugador_id: int, session: AsyncSession = Depends(get_db)) -> JugadorOut:
+async def dar_de_baja_jugador(
+    jugador_id: int, session: AsyncSession = Depends(get_db), usuario: Usuario = Depends(get_current_user)
+) -> JugadorOut:
+    """TASK-013 (SEC-04): exige administrar todos los torneos abiertos donde
+    está en una plantilla activa (ver services/permisos_catalogo.py)."""
+    await exigir_admin_de_torneos_del_jugador(usuario, jugador_id, session)
     return await JugadorService(session).soft_delete(jugador_id)

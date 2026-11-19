@@ -1,5 +1,6 @@
 import type { Modalidad as ModalidadRow } from "../../api/types";
 import { apiErrorMessage } from "../../api/client";
+import { useAuth } from "../../auth/useAuth";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
 
 interface DisciplinaRow {
@@ -23,6 +24,10 @@ interface DisciplinaRow {
  * criterio que PerfilJugadorAdmin.tsx para una vista de solo lectura que
  * no encaja en el molde CRUD genérico. */
 export function CatalogoDisciplinasPage() {
+  // TASK-013 (SEC-04): catálogo de sistema, afecta a todos los torneos.
+  // Solo AdminGeneral lo modifica; el backend responde 403 al resto.
+  const { session } = useAuth();
+  const puedeEditar = session?.rol === "AdminGeneral";
   // basePath apunta a la vista jerárquica: es de dónde sale `listQuery`.
   // Los toggles de estado (disciplina Y modalidad) van por `customAction`
   // porque cada uno pega a un endpoint propio (/disciplinas/{id} y
@@ -58,6 +63,9 @@ export function CatalogoDisciplinasPage() {
         solo activar/desactivar. Una disciplina o modalidad desactivada deja de ofrecerse para
         torneos nuevos, sin afectar a los que ya la usan.
       </p>
+      {!puedeEditar && (
+        <p className="muted">Solo un Admin General puede activar o desactivar disciplinas y modalidades.</p>
+      )}
 
       {catalogo.customAction.isError && (
         <p className="error-text">{apiErrorMessage(catalogo.customAction.error)}</p>
@@ -72,9 +80,11 @@ export function CatalogoDisciplinasPage() {
               <h2>
                 {d.nombre} <span className={`badge ${d.estado === "Activo" ? "badge--en-curso" : ""}`}>{d.estado}</span>
               </h2>
-              <button type="button" onClick={() => toggleDisciplina(d)} disabled={catalogo.customAction.isPending}>
-                {d.estado === "Activo" ? "Desactivar disciplina" : "Activar disciplina"}
-              </button>
+              {puedeEditar && (
+                <button type="button" onClick={() => toggleDisciplina(d)} disabled={catalogo.customAction.isPending}>
+                  {d.estado === "Activo" ? "Desactivar disciplina" : "Activar disciplina"}
+                </button>
+              )}
             </div>
 
             {d.modalidades.length === 0 ? (
@@ -99,9 +109,11 @@ export function CatalogoDisciplinasPage() {
                           <span className={`badge ${m.estado === "Activo" ? "badge--en-curso" : ""}`}>{m.estado}</span>
                         </td>
                         <td className="table-actions">
-                          <button type="button" onClick={() => toggleModalidad(m)} disabled={catalogo.customAction.isPending}>
-                            {m.estado === "Activo" ? "Desactivar" : "Activar"}
-                          </button>
+                          {puedeEditar && (
+                            <button type="button" onClick={() => toggleModalidad(m)} disabled={catalogo.customAction.isPending}>
+                              {m.estado === "Activo" ? "Desactivar" : "Activar"}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

@@ -1,14 +1,16 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
+from app.models.usuario import Usuario
 from app.schemas.jugador_perfil_disciplina import (
     JugadorPerfilDisciplinaCreate,
     JugadorPerfilDisciplinaOut,
     JugadorPerfilDisciplinaUpdate,
 )
 from app.services.jugador_perfil_disciplina import JugadorPerfilDisciplinaService
+from app.services.permisos_catalogo import exigir_admin_de_torneos_del_perfil
 
 # jugador_perfil_disciplina: el jugador dentro de una disciplina puntual.
 # Sin DELETE: la tabla no tiene Estado, ver el modelo.
@@ -53,7 +55,12 @@ async def crear_perfil(
     dependencies=[Depends(require_roles("TorneoAdmin"))],
 )
 async def actualizar_perfil(
-    perfil_id: int, data: JugadorPerfilDisciplinaUpdate, session: AsyncSession = Depends(get_db)
+    perfil_id: int,
+    data: JugadorPerfilDisciplinaUpdate,
+    session: AsyncSession = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
 ) -> JugadorPerfilDisciplinaOut:
-    """Único uso real: alternar `suspendido`."""
+    """Único uso real: alternar `suspendido`. TASK-013 (SEC-04): exige
+    administrar todos los torneos abiertos donde el jugador está activo."""
+    await exigir_admin_de_torneos_del_perfil(usuario, perfil_id, session)
     return await JugadorPerfilDisciplinaService(session).update(perfil_id, data)

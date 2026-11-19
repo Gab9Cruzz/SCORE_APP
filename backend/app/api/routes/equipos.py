@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
+from app.models.usuario import Usuario
 from app.schemas.equipo import EquipoCreate, EquipoOut, EquipoUpdate, EstadoEquipo
 from app.schemas.equipo_jugador_base import (
     ConflictoMultimilitancia,
@@ -10,6 +11,7 @@ from app.schemas.equipo_jugador_base import (
     EquipoJugadorBaseOut,
 )
 from app.services.equipo import EquipoService
+from app.services.permisos_catalogo import exigir_admin_de_torneos_del_equipo
 from app.services.plantilla_base import PlantillaBaseService
 
 router = APIRouter(prefix="/equipos", tags=["Equipos"])
@@ -50,13 +52,21 @@ async def crear_equipo(data: EquipoCreate, session: AsyncSession = Depends(get_d
 
 @router.patch("/{equipo_id}", response_model=EquipoOut, dependencies=[Depends(require_roles("TorneoAdmin"))])
 async def actualizar_equipo(
-    equipo_id: int, data: EquipoUpdate, session: AsyncSession = Depends(get_db)
+    equipo_id: int, data: EquipoUpdate, session: AsyncSession = Depends(get_db), usuario: Usuario = Depends(get_current_user)
 ) -> EquipoOut:
+    # TASK-013: editar es compartido; cambiar el estado es una baja.
+    if data.estado is not None:
+        await exigir_admin_de_torneos_del_equipo(usuario, equipo_id, session)
     return await EquipoService(session).update(equipo_id, data)
 
 
 @router.delete("/{equipo_id}", response_model=EquipoOut, dependencies=[Depends(require_roles("TorneoAdmin"))])
-async def dar_de_baja_equipo(equipo_id: int, session: AsyncSession = Depends(get_db)) -> EquipoOut:
+async def dar_de_baja_equipo(
+    equipo_id: int, session: AsyncSession = Depends(get_db), usuario: Usuario = Depends(get_current_user)
+) -> EquipoOut:
+    """TASK-013 (SEC-04): exige administrar todos los torneos abiertos donde
+    juega (ver services/permisos_catalogo.py)."""
+    await exigir_admin_de_torneos_del_equipo(usuario, equipo_id, session)
     return await EquipoService(session).soft_delete(equipo_id)
 
 

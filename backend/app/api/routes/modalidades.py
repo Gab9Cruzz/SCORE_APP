@@ -29,7 +29,7 @@ async def obtener_modalidad(modalidad_id: int, session: AsyncSession = Depends(g
 
 
 @router.patch(
-    "/{modalidad_id}", response_model=ModalidadOut, dependencies=[Depends(require_roles("TorneoAdmin"))]
+    "/{modalidad_id}", response_model=ModalidadOut, dependencies=[Depends(require_roles("AdminGeneral"))]
 )
 async def actualizar_estado_modalidad(
     modalidad_id: int, data: ModalidadUpdate, session: AsyncSession = Depends(get_db)

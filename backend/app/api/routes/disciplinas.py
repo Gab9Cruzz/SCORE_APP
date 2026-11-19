@@ -75,7 +75,7 @@ async def obtener_disciplina(disciplina_id: int, session: AsyncSession = Depends
 
 
 @router.patch(
-    "/{disciplina_id}", response_model=DisciplinaOut, dependencies=[Depends(require_roles("TorneoAdmin"))]
+    "/{disciplina_id}", response_model=DisciplinaOut, dependencies=[Depends(require_roles("AdminGeneral"))]
 )
 async def actualizar_estado_disciplina(
     disciplina_id: int, data: DisciplinaUpdate, session: AsyncSession = Depends(get_db)
