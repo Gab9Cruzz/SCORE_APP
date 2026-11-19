@@ -1,11 +1,12 @@
 """Traspasos (equipos-jugadores-plan.md, Fase 2, Etapa C)."""
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.reloj import hoy_negocio
 from app.exceptions.errors import DomainRuleError
 from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.jugador_equipo import JugadorEquipo
@@ -185,7 +186,7 @@ class TraspasoService:
                     "El jugador no tiene una membresía activa en el equipo de origen indicado."
                 )
             origen.estado = "Traspasado"
-            origen.fecha_fin = max(date.today(), origen.fecha_inicio)  # TASK-026
+            origen.fecha_fin = max(hoy_negocio(), origen.fecha_inicio)  # TASK-026
         else:
             # Fichaje desde agencia libre: el perfil no debe tener NINGUNA
             # membresía activa ahora mismo, o esto no es una agencia libre
@@ -217,7 +218,7 @@ class TraspasoService:
             jugador_perfil_id=data.jugador_perfil_id,
             inscripcion_torneo_id=data.inscripcion_destino_id,
             dorsal=data.dorsal_nuevo,
-            fecha_inicio=date.today(),
+            fecha_inicio=hoy_negocio(),
             estado="Activo",
         )
         self.session.add(nueva_membresia)
@@ -286,7 +287,7 @@ class TraspasoService:
                 "un movimiento posterior ya lo sacó de ahí. No se puede revertir automáticamente."
             )
         destino_activo.estado = "Inactivo"
-        destino_activo.fecha_fin = max(date.today(), destino_activo.fecha_inicio)  # TASK-026
+        destino_activo.fecha_fin = max(hoy_negocio(), destino_activo.fecha_inicio)  # TASK-026
         # Cierra destino ANTES de reactivar origen (mismo motivo que
         # crear(): fn_validar_exclusividad_torneo no debe ver dos Activo
         # del mismo perfil en el mismo torneo a la vez).

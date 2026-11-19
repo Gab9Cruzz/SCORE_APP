@@ -1,13 +1,20 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from functools import lru_cache
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.reloj import ahora_negocio
 from app.core.security import create_access_token, hash_password, verify_password
-from app.exceptions.errors import AuthError, ForbiddenError, LicenseRevokedError, NotFoundError, RateLimitError
+from app.exceptions.errors import (
+    AuthError,
+    ForbiddenError,
+    LicenseRevokedError,
+    NotFoundError,
+    RateLimitError,
+)
 from app.models.usuario import Usuario
 from app.repositories.acceso import AccesoRepository
 from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
@@ -157,7 +164,7 @@ class UsuarioService:
 
         settings = get_settings()
         if settings.login_rate_limit_intentos > 0 and settings.login_rate_limit_ventana_minutos > 0:
-            desde = datetime.now() - timedelta(minutes=settings.login_rate_limit_ventana_minutos)
+            desde = ahora_negocio() - timedelta(minutes=settings.login_rate_limit_ventana_minutos)
             fallos = await self.acceso_repo.contar_fallos_credenciales_recientes(username, ip, desde)
             # Tope por cuenta, sin importar la IP (TASK-004): frena un ataque
             # repartido entre muchas IPs, que por (usuario, IP) nunca llega

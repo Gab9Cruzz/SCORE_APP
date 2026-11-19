@@ -1,8 +1,9 @@
 """Configuración de la aplicación, leída de variables de entorno (.env)."""
 from functools import lru_cache
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Valores que aparecen en el repositorio (defaults, .env.example, compose):
@@ -20,6 +21,12 @@ class Settings(BaseSettings):
     # con secretos de ejemplo (ver _exigir_secretos_propios_en_produccion).
     # "desarrollo" no valida nada, como hasta ahora.
     entorno: Literal["desarrollo", "produccion"] = "desarrollo"
+
+    # TASK-028 (BE-05, DB-04): zona del negocio. Las columnas de fecha son
+    # TIMESTAMP sin zona y guardan la hora local de esta zona: cada conexión
+    # la fija (db/database.py) y el reloj de Python que se compara con la
+    # base la usa (core/reloj.py). Decisión del propietario: America/Guayaquil.
+    zona_horaria: str = "America/Guayaquil"
 
     database_url: str
     test_database_url: str | None = None
@@ -82,6 +89,15 @@ class Settings(BaseSettings):
     evento_lock_timeout_ms: int = 3000
     evento_lock_log_umbral_ms: int = 500
     evento_concurrencia_reintentos: int = 1
+
+    @field_validator("zona_horaria")
+    @classmethod
+    def _zona_existente(cls, valor: str) -> str:
+        try:
+            ZoneInfo(valor)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"ZONA_HORARIA: '{valor}' no es una zona IANA válida (ej. America/Guayaquil).") from exc
+        return valor
 
     @model_validator(mode="after")
     def _exigir_secretos_propios_en_produccion(self) -> "Settings":

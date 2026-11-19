@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
-
 from sqlalchemy import or_, select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.reloj import hoy_negocio
 from app.exceptions.errors import DomainRuleError
 from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.jugador import Jugador
@@ -21,7 +20,6 @@ from app.repositories.jugador import JugadorRepository
 from app.repositories.jugador_equipo import JugadorEquipoRepository
 from app.repositories.jugador_perfil_disciplina import JugadorPerfilDisciplinaRepository
 from app.repositories.torneo import TorneoRepository
-from app.services.plantilla_reglas import validar_alta
 from app.schemas.inscripcion_torneo import (
     ConflictoPlantillaBase,
     InscripcionTorneoCreate,
@@ -29,6 +27,7 @@ from app.schemas.inscripcion_torneo import (
     InscripcionTorneoUpdate,
     PlantillaBaseCopiaResumen,
 )
+from app.services.plantilla_reglas import validar_alta
 
 _MENSAJE_CONFLICTO_TORNEO = (
     "El jugador {nombre} ya pertenece a otro equipo en este torneo. Para que "
@@ -244,7 +243,7 @@ class InscripcionTorneoService:
                         jugador_perfil_id=jugador_perfil_id,
                         inscripcion_torneo_id=inscripcion_torneo_id,
                         dorsal=dorsal_sugerido,
-                        fecha_inicio=date.today(),
+                        fecha_inicio=hoy_negocio(),
                     )
                 )
                 await self.session.flush()
@@ -266,7 +265,7 @@ class InscripcionTorneoService:
                             jugador_perfil_id=jugador_perfil_id,
                             inscripcion_torneo_id=inscripcion_torneo_id,
                             dorsal=None,
-                            fecha_inicio=date.today(),
+                            fecha_inicio=hoy_negocio(),
                         )
                     )
                     await self.session.flush()
@@ -325,7 +324,7 @@ class InscripcionTorneoService:
         vinculo = JugadorEquipo(
             jugador_perfil_id=perfil.id,
             inscripcion_torneo_id=inscripcion.id,
-            fecha_inicio=date.today(),
+            fecha_inicio=hoy_negocio(),
         )
         self.session.add(vinculo)
         # EC-27 (exclusividad): si el trigger rechaza este INSERT, la
@@ -380,7 +379,7 @@ class InscripcionTorneoService:
                     raise DomainRuleError(
                         "El equipo tiene un partido en curso en este torneo: terminalo antes de cancelar la inscripción."
                     )
-            hoy = date.today()
+            hoy = hoy_negocio()
             activas = await self.session.execute(
                 select(JugadorEquipo).where(
                     JugadorEquipo.inscripcion_torneo_id == inscripcion.id, JugadorEquipo.estado == "Activo"

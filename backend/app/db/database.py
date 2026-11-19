@@ -16,7 +16,16 @@ class Base(DeclarativeBase):
 
 
 def make_engine(database_url: str) -> AsyncEngine:
-    return create_async_engine(database_url, pool_pre_ping=True, future=True)
+    """TASK-028: cada conexión fija `timezone` a la zona del negocio, así
+    CURRENT_DATE/CURRENT_TIMESTAMP (valores por defecto, triggers, el "hoy"
+    del feed) caen en esa zona aunque el servidor esté en UTC (Docker)."""
+    zona = get_settings().zona_horaria
+    return create_async_engine(
+        database_url,
+        pool_pre_ping=True,
+        future=True,
+        connect_args={"options": f"-c timezone={zona}"},
+    )
 
 
 settings = get_settings()

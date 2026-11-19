@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import delete, func, select
 
+from app.core.reloj import ahora_negocio
 from app.models.auditoria import Auditoria
 from app.repositories.base import BaseRepository
 
@@ -58,7 +59,7 @@ class AuditoriaRepository(BaseRepository[Auditoria]):
         la app, `dias <= 0` = no purgar nunca)."""
         if dias <= 0:
             return 0
-        corte = datetime.now() - timedelta(days=dias)
+        corte = ahora_negocio() - timedelta(days=dias)
         result = await self.session.execute(delete(Auditoria).where(Auditoria.fecha < corte))
         await self.session.commit()
         return result.rowcount or 0

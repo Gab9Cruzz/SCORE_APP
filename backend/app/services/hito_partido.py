@@ -1,7 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.metricas import registrar_evento
+from app.core.reloj import ahora_negocio
 from app.exceptions.errors import DomainRuleError
 from app.models.configuracion_tiempo_torneo import ConfiguracionTiempoTorneo
 from app.models.hito_partido import HitoPartido
@@ -9,7 +11,9 @@ from app.models.modalidad import Modalidad
 from app.models.partido import Partido
 from app.models.torneo import Torneo
 from app.models.usuario import Usuario
-from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoRepository
+from app.repositories.configuracion_tiempo_torneo import (
+    ConfiguracionTiempoTorneoRepository,
+)
 from app.repositories.convocado_a_partido import ConvocadoAPartidoRepository
 from app.repositories.equipo import EquipoRepository
 from app.repositories.fase import FaseRepository
@@ -29,7 +33,6 @@ from app.schemas.hito_partido import (
     PreflightInicioOut,
     TitularesEquipoOut,
 )
-from app.core.metricas import registrar_evento
 from app.services.desempate import (
     completar_metodo_manual,
     derivar_ganador_desde_penales,
@@ -612,7 +615,7 @@ class HitoPartidoService:
             raise DomainRuleError("No hay un cierre forzado reciente para deshacer en este partido.")
 
         limite = ultimo.timestamp_real + timedelta(seconds=VENTANA_DESHACER_SEGUNDOS)
-        if datetime.now() > limite:
+        if ahora_negocio() > limite:
             raise DomainRuleError("La ventana para deshacer este cierre ya expiró.")
 
         for siguiente_id in (partido.partido_siguiente_id, partido.partido_perdedor_siguiente_id):

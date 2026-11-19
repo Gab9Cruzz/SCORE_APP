@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import delete, func, select
 
+from app.core.reloj import ahora_negocio
 from app.models.acceso import Acceso
 from app.repositories.base import BaseRepository
 
@@ -74,7 +75,7 @@ class AccesoRepository(BaseRepository[Acceso]):
         """
         if dias <= 0:
             return 0
-        corte = datetime.now() - timedelta(days=dias)
+        corte = ahora_negocio() - timedelta(days=dias)
         result = await self.session.execute(delete(Acceso).where(Acceso.fecha < corte))
         await self.session.commit()
         return result.rowcount or 0

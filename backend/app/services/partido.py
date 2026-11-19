@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.metricas import registrar_evento
+from app.core.reloj import ahora_negocio
 from app.exceptions.errors import DomainRuleError, ForbiddenError
 from app.models.configuracion_tiempo_torneo import ConfiguracionTiempoTorneo
 from app.models.evento_partido import EventoPartido
@@ -15,14 +15,22 @@ from app.models.fase import Fase
 from app.models.hito_partido import HitoPartido
 from app.models.partido import Partido
 from app.models.usuario import Usuario
-from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoRepository
+from app.repositories.configuracion_tiempo_torneo import (
+    ConfiguracionTiempoTorneoRepository,
+)
 from app.repositories.evento import EventoRepository
 from app.repositories.evento_partido import EventoPartidoRepository
 from app.repositories.fase import FaseRepository
 from app.repositories.partido import PartidoRepository
 from app.repositories.torneo import TorneoRepository
 from app.repositories.torneo_grupo import TorneoGrupoRepository
-from app.schemas.partido import PartidoCreate, PartidoOut, PartidoUpdate, ReclamoRequest, ResultadoDirectoCreate
+from app.schemas.partido import (
+    PartidoCreate,
+    PartidoOut,
+    PartidoUpdate,
+    ReclamoRequest,
+    ResultadoDirectoCreate,
+)
 from app.services.desempate import (
     completar_metodo_manual,
     es_escape_manual_sobre_metodo_configurado,
@@ -32,7 +40,6 @@ from app.services.permisos import verificar_arbitro_asignado
 from app.services.reglamento_torneo import ReglamentoTorneo
 from app.services.reglas_cambio import validar_reglas_cambio
 from app.services.reglas_tarjetas import procesar_doble_amarilla
-
 
 # TASK-021: lo único que un árbitro puede cambiar por PATCH /partidos/{id}.
 _CAMPOS_DEL_ARBITRO = frozenset(
@@ -237,7 +244,7 @@ class PartidoService:
 
         partido.ganador_reclamo_id = data.equipo_id
         partido.reclamo_motivo = data.motivo
-        partido.reclamo_fecha = datetime.now()
+        partido.reclamo_fecha = ahora_negocio()
         for destino, slot, equipo in a_escribir:
             if slot == "Local":
                 destino.equipos_id_local = equipo

@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.metricas import registrar_evento
+from app.core.reloj import hoy_negocio
 from app.repositories.feed import FeedRepository
 from app.schemas.disciplina import DisciplinaConPartidosOut
 from app.schemas.partido import (
@@ -83,7 +84,7 @@ DIAS_MAXIMOS_FEED = 730
 
 
 def validar_fecha_feed(fecha: date | None) -> None:
-    if fecha is not None and abs((fecha - date.today()).days) > DIAS_MAXIMOS_FEED:
+    if fecha is not None and abs((fecha - hoy_negocio()).days) > DIAS_MAXIMOS_FEED:
         raise HTTPException(status_code=422, detail="La fecha tiene que estar dentro de los dos años de hoy.")
 
 

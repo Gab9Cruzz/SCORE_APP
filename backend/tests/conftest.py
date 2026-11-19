@@ -39,10 +39,11 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import get_settings
 from app.core.security import hash_password
+from app.db.database import make_engine
 from app.db.session import get_db
 from app.main import app
 from app.models.asignacion_torneo_admin import AsignacionTorneoAdmin
@@ -156,7 +157,8 @@ async def engine(_test_db_ready):
     # hace un SELECT liviano antes de entregar cada conexión y la
     # reemplaza sola si ya no sirve — mismo mecanismo, sin cambiar el
     # resto del fixture.
-    eng = create_async_engine(TEST_DATABASE_URL, future=True, pool_pre_ping=True)
+    # TASK-028: mismo motor que la app (fija la zona del negocio por conexión).
+    eng = make_engine(TEST_DATABASE_URL)
     yield eng
     await eng.dispose()
 
@@ -204,7 +206,7 @@ async def sesiones_paralelas() -> AsyncGenerator[tuple[AsyncSession, AsyncSessio
     un deadlock salga como fallo con mensaje, no como una corrida
     colgada."""
     await _recrear_base(TEST_DB_CONCURRENCIA_NAME)
-    eng = create_async_engine(TEST_DATABASE_URL_CONCURRENCIA, future=True, pool_pre_ping=True)
+    eng = make_engine(TEST_DATABASE_URL_CONCURRENCIA)
     session_factory = async_sessionmaker(bind=eng, expire_on_commit=False)
     sesion_a = session_factory()
     sesion_b = session_factory()

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime
 
 import psycopg.errors as psycopg_errors
 from sqlalchemy import text
@@ -10,17 +9,20 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.core.reloj import ahora_negocio
 from app.exceptions.errors import ConcurrencyConflictError, DomainRuleError
 from app.models.evento_partido import EventoPartido
 from app.models.partido import Partido
 from app.models.usuario import Usuario
-from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoRepository
+from app.repositories.configuracion_tiempo_torneo import (
+    ConfiguracionTiempoTorneoRepository,
+)
 from app.repositories.evento import EventoRepository
 from app.repositories.evento_partido import EventoPartidoRepository
 from app.repositories.hito_partido import HitoPartidoRepository
 from app.repositories.partido import PartidoRepository
 from app.repositories.torneo import TorneoRepository
-from app.schemas.evento_partido import EventoPartidoCreate, EventoPartidoUpdate
+from app.schemas.evento_partido import EventoPartidoCreate
 from app.services.minuto_partido import calcular_minuto_actual
 from app.services.permisos import verificar_arbitro_asignado
 from app.services.reglas_cambio import validar_reglas_cambio
@@ -268,7 +270,7 @@ class EventoPartidoService:
             # (Sección 2 del plan: el GAP real era justo esto).
             raise DomainRuleError("Este torneo todavía no tiene configuración de tiempos.")
         hitos = await self.hito_repo.listar_por_partido(partido.id)
-        minuto = calcular_minuto_actual(hitos, config, datetime.now())
+        minuto = calcular_minuto_actual(hitos, config, ahora_negocio())
         if minuto is None:
             raise DomainRuleError(
                 "El cronómetro todavía no arrancó — esperá el primer inicio de partido para cargar eventos."

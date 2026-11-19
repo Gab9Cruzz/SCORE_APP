@@ -22,13 +22,14 @@ para "quién ganó esta llave")."""
 import logging
 import math
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.bloqueos import Espacio, bloquear
+from app.core.reloj import ahora_negocio
 from app.exceptions.errors import DomainRuleError
 from app.models.fase import Fase
 from app.models.grupo import Grupo
@@ -916,7 +917,9 @@ class MotorFormatosService:
         torneo.campeon_equipo_id = campeon
         torneo.subcampeon_equipo_id = subcampeon
         torneo.tercer_puesto_equipo_id = tercero
-        torneo.fecha_cierre = datetime.now(timezone.utc).replace(tzinfo=None)
+        # TASK-028: en la hora del negocio, como el resto de las columnas (antes
+        # UTC, y un cierre nocturno quedaba con la fecha del día siguiente).
+        torneo.fecha_cierre = ahora_negocio()
         if orden_podio is not None:
             torneo.orden_podio_manual = orden_podio
         torneo.estado = "Finalizado"
@@ -948,7 +951,7 @@ class MotorFormatosService:
         # limpiar Fecha_Cierre.
         dia_cierre = (
             await self.session.execute(
-                text("SELECT (Fecha_Cierre AT TIME ZONE 'UTC')::date FROM TORNEO WHERE ID = :id"),
+                text("SELECT Fecha_Cierre::date FROM TORNEO WHERE ID = :id"),
                 {"id": torneo_id},
             )
         ).scalar_one()
