@@ -138,3 +138,11 @@ async def test_cors_expone_x_total_count(client: AsyncClient):
         "/api/v1/inscripciones", params={"torneo_id": 1}, headers={"Origin": "http://localhost:5173"}
     )
     assert "x-total-count" in resp.headers.get("access-control-expose-headers", "").lower()
+
+
+async def test_cors_expone_la_marca_de_licencia_revocada(client: AsyncClient):
+    """TASK-046: el frontend decide mostrar la pantalla de licencia revocada
+    por esta cabecera; con el frontend en otro origen, sin exponerla el
+    navegador la oculta y la app trataba el 403 como un error cualquiera."""
+    resp = await client.get("/api/v1/torneos", headers={"Origin": "http://localhost:5173"})
+    assert "x-license-revoked" in resp.headers.get("access-control-expose-headers", "").lower()

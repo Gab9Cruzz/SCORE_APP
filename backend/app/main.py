@@ -12,7 +12,7 @@ from app.core.logging import CABECERA_REQUEST_ID, RequestIdMiddleware, configura
 from app.core.migraciones import avisar, migraciones_pendientes
 from app.core.paginacion import CABECERA_TOTAL
 from app.db.database import async_session_factory
-from app.exceptions.handlers import register_exception_handlers
+from app.exceptions.handlers import CABECERA_LICENCIA_REVOCADA, register_exception_handlers
 from app.repositories.acceso import AccesoRepository
 from app.repositories.auditoria import AuditoriaRepository
 from app.services.usuario import UsuarioService
@@ -146,8 +146,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
     # TASK-011: sin esto el navegador le oculta al frontend el total de los
-    # listados paginados.
-    expose_headers=[CABECERA_TOTAL, CABECERA_REQUEST_ID],
+    # listados paginados. TASK-046: lo mismo con la marca de licencia
+    # revocada — oculta, la app mostraba el 403 como un error más y nunca
+    # la pantalla de licencia (lo encontró el recorrido PR-063).
+    expose_headers=[CABECERA_TOTAL, CABECERA_REQUEST_ID, CABECERA_LICENCIA_REVOCADA],
 )
 
 register_exception_handlers(app)

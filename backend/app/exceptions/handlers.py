@@ -21,6 +21,10 @@ from app.exceptions.errors import (
     RateLimitError,
 )
 
+# El frontend la lee para mostrar la pantalla de licencia revocada; main.py
+# la expone por CORS (si no, el navegador la oculta).
+CABECERA_LICENCIA_REVOCADA = "X-License-Revoked"
+
 logger = logging.getLogger("score_app.errores")
 
 ERROR_INTERNO = "Error interno."
@@ -135,7 +139,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
             content={"detail": exc.detail},
-            headers={"X-License-Revoked": "true"},
+            headers={CABECERA_LICENCIA_REVOCADA: "true"},
         )
 
     @app.exception_handler(ForbiddenError)
