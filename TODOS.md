@@ -52,6 +52,13 @@ retomarlo — acá solo queda lo que sigue abierto.
    libre está parada porque falta elegir proveedor de correo (decisión de
    infraestructura). **Pospuesto explícitamente (2026-09-17)** hasta que el
    resto del proyecto esté más afinado.
+2. **Despliegue a producción (Fase 5 del roadmap de `docs/audit/`):**
+   TASK-049 (imagen del frontend, proxy inverso con TLS), TASK-050
+   (configuración por entorno y secretos), TASK-051 (copias automáticas y
+   restauración ensayada), TASK-052 (observabilidad), y después 053, 054 y
+   056. Falta definir dónde se despliega, el dominio para HTTPS y el
+   destino de las copias. **Pospuesto (2026-11-19)** hasta tener esas
+   definiciones; el resto del roadmap sigue sin esperar.
 
 ## Resuelto (2026-11-18)
 
