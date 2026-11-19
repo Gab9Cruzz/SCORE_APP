@@ -5,6 +5,23 @@ solo lo mapea (ver `backend/README.md`). Eso hace que la numeración de los
 archivos importe: no todos los `.sql` son lo mismo, y confundirlos cuesta
 caro.
 
+## Crear la base desde cero (sin Docker)
+
+Con PostgreSQL 16 o 17 instalado y `psql` en el `PATH` (en Windows suele
+estar en `C:\Program Files\PostgreSQL\17\bin`). Desde la raíz del repo:
+
+```powershell
+psql -U postgres -c "CREATE DATABASE torneos_mvp"
+foreach ($f in "01_schema","02_constraints","03_indexes","04_views","05_seed","06_triggers","11_catalogo_disciplinas") {
+    psql -U postgres -d torneos_mvp -v ON_ERROR_STOP=1 -q -1 -f "database\$f.sql"
+}
+```
+
+Es lo mismo que hace `infrastructure/initdb/00_init.sh` en el compose: el
+esquema final (`01`–`06`) y el catálogo de disciplinas (`11`). **No** correr
+las migraciones `07`+ sobre una base nueva (ver abajo por qué). Para tener
+datos de muestra, sumar `10_demo_torneos_admin.sql` al final.
+
 ## Las tres familias de archivos
 
 ### 1. `01`–`06` — el esquema actual, siempre al día

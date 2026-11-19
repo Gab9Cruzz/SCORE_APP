@@ -48,7 +48,7 @@ npm run dev
 Primera vez: en `backend/`, `python -m venv .venv`, activarlo,
 `pip install -r requirements.txt` y `copy .env.example .env`; en
 `frontend/`, `npm install --legacy-peer-deps`; y crear la base con los
-scripts de [`database/`](database/README.md). Una base que ya existía se
+comandos de [`database/README.md`](database/README.md#crear-la-base-desde-cero-sin-docker). Una base que ya existía se
 pone al día con `python -m scripts.migrar --aplicar` desde `backend/`.
 
 ## Verificar antes de dar algo por terminado
