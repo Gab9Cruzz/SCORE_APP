@@ -5,6 +5,7 @@ import { api } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
 import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
 import { ESTADOS_OPERABLES, totalDeRespuesta } from "../../lib/partidosOperables";
+import { LOCALE, parsearFecha } from "../../lib/fechas";
 
 /** Dashboard de Control de Mesa: la lista de partidos operables.
  *
@@ -146,7 +147,7 @@ export function ControlDeMesaPage() {
                 : "?"}
             </span>
             <span className="muted">
-              {new Date(p.fecha_partido).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}
+              {parsearFecha(p.fecha_partido).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" })}
             </span>
             {/* Punto de entrada único. Sirve para 'Programado' y 'En curso' por
                 igual: es lo que rompe el deadlock que había antes, cuando a la

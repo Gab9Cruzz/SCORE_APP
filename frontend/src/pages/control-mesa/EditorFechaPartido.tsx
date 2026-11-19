@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LOCALE, parsearFecha } from "../../lib/fechas";
 
 /** Campo de fecha/hora inline (Flujo 4 del plan: "desde esta misma
  * vista", sin navegar a otra pantalla). Clic en la fecha abre un
@@ -17,7 +18,7 @@ export function EditorFechaPartido(props: {
   if (!editando) {
     return (
       <button type="button" className="link-button" onClick={() => setEditando(true)}>
-        📅 {new Date(props.fechaActual).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })} ▾
+        📅 {parsearFecha(props.fechaActual).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" })} ▾
       </button>
     );
   }

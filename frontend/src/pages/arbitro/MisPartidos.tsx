@@ -3,6 +3,7 @@ import { api } from "../../api/client";
 import { ESTADOS_OPERABLES, totalDeRespuesta } from "../../lib/partidosOperables";
 import { useAuth } from "../../auth/useAuth";
 import { useNavigate } from "react-router-dom";
+import { LOCALE, parsearFecha } from "../../lib/fechas";
 
 /** Landing del módulo Árbitro (roles-3-modulos-plan.md, Fase 3).
  *
@@ -64,7 +65,7 @@ export function MisPartidosPage() {
             <button type="button" onClick={() => navigate(`/control-de-mesa/partido/${p.id}`)}>
               <span className="badge">{p.estado}</span>
               Partido #{p.id} ·{" "}
-              {new Date(p.fecha_partido).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}
+              {parsearFecha(p.fecha_partido).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" })}
             </button>
           </li>
         ))}

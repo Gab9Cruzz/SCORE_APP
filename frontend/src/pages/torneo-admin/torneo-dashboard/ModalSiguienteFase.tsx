@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { api, apiErrorMessage } from "../../../api/client";
 import { useModalFocusTrap } from "../../../hooks/useModalFocusTrap";
+import { LOCALE } from "../../../lib/fechas";
 
 type AccionDisponible = "cerrar_directo" | "generar_playoffs";
 type FormatoEliminatoria = "Unico" | "Ida_Vuelta" | "Mixto";
@@ -481,7 +482,7 @@ function PasoGenerarPlayoffs(props: {
         {estimacion && (
           <p className="muted--cuerpo">
             {estimacion.partidos} partido(s) · la final cae aprox. el{" "}
-            {estimacion.fechaFinalAprox.toLocaleDateString("es-AR", { day: "2-digit", month: "short" })}.
+            {estimacion.fechaFinalAprox.toLocaleDateString(LOCALE, { day: "2-digit", month: "short" })}.
           </p>
         )}
         {formato !== "Unico" && (

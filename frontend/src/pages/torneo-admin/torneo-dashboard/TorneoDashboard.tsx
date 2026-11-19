@@ -4,6 +4,7 @@ import { NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../../api/client";
 import { ResourceForm, type ResourceFormField } from "../../../components/admin/ResourceForm";
 import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
+import { LOCALE, parsearFecha } from "../../../lib/fechas";
 
 interface TorneoRow {
   id: number;
@@ -36,7 +37,7 @@ interface TorneoGrupoRow {
   ediciones: EdicionResumen[];
 }
 
-const formatearFecha = (iso: string) => new Date(iso).toLocaleDateString("es-AR");
+const formatearFecha = (iso: string) => parsearFecha(iso).toLocaleDateString(LOCALE);
 
 const camposNuevaEdicion: ResourceFormField[] = [
   { name: "fecha_inicio", label: "Fecha de inicio", type: "date", required: true },

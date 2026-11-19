@@ -3,6 +3,7 @@ import { useAuth } from "../../auth/useAuth";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
 import { SimpleResourceAdminPage } from "../torneo-admin/SimpleResourceAdminPage";
 import { AsignarTorneosModal } from "./AsignarTorneosModal";
+import { LOCALE, parsearFecha } from "../../lib/fechas";
 
 interface UsuarioRow {
   id: number;
@@ -16,7 +17,7 @@ interface UsuarioRow {
 
 const ROLES = ["AdminGeneral", "TorneoAdmin", "Arbitro", "Publico"];
 
-const formatearFecha = (iso: string) => new Date(iso).toLocaleDateString("es-AR");
+const formatearFecha = (iso: string) => parsearFecha(iso).toLocaleDateString(LOCALE);
 
 /** Toggle de licencia (rbac-licencias-torneos-plan.md, §5.3) — checkbox
  * nativo, no un switch custom (Design review, Pass 5: ningún switch

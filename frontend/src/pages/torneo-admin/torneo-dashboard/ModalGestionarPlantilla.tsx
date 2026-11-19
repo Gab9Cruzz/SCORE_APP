@@ -4,6 +4,7 @@ import { apiErrorMessage } from "../../../api/client";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
 import { useEtiquetaJugadorPorPerfil } from "../../../hooks/useEtiquetaJugadorPorPerfil";
 import type { RegistroLotePreResuelto } from "../RegistroLoteAdmin";
+import { hoyISO } from "../../../lib/fechas";
 
 interface PlantillaRow {
   id: number;
@@ -33,7 +34,6 @@ interface FilaAlta {
 
 const FILA_VACIA: FilaAlta = { cedula: "", nombre: "", correo_electronico: "", dorsal: "" };
 
-const hoyISO = () => new Date().toISOString().slice(0, 10);
 
 interface ModalGestionarPlantillaProps {
   inscripcionTorneoId: number;

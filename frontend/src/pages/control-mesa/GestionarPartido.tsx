@@ -18,6 +18,7 @@ import {
   seleccionDesdeConvocados,
   seleccionInicial,
 } from "./alineacion";
+import { LOCALE, parsearFecha } from "../../lib/fechas";
 
 /** Distingue "no hay red" de "el backend rechazó la request" — mismo criterio
  * que `MesaPanel`: `fetch` tira `TypeError` cuando no llega a conectar, un
@@ -405,7 +406,7 @@ export function GestionarPartidoPage() {
               es el partido. */}
           <p className="muted">
             {nombreTorneo.get(partido.torneo_id) ?? `Torneo #${partido.torneo_id}`} ·{" "}
-            {new Date(partido.fecha_partido).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}
+            {parsearFecha(partido.fecha_partido).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" })}
           </p>
         </div>
         <span className={`badge badge--${partido.estado.replace(" ", "-").toLowerCase()}`}>{partido.estado}</span>
@@ -416,7 +417,7 @@ export function GestionarPartidoPage() {
       {torneoCerrado && (
         <p className="banner-info-persistente" aria-live="polite">
           Torneo cerrado
-          {torneoQuery.data?.fecha_cierre ? ` el ${new Date(torneoQuery.data.fecha_cierre).toLocaleDateString("es-AR")}` : ""} —
+          {torneoQuery.data?.fecha_cierre ? ` el ${parsearFecha(torneoQuery.data.fecha_cierre).toLocaleDateString(LOCALE)}` : ""} —
           los resultados están bloqueados.
         </p>
       )}

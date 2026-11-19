@@ -15,6 +15,7 @@ import { Cronometro } from "./Cronometro";
 import { BadgeTarjeta } from "./BadgeTarjeta";
 import { deriveEnCancha, deriveEstadoTarjetasPorJugador, deriveHistorialElegibilidad, deriveTitularSuplente, TIPOS, TIPO_ICONO, type PlantillaJugador, type TipoEvento } from "./eventos";
 import { ModalSustitucion } from "./ModalSustitucion";
+import { LOCALE, parsearFecha } from "../lib/fechas";
 
 /** 3B-1 (docs/plans/cierre-backlog-todos-plan.md): distingue "no hay red"
  * de "el backend rechazó la request" — solo el primer caso debe encolarse
@@ -617,7 +618,7 @@ export function MesaPanel({
           // dejar que un segundo evento pise al primero en el mismo slot.
           <section className="card">
             <p className="muted">
-              Hay un evento cargado el {new Date(pendiente.guardadoEn).toLocaleTimeString("es-AR")} que todavía no
+              Hay un evento cargado el {parsearFecha(pendiente.guardadoEn).toLocaleTimeString(LOCALE)} que todavía no
               se pudo enviar{online ? "" : " (sin conexión)"}.
             </p>
             <div className="confirmar-evento__acciones">

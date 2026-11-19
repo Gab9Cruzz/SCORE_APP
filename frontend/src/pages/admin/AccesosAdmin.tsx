@@ -3,6 +3,7 @@ import { apiErrorMessage } from "../../api/client";
 import { FiltrosRecurso } from "../../components/admin/FiltrosRecurso";
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
 import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
+import { LOCALE, parsearFecha } from "../../lib/fechas";
 
 interface AccesoRow {
   id: number;
@@ -16,7 +17,7 @@ interface AccesoRow {
 }
 
 const formatearFechaHora = (iso: string) =>
-  new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "medium" });
+  parsearFecha(iso).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "medium" });
 
 /** El motivo crudo de la base es un código corto ('credenciales',
  * 'inactivo', 'bloqueado'); acá se traduce a algo que se lee. Los tres

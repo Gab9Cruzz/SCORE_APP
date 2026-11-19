@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Escudo } from "./Escudo";
+import { LOCALE, parsearFecha } from "../../lib/fechas";
 
 export interface FilaPartidoData {
   partido_id: number;
@@ -10,7 +11,7 @@ export interface FilaPartidoData {
 }
 
 const formatearHora = (iso: string) =>
-  new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
+  parsearFecha(iso).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit", hour12: false });
 
 /** Fila de partido del feed público (portal-publico-feed-partidos-plan.md,
  * T4.3/D1/D2). Grid explícito de 3 columnas — hora/minuto, equipos (dos

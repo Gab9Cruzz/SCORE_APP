@@ -7,6 +7,7 @@ import { ResourceTable } from "../../../components/admin/ResourceTable";
 import { LIMITE_LISTA, useResourceCrud } from "../../../hooks/useResourceCrud";
 import { MotorFormatosPanel } from "./MotorFormatosPanel";
 import type { TorneoDashboardContext } from "./TorneoDashboard";
+import { LOCALE, parsearFecha } from "../../../lib/fechas";
 
 interface PartidoRow {
   id: number;
@@ -41,7 +42,7 @@ const FASES = ["Regular", "Grupos", "Octavos", "Cuartos", "Semifinal", "Final", 
 
 type Modo = { tipo: "lista" } | { tipo: "crear" };
 
-const formatearFecha = (iso: string) => new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
+const formatearFecha = (iso: string) => parsearFecha(iso).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" });
 
 /** Sub-pestaña "Partidos" del dashboard scoped — a partir de
  * control-mesa-centralizacion-fixture-plan.md (Sección 16, Decision Audit
@@ -129,7 +130,7 @@ export function PartidosDelTorneoPage() {
           nombra la fecha, siempre visible mientras el torneo esté cerrado. */}
       {torneoEstado === "Finalizado" && (
         <p className="banner-info-persistente" aria-live="polite">
-          Torneo cerrado{fechaCierre ? ` el ${new Date(fechaCierre).toLocaleDateString("es-AR")}` : ""} — los
+          Torneo cerrado{fechaCierre ? ` el ${parsearFecha(fechaCierre).toLocaleDateString(LOCALE)}` : ""} — los
           resultados están bloqueados.
         </p>
       )}

@@ -6,6 +6,7 @@ import { useResourceCrud } from "../../../hooks/useResourceCrud";
 import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
 import { badgePenales } from "../../../lib/desempate";
 import { ReclamoPartido } from "./ReclamoPartido";
+import { LOCALE, parsearFecha } from "../../../lib/fechas";
 
 interface PartidoBracket {
   id: number;
@@ -154,7 +155,7 @@ export function BracketView({
   const hayLlaves = canonicos.some((p) => p.partido_ida_id != null);
 
   function formatearFecha(iso: string): string {
-    return new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
+    return parsearFecha(iso).toLocaleDateString(LOCALE, { day: "2-digit", month: "short" });
   }
 
   // `partidoCanonico` es SIEMPRE la vuelta (o el partido único) — el que

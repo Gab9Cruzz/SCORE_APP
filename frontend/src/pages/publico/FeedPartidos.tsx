@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../api/client";
 import { BloqueTorneo, type BloqueTorneoData } from "../../components/publico/BloqueTorneo";
 import type { FilaPartidoData } from "../../components/publico/FilaPartido";
+import { LOCALE, hoyISO, sumarDias } from "../../lib/fechas";
 
 interface FeedResponse {
   fecha_pedida: string;
@@ -14,15 +15,9 @@ interface FeedResponse {
 
 const LIMITE_INICIAL = 60;
 
-function sumarDias(fechaISO: string, dias: number): string {
-  const fecha = new Date(fechaISO + "T00:00:00");
-  fecha.setDate(fecha.getDate() + dias);
-  return fecha.toISOString().slice(0, 10);
-}
-
 function formatearFechaLarga(fechaISO: string): string {
   const fecha = new Date(fechaISO + "T00:00:00");
-  const texto = fecha.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
+  const texto = fecha.toLocaleDateString(LOCALE, { weekday: "long", day: "numeric", month: "long" });
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
@@ -84,7 +79,7 @@ export function FeedPartidosPage() {
   }, [query.data]);
 
   function navegarDia(delta: number) {
-    const base = query.data?.fecha_efectiva ?? new Date().toISOString().slice(0, 10);
+    const base = query.data?.fecha_efectiva ?? hoyISO();
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("fecha", sumarDias(base, delta));
@@ -102,7 +97,7 @@ export function FeedPartidosPage() {
     });
   }
 
-  const actualizado = new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+  const actualizado = new Date().toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" });
 
   return (
     <div className="page publico feed-partidos">

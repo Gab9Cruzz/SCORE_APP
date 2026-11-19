@@ -6,6 +6,7 @@ import { Escudo } from "../../components/publico/Escudo";
 import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
 import { BracketView } from "../torneo-admin/torneo-dashboard/BracketView";
 import { formatearResultadoDesempate, fraseResultadoDesempate } from "../../lib/desempate";
+import { LOCALE, parsearFecha } from "../../lib/fechas";
 
 interface TorneoDetalle {
   id: number;
@@ -63,7 +64,7 @@ interface GoleadorRow {
 
 type Tab = "posiciones" | "resultados" | "goleadores";
 
-const formatearFecha = (iso: string) => new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
+const formatearFecha = (iso: string) => parsearFecha(iso).toLocaleDateString(LOCALE, { day: "2-digit", month: "short" });
 
 /** Vista pública de un torneo (portal-publico-feed-partidos-plan.md, T5.2):
  * tabla de posiciones, resultados y goleadores con los endpoints públicos
@@ -436,7 +437,7 @@ function PodioPublico({ torneo }: { torneo: TorneoDetalle }) {
       )}
       {torneo.fecha_cierre && (
         <p className="podio__provenance muted--cuerpo">
-          Torneo finalizado el {new Date(torneo.fecha_cierre).toLocaleDateString("es-AR")}.
+          Torneo finalizado el {parsearFecha(torneo.fecha_cierre).toLocaleDateString(LOCALE)}.
         </p>
       )}
     </div>

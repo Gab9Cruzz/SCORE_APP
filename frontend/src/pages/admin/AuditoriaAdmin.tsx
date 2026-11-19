@@ -4,6 +4,7 @@ import type { components } from "../../api/schema";
 import { FiltrosRecurso } from "../../components/admin/FiltrosRecurso";
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
 import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
+import { LOCALE, parsearFecha } from "../../lib/fechas";
 
 // Tipado desde el contrato GENERADO del backend (ver AccesosAdmin.test.tsx
 // para el mismo criterio): si AuditoriaOut gana o pierde un campo, esta
@@ -12,7 +13,7 @@ type AuditoriaRow = components["schemas"]["AuditoriaOut"];
 type AccionAuditoria = AuditoriaRow["accion"];
 
 const formatearFechaHora = (iso: string) =>
-  new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "medium" });
+  parsearFecha(iso).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "medium" });
 
 const ACCION_LABEL: Record<AccionAuditoria, string> = {
   crear: "Alta",

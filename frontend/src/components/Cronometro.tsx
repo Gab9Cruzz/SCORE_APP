@@ -6,6 +6,7 @@ import {
   etiquetaReglaDesempate,
   type MetodoDesempateEliminatoriaOTorneo,
 } from "../lib/desempate";
+import { LOCALE, parsearFecha } from "../lib/fechas";
 
 const TICK_MS = 1000;
 const POLL_MS = 5000;
@@ -832,7 +833,7 @@ function HistorialHitos(props: { hitos: HitoRow[]; onCorregir: (hitoId: number, 
             {NOMBRE_HITO[h.tipo_hito]}
             {h.numero_periodo != null && ` (${nombrePeriodo(h.numero_periodo)})`}
           </span>
-          <span className="muted">{new Date(h.timestamp_real).toLocaleTimeString("es-AR")}</span>
+          <span className="muted">{parsearFecha(h.timestamp_real).toLocaleTimeString(LOCALE)}</span>
           {editando === h.id ? (
             <>
               <input

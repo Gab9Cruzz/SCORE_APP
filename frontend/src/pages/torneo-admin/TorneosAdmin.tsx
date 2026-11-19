@@ -6,6 +6,7 @@ import { useAuth } from "../../auth/useAuth";
 import { ResourceForm, type ResourceFieldValue, type ResourceFormField } from "../../components/admin/ResourceForm";
 import { useCatalogo } from "../../hooks/useCatalogo";
 import { FiltroDisciplinasBar } from "../../components/FiltroDisciplinasBar";
+import { LOCALE, parsearFecha } from "../../lib/fechas";
 
 interface EdicionResumen {
   id: number;
@@ -78,7 +79,7 @@ interface TorneoCreatePayload {
   permite_walkover_grupos?: boolean;
 }
 
-const formatearFecha = (iso: string) => new Date(iso).toLocaleDateString("es-AR");
+const formatearFecha = (iso: string) => parsearFecha(iso).toLocaleDateString(LOCALE);
 
 // 3A-9: orden fijo de presentación de los chips de Estado cuando están
 // presentes — "en curso" primero, no alfabético.

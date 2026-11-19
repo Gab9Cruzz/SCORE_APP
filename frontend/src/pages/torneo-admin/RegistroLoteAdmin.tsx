@@ -5,6 +5,7 @@ import type { Equipo as EquipoRow } from "../../api/types";
 import { api, apiErrorMessage } from "../../api/client";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
 import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
+import { hoyISO } from "../../lib/fechas";
 
 /** Contexto que llega desde el modal "Agregar Equipo" (torneos-admin-plan.md,
  * Fase 2, journey paso 5): el torneo/equipo ya se resolvieron ahí (se creó
@@ -112,7 +113,7 @@ export function RegistroLoteAdminPage() {
   const [inscripcionTorneoId, setInscripcionTorneoId] = useState<number | null>(
     preResuelto?.inscripcionTorneoId ?? null,
   );
-  const [fechaInicio, setFechaInicio] = useState(preResuelto ? new Date().toISOString().slice(0, 10) : "");
+  const [fechaInicio, setFechaInicio] = useState(preResuelto ? hoyISO() : "");
 
   const volverDestino = preResuelto?.volverA ?? alcanceTorneo?.volverA ?? "/torneo-admin/torneos";
   const volverLabel = preResuelto || alcanceTorneo ? "Volver al Torneo" : "Volver a Plantillas";

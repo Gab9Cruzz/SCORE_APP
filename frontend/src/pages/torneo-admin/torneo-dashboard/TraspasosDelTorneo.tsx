@@ -9,6 +9,7 @@ import { LIMITE_LISTA, useResourceCrud } from "../../../hooks/useResourceCrud";
 import { useEtiquetaJugadorPorPerfil } from "../../../hooks/useEtiquetaJugadorPorPerfil";
 import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
 import type { TorneoDashboardContext } from "./TorneoDashboard";
+import { LOCALE, parsearFecha } from "../../../lib/fechas";
 
 interface TraspasoRow {
   id: number;
@@ -44,7 +45,7 @@ interface PlantillaHistRow {
 
 type Modo = { tipo: "lista" } | { tipo: "crear" };
 
-const formatearFecha = (iso: string) => new Date(iso).toLocaleString("es-AR");
+const formatearFecha = (iso: string) => parsearFecha(iso).toLocaleString(LOCALE);
 
 /** D3 (fixes-datos-traspasos-control-mesa-plan.md): jugador activo en ESTE
  * torneo → equipo de origen; sin membresía activa → "Agencia Libre" (texto

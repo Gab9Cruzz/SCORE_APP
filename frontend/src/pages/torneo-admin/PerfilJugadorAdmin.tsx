@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { api, apiErrorMessage } from "../../api/client";
+import { LOCALE, parsearFecha } from "../../lib/fechas";
 
 interface EquipoActivo {
   inscripcion_torneo_id: number;
@@ -39,8 +40,8 @@ const badgePorEstado: Record<PerfilDisciplina["estado"], string> = {
   Libre: "badge badge--libre",
 };
 
-const formatearFecha = (iso: string) => new Date(iso).toLocaleDateString("es-AR");
-const formatearFechaHora = (iso: string) => new Date(iso).toLocaleString("es-AR");
+const formatearFecha = (iso: string) => parsearFecha(iso).toLocaleDateString(LOCALE);
+const formatearFechaHora = (iso: string) => parsearFecha(iso).toLocaleString(LOCALE);
 
 /** Perfil de Jugador: stats + trayectoria consolidadas por disciplina
  * (equipos-jugadores-plan.md, Fase 2, Etapa D). No usa useResourceCrud —

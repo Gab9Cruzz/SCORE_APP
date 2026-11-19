@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { LOCALE, parsearFecha } from "../lib/fechas";
 
 export function DashboardPage() {
   const torneosQuery = useQuery({
@@ -170,7 +171,7 @@ function ProximosPartidos({ torneoId }: { torneoId: number }) {
                 <strong>{p.equipo_local}</strong> vs <strong>{p.equipo_visitante}</strong>
               </div>
               <div className="muted">
-                {new Date(p.fecha_partido).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}
+                {parsearFecha(p.fecha_partido).toLocaleString(LOCALE, { dateStyle: "short", timeStyle: "short" })}
                 {p.jornada ? ` · Jornada ${p.jornada}` : ""}
               </div>
               <Link to={`/partido/${p.partido_id}/en-vivo`}>Ver en vivo →</Link>
