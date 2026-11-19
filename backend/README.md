@@ -35,8 +35,9 @@ traduce el mensaje del trigger a un 400 legible.
 ## Requisitos
 
 - Python 3.12+
-- PostgreSQL con el esquema de `/database` ya aplicado (ver el README de esa
-  carpeta) en una base llamada `torneos_mvp`.
+- PostgreSQL 16 o 17 con el esquema de `/database` ya aplicado (ver el
+  README de esa carpeta) en una base llamada `torneos_mvp`. Una base que ya
+  existía se pone al día con `python -m scripts.migrar --aplicar`.
 
 ## Correr local (sin Docker)
 
@@ -79,35 +80,59 @@ del contenedor y este problema no existe, cualquiera de los dos drivers
 funciona sin este workaround.
 
 Al arrancar por primera vez, si la tabla `usuarios` está vacía, la API crea
-sola un usuario Admin con `ADMIN_USERNAME` / `ADMIN_PASSWORD` de `.env`
-(por defecto `admin` / `admin1234` — **cambiar antes de un entorno real**).
+sola un usuario `AdminGeneral` con `ADMIN_USERNAME` / `ADMIN_PASSWORD` de
+`.env`. Con `ENTORNO=produccion` la API no arranca si `JWT_SECRET_KEY`,
+`ADMIN_PASSWORD` o `CORS_ORIGINS` tienen los valores de ejemplo; el error
+dice qué variable corregir (ver `.env.example`).
 
 ## Correr con Docker
 
-Ver [`/infrastructure`](../infrastructure). La API corre en contenedor y se
-conecta al Postgres que ya tenés corriendo en el host:
+Ver [`/infrastructure`](../infrastructure/README.md). El compose levanta
+Postgres (con el esquema cargado la primera vez) y la API:
 
 ```bash
 cd infrastructure
-docker compose up --build
+JWT_SECRET_KEY=... ADMIN_PASSWORD=... docker compose up --build
 ```
 
 ## Autenticación
 
 `POST /api/v1/auth/login` (form `username`/`password`, estilo OAuth2)
 devuelve un JWT. Mandarlo como `Authorization: Bearer <token>`.
+`POST /auth/cambiar-password` cambia la propia contraseña y cierra las demás
+sesiones de esa cuenta; `GET /auth/me` devuelve el usuario de la sesión.
 
-Roles (`usuarios.rol`, ver `database/02_constraints.sql`):
+Una cuenta con la licencia revocada recibe 403 con la cabecera
+`X-License-Revoked: true` en cualquier ruta que exija sesión; el frontend
+la usa para mostrar la pantalla de licencia revocada.
 
-| Rol       | Puede |
-|-----------|-------|
-| `Admin`   | Todo: torneos, equipos, jugadores, plantillas, inscripciones, catálogo de eventos, usuarios |
-| `Arbitro` | Programar/actualizar partidos, registrar y anular eventos de partido (goles, tarjetas, cambios) |
-| `Publico` | Solo lectura (igual que un visitante sin login) |
+Roles (`usuarios.rol`, ver `app/schemas/usuario.py`):
 
-Todos los `GET` son públicos, sin token — es lo que ve cualquier
-espectador. Escribir (`POST`/`PATCH`/`DELETE`) requiere login y el rol
-adecuado.
+| Rol | Puede |
+|---|---|
+| `AdminGeneral` | Todo. Pasa cualquier chequeo de rol y de torneo asignado (`require_roles`). Es el único que gestiona usuarios, licencias, la bitácora de accesos, la auditoría y los catálogos compartidos (disciplinas, modalidades, tipos de evento). |
+| `TorneoAdmin` | Equipos, jugadores y perfiles; dentro de **los torneos que tiene asignados** (`ASIGNACION_TORNEO_ADMIN`): torneo, fixture, sorteo, inscripciones, plantillas, traspasos, partidos, cierre y reapertura. Otro torneo responde 403. |
+| `Arbitro` | El partido que tiene asignado: datos y fecha, hitos del cronómetro, convocados, eventos (goles, tarjetas, cambios) y su anulación, walkover, resultado directo y deshacer un cierre forzado. No crea ni borra partidos ni presenta reclamos. |
+| `Publico` | Solo lectura, como un visitante; con sesión ve además lo que se muestra solo a usuarios logueados. |
+
+### Qué se lee sin sesión
+
+La mayoría de los `GET` son públicos: es lo que ve un espectador en el
+portal. Algunos cambian su respuesta según haya sesión
+(`get_current_user_optional`):
+
+- Un torneo con `Publicado=false` responde 404 a un anónimo, igual que uno
+  inexistente; con sesión se ve. Lo mismo sus posiciones, goleadores y
+  resultados.
+- Los jugadores salen sin cédula ni correo para un anónimo.
+
+Exigen sesión: `/auth/me`, `/usuarios/*`, `/accesos`, `/auditoria`,
+`/equipos/{id}/plantilla-base*`, `/torneos/{id}/estado-fase`,
+`/torneos/{id}/podio-llave` y `/partidos/{id}/preflight-inicio`.
+
+Escribir (`POST`/`PUT`/`PATCH`/`DELETE`) siempre exige sesión y el rol de
+la tabla. La matriz completa por rol y ruta la verifica
+`tests/test_matriz_permisos.py`.
 
 **No hay `DELETE` físico.** El comentario en `02_constraints.sql` es
 explícito: 6 FK tienen `ON DELETE CASCADE`, así que un `DELETE` real sobre
@@ -115,19 +140,27 @@ explícito: 6 FK tienen `ON DELETE CASCADE`, así que un `DELETE` real sobre
 `DELETE` de esta API hacen borrado lógico (`estado='Inactivo'` o
 `'Cancelado'` según la tabla).
 
-## Endpoints principales
+## Endpoints
 
-- `/torneos`, `/equipos`, `/jugadores`, `/eventos` (catálogo) — CRUD + baja lógica
-- `/partidos` — programar partidos (valida inscripción de ambos equipos)
-- `/inscripciones` — inscribir/cancelar un equipo en un torneo
-- `/plantillas` — altas/bajas de jugadores en un equipo (dorsal)
-- `/eventos-partido` — goles, tarjetas, cambios dentro de un partido
-- `/usuarios` — gestión de cuentas (solo Admin)
-- `/estadisticas/torneos/{id}/posiciones` — tabla de posiciones
-- `/estadisticas/torneos/{id}/goleadores` — goleadores
-- `/estadisticas/torneos/{id}/resultados` — resultados de partidos
-- `/estadisticas/proximos-partidos` — próximos partidos programados
-- `/estadisticas/equipos/{id}/plantilla` — plantilla vigente de un equipo
+Todos bajo `/api/v1`. La referencia completa, con esquemas, está en
+http://localhost:8000/docs.
+
+| Grupo | Rutas | Escribe |
+|---|---|---|
+| Sesión | `/auth/login`, `/auth/me`, `/auth/cambiar-password` | cualquier usuario |
+| Catálogos compartidos | `/disciplinas` (y `/con-modalidades`, `/con-partidos`), `/modalidades`, `/eventos` (tipos de evento) | AdminGeneral |
+| Torneos | `/torneos`, `/torneo-grupos`, `/grupos/equipos/{id}` | TorneoAdmin |
+| Motor de formatos | `/torneos/{id}/fixture`, `/sorteo`, `/playoffs`, `/bracket`, `/estado-fase`, `/podio-llave`, `/cerrar`, `/reabrir` | TorneoAdmin |
+| Equipos y jugadores | `/equipos`, `/equipos/{id}/plantilla-base`, `/jugadores`, `/jugadores/{id}/perfil`, `/perfiles` | TorneoAdmin |
+| Participación | `/inscripciones`, `/plantillas` (y `/plantillas/lote/validar`, `/confirmar`), `/traspasos` | TorneoAdmin |
+| Partidos | `/partidos`, `/partidos/feed`; por partido: `/cronometro`, `/duracion`, `/hitos`, `/convocados`, `/preflight-inicio`, `/walkover`, `/resultado-directo`, `/reclamo`, `/deshacer-cierre-forzado` | TorneoAdmin; el Arbitro asignado todo salvo crear, borrar y `/reclamo` |
+| Eventos de partido | `/eventos-partido`, `/eventos-partido/{id}/anular` | TorneoAdmin, Arbitro |
+| Estadísticas | `/estadisticas/torneos/{id}/posiciones`, `/goleadores`, `/resultados`; `/estadisticas/proximos-partidos`; `/estadisticas/equipos/{id}/plantilla` | — (solo lectura) |
+| Administración | `/usuarios` (y `/{id}/licencia`, `/{id}/torneos`), `/accesos`, `/auditoria` | AdminGeneral |
+| Salud | `/health` (fuera de `/api/v1`) | — |
+
+Los listados aceptan `skip`/`limit` y devuelven el total en la cabecera
+`X-Total-Count`; varios aceptan `q` (búsqueda) e `ids=1,2,3` (hasta 200).
 
 ## Tests
 

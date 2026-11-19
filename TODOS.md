@@ -12,6 +12,14 @@ retomarlo — acá solo queda lo que sigue abierto.
   un estado normal, no un error: deja dos errores en la consola por visita a
   "Gestionar partido" y ensucia el monitoreo de 4xx. Devolver 200 con
   `null` (y adaptar `Cronometro.tsx`) o un 404 explícito. Prioridad P3.
+- **Tres defectos de interfaz vistos al grabar los recorridos de `e2e/`**
+  (TASK-046, 2026-11-19), sin corregir todavía. En "Gestionar partido": el
+  aviso "Partido en curso" tapa las pestañas de los equipos, y la lista de
+  titulares mostró 4 jugadores con el contador en "5 de 5" (falta
+  reproducirlo fuera del recorrido). En "Registro por lote": los campos de
+  la tabla se ven sin estilo (fondo gris claro). Prioridad P2.
+- **`services/minuto_partido.py` tiene 36 % de cobertura** (TASK-047,
+  `docs/cobertura.md`): el resto de `services/` pasa del 88 %. Prioridad P3.
 - **Paginación con cursor en `/equipos` y `/jugadores`** (3B-9). TASK-039 ya
   pagina las grillas por desplazamiento (`skip`/`limit` + `X-Total-Count`,
   pie "1–50 de 312") y busca en el servidor; lo que queda diferido es pasar

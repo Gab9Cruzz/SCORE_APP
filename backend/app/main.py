@@ -25,7 +25,7 @@ logger = logging.getLogger("score_app.arranque")
 async def _bootstrap_admin_con_reintentos() -> None:
     """Crea el primer Admin si usuarios está vacía (ver bootstrap_admin_si_no_existe).
 
-    Reintenta porque la primerísima conexión asyncpg que abre un proceso
+    Reintenta porque la primerísima conexión a la base que abre un proceso
     recién arrancado puede fallar una vez por una condición de carrera
     transitoria del socket (visto tanto en Windows/ProactorEventLoop como en
     arranques con Postgres en un contenedor que aún no aceptó conexiones),
@@ -64,7 +64,8 @@ async def _purgar_accesos_viejos() -> None:
     semanas levantado sin reiniciarse no purga**. Si esto pasa a correr
     como servicio permanente, la purga tiene que mudarse a un scheduler
     de verdad (pg_cron o un cron del sistema llamando al mismo
-    repositorio); está anotado en TODOS.md.
+    repositorio); es parte de TASK-053 en
+    docs/audit/11_BACKLOG_IMPLEMENTACION.md.
 
     Como el bootstrap del Admin: los errores se loguean y no se propagan.
     Que no se pueda limpiar la bitácora no es razón para no levantar la

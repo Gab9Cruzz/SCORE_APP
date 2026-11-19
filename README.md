@@ -45,8 +45,11 @@ copy .env.example .env
 npm run dev
 ```
 
-Primera vez: `pip install -r backend/requirements.txt`, `npm install` en
-`frontend/`, y crear la base con los scripts de [`database/`](database/README.md).
+Primera vez: en `backend/`, `python -m venv .venv`, activarlo,
+`pip install -r requirements.txt` y `copy .env.example .env`; en
+`frontend/`, `npm install --legacy-peer-deps`; y crear la base con los
+scripts de [`database/`](database/README.md). Una base que ya existía se
+pone al día con `python -m scripts.migrar --aplicar` desde `backend/`.
 
 ## Verificar antes de dar algo por terminado
 
@@ -75,11 +78,14 @@ resultado.
 | [`backend/`](backend/README.md) | API. `routes` → `services` → `repositories` → `models`. Las reglas de negocio duras viven en triggers de la base, no en Python. |
 | [`frontend/`](frontend/README.md) | SPA. Cliente API **tipado y generado** desde el OpenAPI del backend. |
 | [`database/`](database/README.md) | El esquema, en SQL puro. Sin Alembic. **Leer ese README antes de tocar el esquema** — la numeración de los archivos no es cronológica y confundirla cuesta caro. |
+| [`docs/audit/`](docs/audit/) | Auditoría técnica de 2026-11: hallazgos, roadmap y backlog de tareas (`TASK-NNN`) que citan los commits. |
 | `docs/plans/` | Un plan por módulo, con las decisiones y por qué se tomaron. |
 | `docs/designs/` | Design docs de UI. |
 | [`docs/queries/`](docs/queries/README.md) | Métricas ad hoc versionadas en SQL (no un dashboard) — cómo correrlas y contra qué base. |
 | `TODOS.md` | Lo deferido de cada plan, con el motivo. |
 | `infrastructure/` | `docker-compose.yml` — Postgres + API; `initdb/` carga el esquema y el catálogo la primera vez. |
+| [`e2e/`](e2e/README.md) | Recorridos de punta a punta con Playwright contra una base propia. |
+| [`docs/cobertura.md`](docs/cobertura.md) | Cobertura medida y pisos por carpeta. |
 
 ## Cómo se trabaja acá
 

@@ -2,7 +2,8 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# libpq no hace falta: asyncpg es puro Python + wheels precompilados.
+# libpq no hace falta: el driver de la app es psycopg[binary], que trae
+# su propia libpq en el wheel.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

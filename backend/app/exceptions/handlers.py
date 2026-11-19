@@ -175,7 +175,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     # Red de seguridad: si un repositorio se olvida de atrapar un error de
     # Postgres y lo traduce a una excepción de dominio, esto evita que el
-    # mensaje crudo de asyncpg (con el SQL adentro) llegue al cliente como 500.
+    # mensaje crudo del driver (con el SQL adentro) llegue al cliente como 500.
     @app.exception_handler(IntegrityError)
     async def _sa_integrity(_: Request, exc: IntegrityError) -> JSONResponse:
         return _integrity_error_response(exc)
