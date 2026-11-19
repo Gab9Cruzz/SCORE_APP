@@ -55,6 +55,7 @@ SCRIPTS_VIGENTES = [
     "34_migracion_validar_jugador_por_fecha.sql",
     "35_migracion_reclamo_llave.sql",
     "36_migracion_codigo_eventos.sql",
+    "37_migracion_indice_partido_ida.sql",
 ]
 
 # F10/E-L6 (portal-publico-feed-partidos-plan.md): el test de cobertura de

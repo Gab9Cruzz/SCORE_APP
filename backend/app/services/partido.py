@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlalchemy import select, text
@@ -8,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.metricas import registrar_evento
 from app.exceptions.errors import DomainRuleError, ForbiddenError
+from app.models.configuracion_tiempo_torneo import ConfiguracionTiempoTorneo
 from app.models.evento_partido import EventoPartido
+from app.models.fase import Fase
 from app.models.hito_partido import HitoPartido
 from app.models.partido import Partido
 from app.models.usuario import Usuario
@@ -35,6 +38,17 @@ from app.services.reglas_tarjetas import procesar_doble_amarilla
 _CAMPOS_DEL_ARBITRO = frozenset(
     {"ganador_desempate_id", "metodo_desempate", "penales_local", "penales_visitante", "hubo_tiempo_extra", "ganador_corrido_id"}
 )
+
+
+@dataclass
+class _ContextoSalida:
+    """TASK-023: datos de `_a_salida` cargados en lote (ver _contexto_salida)."""
+
+    tipo_fase: dict[int, str] = field(default_factory=dict)
+    ids_que_son_ida: set[int] = field(default_factory=set)
+    cronometro_por_torneo: dict[int, str] = field(default_factory=dict)
+    idas: dict[int, Partido] = field(default_factory=dict)
+    goles_de_idas: dict[tuple[int, int], int] = field(default_factory=dict)
 
 
 class PartidoService:
@@ -91,7 +105,8 @@ class PartidoService:
             solo_publicados=solo_publicados,
             orden=orden,
         )
-        return [await self._a_salida(p) for p in partidos]
+        ctx = await self._contexto_salida(partidos)
+        return [await self._a_salida(p, ctx) for p in partidos]
 
     async def contar(
         self,
@@ -496,7 +511,42 @@ class PartidoService:
         await self.session.refresh(partido)
         return await self._a_salida(partido)
 
-    async def _a_salida(self, partido: Partido) -> PartidoOut:
+    async def _contexto_salida(self, partidos: Sequence[Partido]) -> _ContextoSalida:
+        """TASK-023 (BE-01): lo que `_a_salida` necesita para toda una página,
+        en cinco consultas fijas en vez de hasta cuatro por partido."""
+        ctx = _ContextoSalida()
+        candidatos = [p for p in partidos if p.fase_id is not None and not p.es_walkover]
+        if not candidatos:
+            return ctx
+        fase_ids = {p.fase_id for p in candidatos}
+        filas = await self.session.execute(select(Fase.id, Fase.tipo).where(Fase.id.in_(fase_ids)))
+        ctx.tipo_fase = {fid: tipo for fid, tipo in filas.all()}
+        ids = [p.id for p in candidatos]
+        filas = await self.session.execute(select(Partido.partido_ida_id).where(Partido.partido_ida_id.in_(ids)))
+        ctx.ids_que_son_ida = {pid for (pid,) in filas.all()}
+        torneo_ids = {p.torneo_id for p in candidatos}
+        filas = await self.session.execute(
+            select(ConfiguracionTiempoTorneo.torneo_id, ConfiguracionTiempoTorneo.tipo_cronometro).where(
+                ConfiguracionTiempoTorneo.torneo_id.in_(torneo_ids)
+            )
+        )
+        ctx.cronometro_por_torneo = {tid: tipo for tid, tipo in filas.all()}
+        ida_ids = {p.partido_ida_id for p in candidatos if p.partido_ida_id is not None}
+        if ida_ids:
+            filas = await self.session.execute(select(Partido).where(Partido.id.in_(ida_ids)))
+            ctx.idas = {ida.id: ida for ida in filas.scalars().all()}
+            filas = await self.session.execute(
+                text(
+                    "SELECT PARTIDOS_ID, Equipo_Acreditado, COUNT(*) FROM vw_goles_acreditados "
+                    "WHERE PARTIDOS_ID = ANY(:ids) GROUP BY PARTIDOS_ID, Equipo_Acreditado"
+                ),
+                {"ids": list(ida_ids)},
+            )
+            for partido_id, equipo_id, cantidad in filas.all():
+                ctx.goles_de_idas[(partido_id, equipo_id)] = cantidad
+        return ctx
+
+    async def _a_salida(self, partido: Partido, ctx: _ContextoSalida | None = None) -> PartidoOut:
         """Fase 1 (sin migración) del plan de desempate de eliminatoria —
         SPEC-REVIEW S12/D-Q2: reemplaza las dos derivaciones de cliente
         divergentes (`MesaPanel.tsx:290` no excluía Corrido/ida;
@@ -506,10 +556,34 @@ class PartidoService:
         final, es la parte estructural más los goles ya jugados de la ida
         cuando corresponde, para que el cliente arme el global sumando su
         propio marcador (en vivo, o un draft de resultado directo todavía
-        sin guardar)."""
+        sin guardar).
+
+        TASK-023: los datos vienen de `_contexto_salida`, cargados en lote
+        para toda la página; un partido suelto arma su propio contexto."""
+        if ctx is None:
+            ctx = await self._contexto_salida([partido])
         salida = PartidoOut.model_validate(partido)
         if partido.fase_id is None or partido.es_walkover:
             return salida
+        if ctx.tipo_fase.get(partido.fase_id) != "Eliminacion":
+            return salida
+        if partido.id in ctx.ids_que_son_ida:
+            return salida  # D4/§6: una ida nunca es elegible para desempate.
+        if ctx.cronometro_por_torneo.get(partido.torneo_id) == "Corrido":
+            return salida  # D5/§7: solo disciplinas de gol.
+
+        salida.elegible_desempate = True
+
+        ida = ctx.idas.get(partido.partido_ida_id) if partido.partido_ida_id is not None else None
+        if ida is not None:
+            # fn_resolver_llave invierte la ida: el LOCAL de la ida juega de
+            # VISITANTE en la vuelta y viceversa — los goles ya jugados se
+            # cruzan acá para que salgan expresados en la orientación
+            # local/visitante de ESTE partido (la vuelta).
+            salida.goles_previos_global_local = ctx.goles_de_idas.get((ida.id, ida.equipos_id_visitante), 0)
+            salida.goles_previos_global_visitante = ctx.goles_de_idas.get((ida.id, ida.equipos_id_local), 0)
+
+        return salida
 
         fase = await self.fase_repo.get(partido.fase_id)
         if fase is None or fase.tipo != "Eliminacion":

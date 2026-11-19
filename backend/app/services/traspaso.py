@@ -1,11 +1,13 @@
 """Traspasos (equipos-jugadores-plan.md, Fase 2, Etapa C)."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import DomainRuleError
+from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.jugador_equipo import JugadorEquipo
 from app.models.torneo import Torneo
 from app.models.traspaso import Traspaso
@@ -57,7 +59,8 @@ class TraspasoService:
             )
         else:
             traspasos = await self.repo.list(skip=skip, limit=limit, jugador_perfil_id=jugador_perfil_id)
-        return [await self._a_salida(t) for t in traspasos]
+        anulables = await self._anulables(traspasos)
+        return [self._salida(t, anulables) for t in traspasos]
 
     async def contar(
         self,
@@ -91,6 +94,50 @@ class TraspasoService:
         salida = TraspasoOut.model_validate(traspaso)
         salida.puede_anularse = await self._puede_anularse(traspaso)
         return salida
+
+    @staticmethod
+    def _salida(traspaso: Traspaso, anulables: set[int]) -> TraspasoOut:
+        salida = TraspasoOut.model_validate(traspaso)
+        salida.puede_anularse = traspaso.id in anulables
+        return salida
+
+    async def _anulables(self, traspasos: list[Traspaso]) -> set[int]:
+        """TASK-023 (BE-01): el mismo criterio que `_puede_anularse` para toda
+        una página en dos consultas: el equipo destino de cada traspaso y el
+        último Inicio_Partido de cada uno de esos equipos (si es posterior al
+        traspaso, el club ya compitió)."""
+        vigentes = [t for t in traspasos if t.estado != "Anulado"]
+        if not vigentes:
+            return set()
+        filas = await self.session.execute(
+            select(InscripcionTorneo.id, InscripcionTorneo.equipo_id).where(
+                InscripcionTorneo.id.in_({t.inscripcion_destino_id for t in vigentes})
+            )
+        )
+        equipo_de_inscripcion = dict(filas.all())
+        equipos = {e for e in equipo_de_inscripcion.values() if e is not None}
+        ultimo_inicio: dict[int, datetime] = {}
+        if equipos:
+            filas = await self.session.execute(
+                text(
+                    """
+                    SELECT e.equipo_id, MAX(h.Timestamp_Real)
+                      FROM HITOS_PARTIDO h
+                      JOIN PARTIDOS p ON p.ID = h.Partido_ID
+                      JOIN LATERAL (VALUES (p.EQUIPOS_ID_LOCAL), (p.EQUIPOS_ID_VISITANTE)) AS e(equipo_id) ON TRUE
+                     WHERE h.Tipo_Hito = 'Inicio_Partido' AND e.equipo_id = ANY(:equipos)
+                     GROUP BY e.equipo_id
+                    """
+                ),
+                {"equipos": list(equipos)},
+            )
+            ultimo_inicio = dict(filas.all())
+        anulables = set()
+        for t in vigentes:
+            inicio = ultimo_inicio.get(equipo_de_inscripcion.get(t.inscripcion_destino_id))
+            if inicio is None or inicio < t.fecha_traspaso:
+                anulables.add(t.id)
+        return anulables
 
     async def crear(self, data: TraspasoCreate, usuario_actual_id: int) -> TraspasoOut:
         """Cierra el origen (si hay), abre el destino y registra el

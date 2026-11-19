@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models.usuario import Usuario
 from app.repositories.base import BaseRepository
@@ -14,6 +14,6 @@ class UsuarioRepository(BaseRepository[Usuario]):
         return result.scalar_one_or_none()
 
     async def count(self) -> int:
-        stmt = select(Usuario)
-        result = await self.session.execute(stmt)
-        return len(result.scalars().all())
+        # TASK-023: contar en la base, no traer todas las filas.
+        result = await self.session.execute(select(func.count()).select_from(Usuario))
+        return result.scalar_one()

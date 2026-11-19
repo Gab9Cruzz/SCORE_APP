@@ -58,6 +58,7 @@ Cada una aplica un plan concreto sobre una base **ya provisionada**
 | `34_migracion_validar_jugador_por_fecha.sql` | TASK-008 (`docs/audit/`): `fn_validar_jugador_partido` valida la membresía por fecha, no por estado actual |
 | `35_migracion_reclamo_llave.sql` | TASK-009 (`docs/audit/`): reclamo sobre un partido de llave cerrado — `PARTIDOS.Ganador_Reclamo_ID`/`Reclamo_Motivo`/`Reclamo_Fecha`, override en `fn_marcador_partido` y `fn_resolver_llave` |
 | `36_migracion_codigo_eventos.sql` | TASK-019 (`docs/audit/`): `EVENTOS.Codigo` para los tipos de sistema, unicidad de `Nombre`/`Codigo`; `vw_goles_acreditados` y `fn_validar_jugador_partido` comparan por código |
+| `37_migracion_indice_partido_ida.sql` | TASK-023 (`docs/audit/`): índice `idx_partidos_ida` sobre `PARTIDOS(Partido_Ida_ID)` |
 
 **Nota (2026-09-14):** este índice se quedó desactualizado entre `21` y `30` — ninguna de esas
 migraciones aparecía listada aquí, aunque sí estaban aplicadas (o, en el caso de `21`,
