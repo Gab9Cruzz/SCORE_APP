@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas._tipos import Nombre50, Texto200
+
 EstadoEvento = Literal["Activo", "Inactivo"]
 
 
@@ -12,12 +14,14 @@ class EventoBase(BaseModel):
 
 
 class EventoCreate(EventoBase):
+    nombre: Nombre50  # TASK-029
+    descripcion: Texto200 | None = None
     pass
 
 
 class EventoUpdate(BaseModel):
-    nombre: str | None = None
-    descripcion: str | None = None
+    nombre: Nombre50 | None = None
+    descripcion: Texto200 | None = None
     estado: EstadoEvento | None = None
 
 

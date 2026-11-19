@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas._tipos import Dorsal
+
 EstadoEquipoJugadorBase = Literal["Activo", "Inactivo"]
 
 
@@ -15,7 +17,7 @@ class EquipoJugadorBaseCreate(BaseModel):
     que InscripcionTorneoService._crear_individual."""
 
     jugador_id: int
-    dorsal_sugerido: int | None = None
+    dorsal_sugerido: Dorsal | None = None  # TASK-029
 
 
 class EquipoJugadorBaseOut(BaseModel):

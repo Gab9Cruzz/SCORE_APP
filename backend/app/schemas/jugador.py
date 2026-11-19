@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas._tipos import Cedula, Correo, Nombre100, UrlHttps
+
 EstadoJugador = Literal["Activo", "Inactivo"]
 
 
@@ -16,15 +18,19 @@ class JugadorBase(BaseModel):
 
 
 class JugadorCreate(JugadorBase):
+    # TASK-029: validación de entrada (la de JugadorBase la comparte la salida).
+    nombre: Nombre100
+    cedula: Cedula
+    correo_electronico: Correo
     pass
 
 
 class JugadorUpdate(BaseModel):
-    nombre: str | None = None
-    cedula: str | None = None
-    correo_electronico: str | None = None
+    nombre: Nombre100 | None = None
+    cedula: Cedula | None = None
+    correo_electronico: Correo | None = None
     estado: EstadoJugador | None = None
-    foto_url: str | None = None
+    foto_url: UrlHttps | None = None  # TASK-029 (SEC-11): como los logos
 
 
 class JugadorOut(JugadorBase):

@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from app.schemas._tipos import Cedula, Correo, Nombre100
+
 EstadoInscripcion = Literal["Inscrito", "Cancelado", "Confirmado"]
 
 
@@ -40,9 +42,9 @@ class InscripcionTorneoCreate(BaseModel):
 
     torneo_id: int
     equipo_id: int | None = None
-    jugador_cedula: str | None = None
-    jugador_nombre: str | None = None
-    jugador_correo_electronico: str | None = None
+    jugador_cedula: Cedula | None = None  # TASK-029
+    jugador_nombre: Nombre100 | None = None
+    jugador_correo_electronico: Correo | None = None
 
     @model_validator(mode="after")
     def exactamente_un_camino(self):

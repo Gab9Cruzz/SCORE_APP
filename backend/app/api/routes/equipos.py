@@ -19,8 +19,8 @@ router = APIRouter(prefix="/equipos", tags=["Equipos"])
 
 @router.get("", response_model=list[EquipoOut])
 async def listar_equipos(
-    skip: int = 0,
-    limit: int = Query(default=100, le=200),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
     estado: EstadoEquipo | None = None,
     # Filtros server-side (equipos-disciplina-navegacion-plan.md, Mejora
     # #1): son lo que permite que la grilla de Equipos no tope contra el

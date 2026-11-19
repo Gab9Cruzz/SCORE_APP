@@ -4,7 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_current_user_optional, require_roles
 from app.db.session import get_db
 from app.models.usuario import Usuario
-from app.schemas.torneo_grupo import TorneoGrupoConEdiciones, TorneoGrupoOut, TorneoGrupoUpdate
+from app.schemas.torneo_grupo import (
+    TorneoGrupoConEdiciones,
+    TorneoGrupoOut,
+    TorneoGrupoUpdate,
+)
 from app.services.permisos_catalogo import exigir_admin_del_grupo
 from app.services.torneo_grupo import TorneoGrupoService
 

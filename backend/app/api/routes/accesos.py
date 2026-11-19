@@ -23,8 +23,8 @@ router = APIRouter(prefix="/accesos", tags=["Accesos (auditoría)"])
 
 @router.get("", response_model=list[AccesoOut], dependencies=[Depends(require_roles("AdminGeneral"))])
 async def listar_accesos(
-    skip: int = 0,
-    limit: int = Query(default=100, le=200),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
     usuario_id: int | None = None,
     username: str | None = None,
     exitoso: bool | None = None,

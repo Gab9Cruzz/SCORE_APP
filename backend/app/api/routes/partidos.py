@@ -8,16 +8,20 @@ from app.api.deps import (
     get_current_user,
     get_current_user_optional,
     require_roles,
-    require_torneo_access,
     require_torneo_access_de,
 )
 from app.core.paginacion import informar_total
 from app.db.session import get_db
-from app.models.usuario import Usuario
 from app.exceptions.errors import NotFoundError
+from app.models.usuario import Usuario
 from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
 from app.repositories.disciplina import DisciplinaRepository
 from app.repositories.partido import PartidoRepository
+from app.schemas.convocado_a_partido import (
+    ConvocadoAgregarRequest,
+    ConvocadoOut,
+    ConvocatoriaSetRequest,
+)
 from app.schemas.hito_partido import (
     DeshacerCierreForzadoOut,
     DuracionPartidoOut,
@@ -27,15 +31,14 @@ from app.schemas.hito_partido import (
     HitoPartidoUpdate,
     PreflightInicioOut,
 )
-from app.schemas.convocado_a_partido import ConvocadoAgregarRequest, ConvocadoOut, ConvocatoriaSetRequest
 from app.schemas.partido import (
     EstadoPartido,
     FeedResponseOut,
     PartidoCreate,
     PartidoOut,
     PartidoUpdate,
-    ResultadoDirectoCreate,
     ReclamoRequest,
+    ResultadoDirectoCreate,
     WalkoverRequest,
 )
 from app.services.convocado_a_partido import ConvocadoAPartidoService

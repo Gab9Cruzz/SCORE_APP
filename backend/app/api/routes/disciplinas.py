@@ -25,8 +25,8 @@ router = APIRouter(prefix="/disciplinas", tags=["Disciplinas"])
 
 @router.get("", response_model=list[DisciplinaOut])
 async def listar_disciplinas(
-    skip: int = 0,
-    limit: int = Query(default=100, le=200),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
     estado: EstadoDisciplina | None = None,
     session: AsyncSession = Depends(get_db),
 ) -> list[DisciplinaOut]:

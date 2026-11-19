@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas._tipos import Dorsal, Texto200
+
 EstadoTraspaso = Literal["Completado", "Anulado"]
 
 
@@ -11,8 +13,8 @@ class TraspasoCreate(BaseModel):
     # NULL = fichaje desde agencia libre.
     inscripcion_origen_id: int | None = None
     inscripcion_destino_id: int
-    dorsal_nuevo: int | None = None
-    motivo: str | None = None
+    dorsal_nuevo: Dorsal | None = None  # TASK-029
+    motivo: Texto200 | None = None
 
 
 class TraspasoOut(BaseModel):

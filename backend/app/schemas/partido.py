@@ -1,7 +1,16 @@
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
+
+from app.schemas._tipos import MAX_EVENTOS_RESULTADO_DIRECTO
 
 EstadoPartido = Literal["Programado", "En curso", "Finalizado", "Cancelado"]
 FasePartido = Literal[
@@ -212,7 +221,7 @@ class ResultadoDirectoCreate(BaseModel):
     reusando las MISMAS tablas/triggers que el flujo en vivo — sin tabla
     paralela. Una lista vacía es válida (0-0 sin sucesos)."""
 
-    eventos: list[ResultadoDirectoEvento] = []
+    eventos: list[ResultadoDirectoEvento] = Field(default=[], max_length=MAX_EVENTOS_RESULTADO_DIRECTO)  # TASK-029
     # Solo exigido para torneos 'Corrido' (Tenis/Pádel, sin marcador de
     # goles) — fn_validar_ganador_corrido lo exige al pasar a 'Finalizado'.
     # Un torneo 'Periodos' lo ignora (el resultado sale del marcador de goles).

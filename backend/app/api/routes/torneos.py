@@ -20,8 +20,8 @@ router = APIRouter(prefix="/torneos", tags=["Torneos"])
 
 @router.get("", response_model=list[TorneoOut])
 async def listar_torneos(
-    skip: int = 0,
-    limit: int = Query(default=100, le=200),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
     estado: EstadoTorneo | None = None,
     torneo_grupo_id: int | None = None,
     # rbac-licencias-torneos-plan.md, E1: filtra a los torneos asignados

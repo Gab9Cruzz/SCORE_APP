@@ -4,12 +4,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_current_user_optional, require_roles
 from app.db.session import get_db
 from app.models.usuario import Usuario
-from app.schemas.jugador import EstadoJugador, JugadorCreate, JugadorOut, JugadorPublicOut, JugadorUpdate
+from app.schemas.jugador import (
+    EstadoJugador,
+    JugadorCreate,
+    JugadorOut,
+    JugadorPublicOut,
+    JugadorUpdate,
+)
 from app.schemas.perfil_jugador import PerfilJugadorOut, PerfilJugadorPublicOut
 from app.services.jugador import JugadorService
-from app.services.permisos_catalogo import exigir_admin_de_torneos_del_jugador
 from app.services.perfil_jugador import PerfilJugadorService
 from app.services.permisos import puede_ver_pii
+from app.services.permisos_catalogo import exigir_admin_de_torneos_del_jugador
 
 router = APIRouter(prefix="/jugadores", tags=["Jugadores"])
 
@@ -40,8 +46,8 @@ RESPUESTA_PERFIL = {
 
 @router.get("", response_model=None, responses=RESPUESTA_LISTA_JUGADORES)
 async def listar_jugadores(
-    skip: int = 0,
-    limit: int = Query(default=100, le=200),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
     estado: EstadoJugador | None = None,
     # Búsqueda server-side por nombre/cédula (gestion-avanzada-equipos-
     # control-mesa-plan.md, Requerimiento 2) — la usa el buscador de la

@@ -3,7 +3,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
-from app.schemas.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoCreate, ConfiguracionTiempoTorneoOut
+from app.schemas._tipos import EnteroPositivo, Nombre100
+from app.schemas.configuracion_tiempo_torneo import (
+    ConfiguracionTiempoTorneoCreate,
+    ConfiguracionTiempoTorneoOut,
+)
 
 EstadoTorneo = Literal["Activo", "Inactivo", "Finalizado"]
 # Motor de Formatos (motor-formatos-plantillas-navegacion-plan.md,
@@ -46,8 +50,8 @@ class TorneoBase(BaseModel):
     # validar_parametros_formato en ese servicio.
     formato: FormatoTorneo = "Liga"
     ida_vuelta: bool = False
-    equipos_por_grupo: int | None = None
-    clasificados_por_grupo: int | None = None
+    equipos_por_grupo: EnteroPositivo | None = None
+    clasificados_por_grupo: EnteroPositivo | None = None
     incluye_tercer_lugar: bool = True
     # Finding 15 / E5 (cierre-fase-regular-llaves-playoffs-plan.md):
     # expuesto en el alta para que un torneo `Eliminacion` PURO (sin fase
@@ -70,7 +74,7 @@ class TorneoBase(BaseModel):
     # 3B-10 (docs/plans/cierre-backlog-todos-plan.md): NULL (default) =
     # sin límite — cada admin decide el número para ESTE torneo, no hay
     # uno universal.
-    cupo_maximo_inscripciones: int | None = None
+    cupo_maximo_inscripciones: EnteroPositivo | None = None
     # 3B-13: habilita marcar walkover en Liga/fase de grupos (en
     # Eliminación siempre está permitido — el bracket necesita un ganador
     # para avanzar, no tiene sentido apagarlo ahí). Default False: un
@@ -104,6 +108,7 @@ class TorneoBase(BaseModel):
 
 
 class TorneoCreate(TorneoBase):
+    nombre: Nombre100 | None = None  # TASK-029
     """Exactamente uno de los dos (torneos-admin-plan.md, Fase 1/3):
     - `torneo_grupo_id`: esto es una EDICIÓN NUEVA de un grupo ya
       existente — TorneoService.create() calcula numero_edicion como
@@ -115,7 +120,7 @@ class TorneoCreate(TorneoBase):
       grupo existente desde la tarjeta, no lo escribe de nuevo)."""
 
     torneo_grupo_id: int | None = None
-    torneo_grupo_nombre: str | None = None
+    torneo_grupo_nombre: Nombre100 | None = None  # TASK-029
 
     @model_validator(mode="after")
     def exactamente_un_origen_de_grupo(self):
@@ -150,7 +155,7 @@ class TorneoUpdate(BaseModel):
     # podía dejar 'Finalizado' sin nada de eso.
     model_config = ConfigDict(extra="forbid")
 
-    nombre: str | None = None
+    nombre: Nombre100 | None = None
     # TorneoService.update rechaza cambiarlas si el torneo ya tiene equipos
     # inscriptos o partidos (necesita consultar la base).
     disciplina_id: int | None = None
@@ -164,8 +169,8 @@ class TorneoUpdate(BaseModel):
     # TorneoService.update, no acá (necesita consultar la base).
     formato: FormatoTorneo | None = None
     ida_vuelta: bool | None = None
-    equipos_por_grupo: int | None = None
-    clasificados_por_grupo: int | None = None
+    equipos_por_grupo: EnteroPositivo | None = None
+    clasificados_por_grupo: EnteroPositivo | None = None
     incluye_tercer_lugar: bool | None = None
     # D-D3/C7 (desempate-tiempo-extra-penales-plan.md, §8/§11): editables
     # los DOS juntos — formato_eliminatoria era create-only y §8 prometía
@@ -183,7 +188,7 @@ class TorneoUpdate(BaseModel):
     # (EC-13 del plan: no hay trigger que lo impida, es responsabilidad
     # del admin no cambiarla a mitad de un torneo en curso).
     config_tiempo: ConfiguracionTiempoTorneoCreate | None = None
-    cupo_maximo_inscripciones: int | None = None
+    cupo_maximo_inscripciones: EnteroPositivo | None = None
     permite_walkover_grupos: bool | None = None
     # Acá `None` es un valor con significado ("volver a exigir el equipo
     # completo"), no "no lo mandes". Por eso TorneoService.update lo escribe a

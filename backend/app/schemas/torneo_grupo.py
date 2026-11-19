@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.schemas._tipos import Nombre100, TextoOpcional
+
 EstadoTorneoGrupo = Literal["Activo", "Archivado"]
 
 
@@ -37,9 +39,9 @@ class TorneoGrupoUpdate(BaseModel):
     feed/vista pública de torneo — ver D14b, el frontend usa un <select>
     de países para `pais`, no un input libre (esta capa no lo valida)."""
 
-    nombre: str | None = None
+    nombre: Nombre100 | None = None  # TASK-029
     estado: EstadoTorneoGrupo | None = None
-    pais: str | None = None
+    pais: TextoOpcional(60) = None  # un <select> sin elegir manda ""
     logo_url: str | None = None
 
     @field_validator("logo_url")

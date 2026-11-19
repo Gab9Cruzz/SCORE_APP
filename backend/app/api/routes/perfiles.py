@@ -19,8 +19,8 @@ router = APIRouter(prefix="/perfiles", tags=["Perfiles"])
 
 @router.get("", response_model=list[JugadorPerfilDisciplinaOut])
 async def listar_perfiles(
-    skip: int = 0,
-    limit: int = Query(default=100, le=200),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
     jugador_id: int | None = None,
     disciplina_id: int | None = None,
     session: AsyncSession = Depends(get_db),

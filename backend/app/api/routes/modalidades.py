@@ -14,8 +14,8 @@ router = APIRouter(prefix="/modalidades", tags=["Modalidades"])
 
 @router.get("", response_model=list[ModalidadOut])
 async def listar_modalidades(
-    skip: int = 0,
-    limit: int = Query(default=100, le=200),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
     disciplina_id: int | None = None,
     estado: EstadoModalidad | None = None,
     session: AsyncSession = Depends(get_db),

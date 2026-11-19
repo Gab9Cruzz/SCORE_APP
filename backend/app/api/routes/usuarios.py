@@ -37,8 +37,8 @@ router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
     "", response_model=list[UsuarioOut], dependencies=[Depends(require_roles("AdminGeneral", "TorneoAdmin"))]
 )
 async def listar_usuarios(
-    skip: int = 0,
-    limit: int = Query(default=100, le=200),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
     rol: RolUsuario | None = None,
     session: AsyncSession = Depends(get_db),
     usuario_actual: Usuario = Depends(get_current_user),

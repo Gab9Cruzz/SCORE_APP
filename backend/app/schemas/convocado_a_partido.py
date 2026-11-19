@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas._tipos import MAX_CONVOCADOS
 
 
 class ConvocadoInput(BaseModel):
@@ -20,7 +22,7 @@ class ConvocatoriaSetRequest(BaseModel):
     convocatoria entera, vuelve al comportamiento de siempre: toda la
     plantilla es candidata)."""
 
-    convocados: list[ConvocadoInput]
+    convocados: list[ConvocadoInput] = Field(max_length=MAX_CONVOCADOS)  # TASK-029
     # ETag de concurrencia optimista (gestionar-partido-alineaciones-plan.md,
     # H4-eng): el `MAX(fecha_modificacion)` que el cliente vio al cargar la
     # convocatoria. Si en el medio la tocaron desde otro dispositivo, el service

@@ -7,7 +7,11 @@ from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.repositories.evento_partido import EventoPartidoRepository
 from app.repositories.partido import PartidoRepository
-from app.schemas.evento_partido import EventoPartidoCreate, EventoPartidoMinutoUpdate, EventoPartidoOut
+from app.schemas.evento_partido import (
+    EventoPartidoCreate,
+    EventoPartidoMinutoUpdate,
+    EventoPartidoOut,
+)
 from app.services.evento_partido import EventoPartidoService
 
 # Goles, tarjetas y cambios dentro de un partido. Distinto de /eventos, que

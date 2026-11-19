@@ -3,13 +3,15 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.schemas._tipos import Nombre50, Nombre100
+
 RolUsuario = Literal["AdminGeneral", "TorneoAdmin", "Arbitro", "Publico"]
 EstadoUsuario = Literal["Activo", "Inactivo"]
 
 
 class UsuarioCreate(BaseModel):
-    username: str
-    nombre: str
+    username: Nombre50  # TASK-029
+    nombre: Nombre100
     password: str
     rol: RolUsuario = "Publico"
 
@@ -33,7 +35,7 @@ class UsuarioCreate(BaseModel):
 
 
 class UsuarioUpdate(BaseModel):
-    nombre: str | None = None
+    nombre: Nombre100 | None = None
     rol: RolUsuario | None = None
     estado: EstadoUsuario | None = None
     password: str | None = None

@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.schemas._tipos import Nombre100
+
 EstadoEquipo = Literal["Activo", "Inactivo"]
 
 
@@ -11,6 +13,7 @@ class EquipoBase(BaseModel):
 
 
 class EquipoCreate(EquipoBase):
+    nombre: Nombre100  # TASK-029
     """disciplina_id/modalidad_id son obligatorios
     (equipos-disciplina-navegacion-plan.md, pedido A: "el formulario debe
     exigir la Disciplina"). Que la modalidad pertenezca a la disciplina lo
@@ -27,7 +30,7 @@ class EquipoUpdate(BaseModel):
     cambio de disciplina si ya tiene inscripciones (EC-38): permitirlo
     dejaría inscripciones que violan la regla que este plan introduce."""
 
-    nombre: str | None = None
+    nombre: Nombre100 | None = None
     disciplina_id: int | None = None
     modalidad_id: int | None = None
     estado: EstadoEquipo | None = None

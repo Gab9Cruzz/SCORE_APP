@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas._tipos import Dorsal
+
 # 'Traspasado' lo pone el trigger de Traspasos (Etapa C), no se ofrece como
 # opción manual en el form de edición del frontend — ver PlantillasAdmin.tsx.
 EstadoJugadorEquipo = Literal["Activo", "Inactivo", "Suspendido", "Traspasado"]
@@ -11,7 +13,7 @@ EstadoJugadorEquipo = Literal["Activo", "Inactivo", "Suspendido", "Traspasado"]
 class JugadorEquipoCreate(BaseModel):
     jugador_perfil_id: int
     inscripcion_torneo_id: int
-    dorsal: int | None = None
+    dorsal: Dorsal | None = None
     fecha_inicio: date
 
 
@@ -22,7 +24,7 @@ class JugadorEquipoUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    dorsal: int | None = None
+    dorsal: Dorsal | None = None
 
 
 class JugadorEquipoOut(BaseModel):

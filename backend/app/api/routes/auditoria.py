@@ -20,8 +20,8 @@ router = APIRouter(prefix="/auditoria", tags=["Auditoría de cambios"])
 
 @router.get("", response_model=list[AuditoriaOut], dependencies=[Depends(require_roles("AdminGeneral"))])
 async def listar_auditoria(
-    skip: int = 0,
-    limit: int = Query(default=100, le=200),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
     tabla: str | None = None,
     registro_id: int | None = None,
     accion: AccionAuditoria | None = None,

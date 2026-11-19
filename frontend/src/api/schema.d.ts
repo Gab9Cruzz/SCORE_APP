@@ -2092,14 +2092,7 @@ export interface components {
              */
             fecha_inicio: string;
         };
-        /**
-         * EquipoCreate
-         * @description disciplina_id/modalidad_id son obligatorios
-         *     (equipos-disciplina-navegacion-plan.md, pedido A: "el formulario debe
-         *     exigir la Disciplina"). Que la modalidad pertenezca a la disciplina lo
-         *     valida EquipoService.create con un mensaje legible (D-Eng-15); el
-         *     trigger de la base es la red de seguridad para un curl directo.
-         */
+        /** EquipoCreate */
         EquipoCreate: {
             /** Nombre */
             nombre: string;
@@ -2747,7 +2740,10 @@ export interface components {
             nombre: string;
             /** Cedula */
             cedula: string;
-            /** Correo Electronico */
+            /**
+             * Correo Electronico
+             * Format: email
+             */
             correo_electronico: string;
         };
         /** JugadorEquipoCreate */
@@ -3331,7 +3327,10 @@ export interface components {
             cedula: string;
             /** Nombre */
             nombre: string;
-            /** Correo Electronico */
+            /**
+             * Correo Electronico
+             * Format: email
+             */
             correo_electronico: string;
             /** Dorsal */
             dorsal?: number | null;
@@ -3485,18 +3484,7 @@ export interface components {
             /** Rol */
             rol: string;
         };
-        /**
-         * TorneoCreate
-         * @description Exactamente uno de los dos (torneos-admin-plan.md, Fase 1/3):
-         *     - `torneo_grupo_id`: esto es una EDICIÓN NUEVA de un grupo ya
-         *       existente — TorneoService.create() calcula numero_edicion como
-         *       MAX(del grupo) + 1, nunca lo manda el cliente.
-         *     - `torneo_grupo_nombre`: crea un TORNEO_GRUPO nuevo (numero_edicion=1).
-         *       Siempre crea un grupo — si el nombre tipeado coincide con uno ya
-         *       existente, es responsabilidad del frontend detectarlo y mandar
-         *       `torneo_grupo_id` en su lugar (journey, paso 1: el admin elige un
-         *       grupo existente desde la tarjeta, no lo escribe de nuevo).
-         */
+        /** TorneoCreate */
         TorneoCreate: {
             /** Nombre */
             nombre?: string | null;

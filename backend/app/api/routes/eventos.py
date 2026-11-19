@@ -11,8 +11,8 @@ router = APIRouter(prefix="/eventos", tags=["Eventos (catálogo)"])
 
 @router.get("", response_model=list[EventoOut])
 async def listar_eventos(
-    skip: int = 0,
-    limit: int = Query(default=100, le=200),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
     estado: EstadoEvento | None = None,
     session: AsyncSession = Depends(get_db),
 ) -> list[EventoOut]:

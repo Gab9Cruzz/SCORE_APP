@@ -1,11 +1,21 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles, require_torneo_access, verificar_torneo_visible
+from app.api.deps import (
+    get_current_user,
+    require_roles,
+    require_torneo_access,
+    verificar_torneo_visible,
+)
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.fase import FaseOut
-from app.schemas.motor_formatos import CerrarTorneoRequest, EstadoFaseOut, PlayoffsRequest, SorteoRequest
+from app.schemas.motor_formatos import (
+    CerrarTorneoRequest,
+    EstadoFaseOut,
+    PlayoffsRequest,
+    SorteoRequest,
+)
 from app.schemas.partido import PartidoOut
 from app.schemas.torneo import TorneoOut
 from app.services.motor_formatos import MotorFormatosService

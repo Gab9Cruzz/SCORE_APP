@@ -4,7 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_roles, require_torneo_access_de
 from app.db.session import get_db
 from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
-from app.schemas.registro_lote import ConfirmarLoteResponse, RegistroLoteRequest, ValidarLoteResponse
+from app.schemas.registro_lote import (
+    ConfirmarLoteResponse,
+    RegistroLoteRequest,
+    ValidarLoteResponse,
+)
 from app.services.registro_lote import RegistroLoteService
 
 

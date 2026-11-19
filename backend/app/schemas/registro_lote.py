@@ -1,19 +1,21 @@
+from app.schemas._tipos import MAX_FILAS_LOTE, Cedula, Correo, Dorsal, Nombre100
+
 """Registro por lote con pantalla dividida (equipos-jugadores-plan.md,
 Fase 2). Las dos rutas (validar/confirmar) devuelven 200 siempre — es una
 operación de resultados mixtos por fila, no el create de un solo recurso;
 "inválido" es un dato en la respuesta, no un error HTTP."""
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.jugador_equipo import JugadorEquipoOut
 
 
 class RegistroLoteFila(BaseModel):
-    cedula: str
-    nombre: str
-    correo_electronico: str
-    dorsal: int | None = None
+    cedula: Cedula
+    nombre: Nombre100
+    correo_electronico: Correo
+    dorsal: Dorsal | None = None
 
 
 class RegistroLoteRequest(BaseModel):
@@ -24,7 +26,7 @@ class RegistroLoteRequest(BaseModel):
 
     inscripcion_torneo_id: int
     fecha_inicio: date
-    filas: list[RegistroLoteFila]
+    filas: list[RegistroLoteFila] = Field(max_length=MAX_FILAS_LOTE)  # TASK-029
 
 
 class FilaValida(BaseModel):

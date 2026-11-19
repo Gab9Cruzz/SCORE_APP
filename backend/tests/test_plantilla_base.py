@@ -60,7 +60,7 @@ async def test_agregar_y_listar_candidato(client: AsyncClient, admin_general_hea
     body = resp.json()
     assert body["jugador_id"] == jugador_id
     assert body["jugador_nombre"] == "Juan Pérez PB"
-    assert body["jugador_cedula"] == "PB-0001"
+    assert body["jugador_cedula"] == "PB0001"  # TASK-029: la cédula se guarda sin guiones
     assert body["dorsal_sugerido"] == 10
     assert body["estado"] == "Activo"
 

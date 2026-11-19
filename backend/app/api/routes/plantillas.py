@@ -3,7 +3,11 @@ from datetime import date
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_optional, require_roles, require_torneo_access_de
+from app.api.deps import (
+    get_current_user_optional,
+    require_roles,
+    require_torneo_access_de,
+)
 from app.core.paginacion import Pagina, informar_total, paginacion
 from app.db.session import get_db
 from app.models.usuario import Usuario
