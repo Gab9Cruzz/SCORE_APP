@@ -120,7 +120,10 @@ class EstadisticasRepository:
             JOIN INSCRIPCIONES_TORNEO it ON it.ID = je.Inscripcion_Torneo_ID
             JOIN EQUIPOS e ON e.ID = it.Equipo_ID
             WHERE e.ID = :equipo_id AND it.Torneo_ID = :torneo_id
-              AND j.Estado = 'Activo' AND e.Estado = 'Activo' AND je.Estado = 'Activo'
+              AND j.Estado = 'Activo' AND e.Estado = 'Activo'
+              -- TASK-008: mismo criterio que fn_validar_jugador_partido.
+              AND (je.Estado = 'Activo'
+                   OR (je.Estado IN ('Inactivo', 'Traspasado') AND je.Fecha_Fin IS NOT NULL))
               AND je.Fecha_Inicio <= CAST(:fecha_partido AS date)
               AND (je.Fecha_Fin IS NULL OR je.Fecha_Fin >= CAST(:fecha_partido AS date))
             ORDER BY je.Dorsal NULLS LAST, j.Nombre

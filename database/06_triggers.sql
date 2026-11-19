@@ -232,7 +232,12 @@ BEGIN
        AND jpd.Disciplina_ID = v_disciplina_id
        AND it.Torneo_ID = v_torneo_id
        AND it.Equipo_ID = NEW.EQUIPO_ID
-       AND je.Estado = 'Activo'
+       -- TASK-008 (FUN-02): vale la membresía que CUBRÍA la fecha del
+       -- partido, aunque hoy esté cerrada (traspaso o baja posteriores).
+       -- Un cierre sin Fecha_Fin no tiene vigencia conocida y no cuenta;
+       -- 'Suspendido' tampoco.
+       AND (je.Estado = 'Activo'
+            OR (je.Estado IN ('Inactivo', 'Traspasado') AND je.Fecha_Fin IS NOT NULL))
        AND je.Fecha_Inicio <= v_fecha_partido::DATE
        AND (je.Fecha_Fin IS NULL OR je.Fecha_Fin >= v_fecha_partido::DATE);
 
@@ -256,7 +261,8 @@ BEGIN
            AND jpd.Disciplina_ID = v_disciplina_id
            AND it.Torneo_ID = v_torneo_id
            AND it.Equipo_ID = NEW.EQUIPO_ID
-           AND je.Estado = 'Activo'
+           AND (je.Estado = 'Activo'
+                OR (je.Estado IN ('Inactivo', 'Traspasado') AND je.Fecha_Fin IS NOT NULL))
            AND je.Fecha_Inicio <= v_fecha_partido::DATE
            AND (je.Fecha_Fin IS NULL OR je.Fecha_Fin >= v_fecha_partido::DATE);
 
@@ -1236,7 +1242,8 @@ BEGIN
               AND jpd.Disciplina_ID = t.Disciplina_ID
               AND it.Torneo_ID = p.Torneo_ID
               AND it.Equipo_ID = ep.EQUIPO_ID
-              AND je.Estado = 'Activo'
+              AND (je.Estado = 'Activo'
+                   OR (je.Estado IN ('Inactivo', 'Traspasado') AND je.Fecha_Fin IS NOT NULL))
               AND je.Fecha_Inicio <= p.Fecha_Partido::DATE
               AND (je.Fecha_Fin IS NULL OR je.Fecha_Fin >= p.Fecha_Partido::DATE));
     IF v_malos > 0 THEN

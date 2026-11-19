@@ -153,9 +153,15 @@ async def test_jugador_traspasado_despues_de_la_fecha_del_partido_es_rechazado(
     # fn_validar_exclusividad_torneo prohíbe 2 membresías ACTIVAS del mismo
     # perfil en el mismo torneo a la vez — se cierra la de Tiburones antes
     # de abrir la de Halcones, como haría un traspaso real.
+    #
+    # TASK-008: la salida de Tiburones es ANTES del partido (2026-01-20). Con
+    # la validación por fecha, una salida posterior (antes era 2026-02-10)
+    # hace que el 2026-01-29 Carlos siga siendo jugador de Tiburones, que
+    # disputa este partido, y convocarlo es correcto. Así el día del partido
+    # no pertenece a ninguno de los dos equipos.
     await db_session.execute(
         text(
-            "UPDATE jugador_equipo SET fecha_fin = '2026-02-10', estado = 'Traspasado' "
+            "UPDATE jugador_equipo SET fecha_fin = '2026-01-20', estado = 'Traspasado' "
             "WHERE jugador_perfil_id = :perfil_id AND estado = 'Activo'"
         ),
         {"perfil_id": perfil_carlos},

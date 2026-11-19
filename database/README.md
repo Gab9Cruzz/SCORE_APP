@@ -54,6 +54,8 @@ Cada una aplica un plan concreto sobre una base **ya provisionada**
 | `30_migracion_fin_forzado.sql` | "Modo en Vivo": cierre forzado de partido (`modo-vivo-sustituciones-cierre-plan.md`, Área 4) |
 | `31_migracion_portal_publico.sql` | Portal Público (`portal-publico-feed-partidos-plan.md`) — `DISCIPLINA.Slug`, `EQUIPOS.Logo_URL`, `TORNEO_GRUPO.Pais`/`Logo_URL`, `TORNEO.Publicado` |
 | `32_migracion_cierre_fase_y_llaves.sql` | Cierre de Fase Regular, Motor de Llaves (Ida/Vuelta/Mixto) y Flexibilidad de Grupos (`docs/plans/cierre-fase-regular-llaves-playoffs-plan.md`) — podio del torneo, `TORNEO.Formato_Eliminatoria`/`Orden_Podio_Manual`, `PARTIDOS.Partido_Ida_ID`, `fn_marcador_partido`/`fn_resolver_llave` y el bloqueo de escritura en un torneo cerrado |
+| `33_migracion_metodo_desempate.sql` | Desempate de eliminatoria: tiempo extra y penales (`desempate-tiempo-extra-penales-plan.md`) |
+| `34_migracion_validar_jugador_por_fecha.sql` | TASK-008 (`docs/audit/`): `fn_validar_jugador_partido` valida la membresía por fecha, no por estado actual |
 
 **Nota (2026-09-14):** este índice se quedó desactualizado entre `21` y `30` — ninguna de esas
 migraciones aparecía listada aquí, aunque sí estaban aplicadas (o, en el caso de `21`,
