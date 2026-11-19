@@ -83,8 +83,16 @@ class HitoPartidoService:
         self.jugador_equipo_repo = JugadorEquipoRepository(session)
         self.convocado_repo = ConvocadoAPartidoRepository(session)
 
-    async def _cargar_contexto(self, partido_id: int) -> tuple[Partido, ConfiguracionTiempoTorneo, list[HitoPartido]]:
-        partido = await self.partido_repo.get_or_404(partido_id)
+    async def _cargar_contexto(
+        self, partido_id: int, bloquear_partido: bool = False
+    ) -> tuple[Partido, ConfiguracionTiempoTorneo, list[HitoPartido]]:
+        # TASK-024 (BE-03): al registrar, la fila del partido se bloquea antes
+        # de leer los hitos, así dos registros simultáneos no ven el mismo
+        # estado. (El índice único de Inicio_Partido/Fin_Partido es la red.)
+        if bloquear_partido:
+            partido = await self.partido_repo.get_or_404_bloqueado(partido_id)
+        else:
+            partido = await self.partido_repo.get_or_404(partido_id)
         config = await self.config_repo.get_by_torneo(partido.torneo_id)
         if config is None:
             raise DomainRuleError("Este torneo todavía no tiene configuración de tiempos.")
@@ -366,7 +374,7 @@ class HitoPartidoService:
         )
 
     async def registrar(self, partido_id: int, data: HitoPartidoCreate, usuario_actual: Usuario) -> HitoPartidoOut:
-        partido, config, hitos = await self._cargar_contexto(partido_id)
+        partido, config, hitos = await self._cargar_contexto(partido_id, bloquear_partido=True)
         verificar_arbitro_asignado(partido, usuario_actual)
 
         estado = self._calcular_estado(hitos, config)

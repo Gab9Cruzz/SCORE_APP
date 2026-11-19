@@ -28,6 +28,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.bloqueos import Espacio, bloquear
 from app.exceptions.errors import DomainRuleError
 from app.models.fase import Fase
 from app.models.grupo import Grupo
@@ -37,7 +38,9 @@ from app.models.jugador_equipo import JugadorEquipo
 from app.models.partido import Partido
 from app.models.sorteo import Sorteo
 from app.models.torneo import Torneo
-from app.repositories.configuracion_tiempo_torneo import ConfiguracionTiempoTorneoRepository
+from app.repositories.configuracion_tiempo_torneo import (
+    ConfiguracionTiempoTorneoRepository,
+)
 from app.repositories.estadisticas import EstadisticasRepository
 from app.repositories.fase import FaseRepository
 from app.repositories.grupo import GrupoRepository
@@ -209,6 +212,9 @@ class MotorFormatosService:
     # ---------- Generar Fixture (Liga) ----------
 
     async def generar_fixture(self, torneo_id: int) -> Fase:
+        # TASK-024 (BE-03): dos sorteos/fixtures simultáneos del mismo torneo
+        # generaban dos llaves; se serializan por torneo.
+        await bloquear(self.session, Espacio.MOTOR_FORMATOS, torneo_id)
         torneo = await self.torneo_repo.get_or_404(torneo_id)
         if torneo.formato != "Liga":
             raise DomainRuleError("Generar Fixture es solo para torneos de Formato Liga.")
@@ -243,6 +249,9 @@ class MotorFormatosService:
     # ---------- Sorteo (Eliminación directa, o asignación de Grupos) ----------
 
     async def sortear(self, torneo_id: int, usuario_id: int, semilla: str | None = None) -> Fase:
+        # TASK-024 (BE-03): dos sorteos/fixtures simultáneos del mismo torneo
+        # generaban dos llaves; se serializan por torneo.
+        await bloquear(self.session, Espacio.MOTOR_FORMATOS, torneo_id)
         torneo = await self.torneo_repo.get_or_404(torneo_id)
         if torneo.formato == "Eliminacion":
             fase = await self._fase_orden1(torneo_id, "Eliminacion")
@@ -642,6 +651,7 @@ class MotorFormatosService:
         significado "cuántos de la tabla pasan a la liguilla" (Taste
         Decision T3 — una sola columna en vez de dos con semántica
         idéntica)."""
+        await bloquear(self.session, Espacio.MOTOR_FORMATOS, torneo_id)  # TASK-024
         torneo = await self.torneo_repo.get_or_404(torneo_id)
         if torneo.formato not in ("Grupos_Playoffs", "Liga"):
             raise DomainRuleError(

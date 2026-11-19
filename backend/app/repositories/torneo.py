@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 
+from app.core.bloqueos import Espacio, bloquear
 from app.models.torneo import Torneo
 from app.models.torneo_grupo import TorneoGrupo
 from app.repositories.base import BaseRepository
@@ -29,9 +30,7 @@ class TorneoRepository(BaseRepository[Torneo]):
         relacionadas por unos milisegundos, no corrompe nada (nunca hay
         dos secciones críticas DISTINTAS activas bajo la misma clave al
         mismo tiempo, solo esperan una a la otra sin necesidad)."""
-        await self.session.execute(
-            text("SELECT pg_advisory_xact_lock(:torneo_id)"), {"torneo_id": torneo_id}
-        )
+        await bloquear(self.session, Espacio.CUPO_TORNEO, torneo_id)
 
     async def listar_ediciones_del_grupo(self, torneo_grupo_id: int) -> list[Torneo]:
         """Todas las ediciones de un TORNEO_GRUPO, de la más reciente a la

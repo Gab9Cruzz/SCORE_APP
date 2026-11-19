@@ -1,5 +1,6 @@
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 
+from app.core.bloqueos import Espacio, bloquear
 from app.models.torneo import Torneo
 from app.models.torneo_grupo import TorneoGrupo
 from app.repositories.base import BaseRepository
@@ -30,10 +31,7 @@ class TorneoGrupoRepository(BaseRepository[TorneoGrupo]):
         (jugador_perfil_id, torneo_id) que usa el lock de arriba): distinto
         espacio de claves en Postgres, no colisiona con ese lock aunque el
         ID numérico coincida por casualidad."""
-        await self.session.execute(
-            text("SELECT pg_advisory_xact_lock(:torneo_grupo_id)"),
-            {"torneo_grupo_id": torneo_grupo_id},
-        )
+        await bloquear(self.session, Espacio.NUMERO_EDICION, torneo_grupo_id)
 
     async def listar_con_ediciones(self, incluir_archivados: bool = False) -> list[TorneoGrupo]:
         """Todos los grupos — el llamador (TorneoGrupoService) arma la

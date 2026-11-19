@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from sqlalchemy import Select, func, select, text
+from sqlalchemy import Select, func, select
 
+from app.core.bloqueos import Espacio, bloquear
 from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.torneo import Torneo
 from app.repositories.base import BaseRepository
@@ -75,10 +76,7 @@ class InscripcionTorneoRepository(BaseRepository[InscripcionTorneo]):
         colisiona con el lock de exclusividad de arriba aunque el ID
         numérico coincida por casualidad — son espacios de claves
         distintos en Postgres). Se libera solo al terminar la transacción."""
-        await self.session.execute(
-            text("SELECT pg_advisory_xact_lock(:inscripcion_torneo_id)"),
-            {"inscripcion_torneo_id": inscripcion_torneo_id},
-        )
+        await bloquear(self.session, Espacio.CUPO_INSCRIPCION, inscripcion_torneo_id)
 
     async def contar_no_canceladas(self, torneo_id: int) -> int:
         """3B-10 (docs/plans/cierre-backlog-todos-plan.md): cuántas

@@ -129,6 +129,10 @@ CREATE INDEX idx_partidos_ganador_corrido ON PARTIDOS(Ganador_Corrido_ID);
 CREATE UNIQUE INDEX uq_hitos_partido_fin_unico
     ON HITOS_PARTIDO (Partido_ID)
     WHERE Tipo_Hito = 'Fin_Partido';
+-- TASK-024 (BE-03): la misma red para un Inicio_Partido duplicado.
+CREATE UNIQUE INDEX uq_hitos_partido_inicio_unico
+    ON HITOS_PARTIDO (Partido_ID)
+    WHERE Tipo_Hito = 'Inicio_Partido';
 
 -- AUDITORIA (bitacora de cambios)
 -- Misma logica que ACCESOS: la pantalla lista siempre por fecha

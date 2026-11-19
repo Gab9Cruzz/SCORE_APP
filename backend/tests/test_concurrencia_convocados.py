@@ -30,6 +30,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
 from app.core.security import hash_password
+from app.exceptions.errors import DomainRuleError
 from app.models.convocado_a_partido import ConvocadoAPartido
 from app.models.hito_partido import HitoPartido
 from app.models.partido import Partido
@@ -128,7 +129,10 @@ async def test_dos_altas_de_titulares_distintos_al_tope_no_lo_exceden(sesiones_p
         "— el trigger no cerró la carrera del tope de titulares"
     )
     assert len(fallidos) == 1, f"esperaba exactamente 1 falla, hubo {len(fallidos)}: {fallidos}"
-    assert isinstance(fallidos[0], DBAPIError), f"esperaba un DBAPIError del trigger, fue {type(fallidos[0])}"
+    # TASK-024: el servicio ahora bloquea la fila del partido antes de
+    # contar, así que la perdedora espera y la frena el chequeo de Python
+    # (DomainRuleError, mensaje legible); el trigger sigue como red.
+    assert isinstance(fallidos[0], (DBAPIError, DomainRuleError)), f"rechazo inesperado: {type(fallidos[0])}"
 
     for sesion in (sesion_a, sesion_b):
         try:
@@ -207,9 +211,10 @@ async def test_doble_fin_partido_simultaneo_cierra_uno_solo(sesiones_paralelas):
         "— el índice único no cerró la carrera del doble Fin_Partido"
     )
     assert len(fallidos) == 1, f"esperaba exactamente 1 falla, hubo {len(fallidos)}: {fallidos}"
-    assert isinstance(fallidos[0], DBAPIError), (
-        f"esperaba un DBAPIError (fn_validar_hito_partido o uq_hitos_partido_fin_unico), fue {type(fallidos[0])}"
-    )
+    # TASK-024: con la fila del partido bloqueada en registrar(), la
+    # perdedora ve el Fin_Partido de la ganadora y la frena el chequeo de
+    # Python; el índice único sigue como red.
+    assert isinstance(fallidos[0], (DBAPIError, DomainRuleError)), f"rechazo inesperado: {type(fallidos[0])}"
 
     for sesion in (sesion_a, sesion_b):
         try:

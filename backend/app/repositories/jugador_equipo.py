@@ -1,7 +1,8 @@
 from typing import Sequence
 
-from sqlalchemy import Select, func, select, text
+from sqlalchemy import Select, func, select
 
+from app.core.bloqueos import Espacio, bloquear
 from app.models.inscripcion_torneo import InscripcionTorneo
 from app.models.jugador_equipo import JugadorEquipo
 from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
@@ -28,10 +29,10 @@ class JugadorEquipoRepository(BaseRepository[JugadorEquipo]):
         primera haga commit/rollback, momento en el que ya ve el INSERT (o
         su ausencia) de la primera. El lock se libera solo, automáticamente,
         al terminar la transacción — no hace falta un unlock explícito."""
-        await self.session.execute(
-            text("SELECT pg_advisory_xact_lock(:jugador_perfil_id, :torneo_id)"),
-            {"jugador_perfil_id": jugador_perfil_id, "torneo_id": torneo_id},
-        )
+        # TASK-024: por perfil (con su espacio propio). Serializa también las
+        # altas del mismo perfil en torneos distintos, que es de más pero
+        # correcto: es un alta rara y el bloqueo dura una transacción.
+        await bloquear(self.session, Espacio.EXCLUSIVIDAD_PERFIL, jugador_perfil_id)
 
     async def listar_por_torneo(
         self,

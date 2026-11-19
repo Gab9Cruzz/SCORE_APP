@@ -179,7 +179,7 @@ class ConvocadoAPartidoService:
         Con el partido ya iniciado esto se rechaza entero: es la operación
         destructiva (puede quitar titulares, degradar, o vaciar la lista), y el
         camino habilitado en vivo es `agregar`, que es aditivo."""
-        partido = await self.partido_repo.get_or_404(partido_id)
+        partido = await self.partido_repo.get_or_404_bloqueado(partido_id)  # TASK-024
         # Mismo ownership-check que EventoPartidoService/HitoPartidoService
         # (D5, roles-3-modulos-plan.md) — un Árbitro solo arma la
         # convocatoria de SU partido asignado.
@@ -277,7 +277,7 @@ class ConvocadoAPartidoService:
 
         Un doble-tap del operador (que en una cancha es normal) responde con la
         fila que ya existía en vez de un error: la operación es idempotente."""
-        partido = await self.partido_repo.get_or_404(partido_id)
+        partido = await self.partido_repo.get_or_404_bloqueado(partido_id)  # TASK-024
         verificar_arbitro_asignado(partido, usuario_actual)
         self._exigir_partido_operable(partido)
         self._exigir_equipos_definidos(partido)
