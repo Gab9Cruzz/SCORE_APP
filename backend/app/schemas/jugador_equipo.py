@@ -16,9 +16,13 @@ class JugadorEquipoCreate(BaseModel):
 
 
 class JugadorEquipoUpdate(BaseModel):
+    """TASK-017 (FUN-20): solo el dorsal. Las bajas van por
+    POST /plantillas/{id}/baja (que valida la fecha) y los cambios de equipo
+    por traspaso; cambiar `estado` o `fecha_fin` acá saltaba esas reglas."""
+
+    model_config = ConfigDict(extra="forbid")
+
     dorsal: int | None = None
-    fecha_fin: date | None = None
-    estado: EstadoJugadorEquipo | None = None
 
 
 class JugadorEquipoOut(BaseModel):

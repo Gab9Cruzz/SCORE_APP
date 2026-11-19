@@ -193,6 +193,7 @@ class EventoPartidoService:
         minuto = await self._minuto_en_vivo(partido)
 
         await self._validar_reglas_cambio(partido, data, evento_catalogo)
+        await self._verificar_jugador_en_cancha(partido.id, data.jugador_id)
 
         datos = data.model_dump()
         datos["minuto"] = minuto
@@ -273,6 +274,32 @@ class EventoPartidoService:
                 "El cronómetro todavía no arrancó — esperá el primer inicio de partido para cargar eventos."
             )
         return minuto
+
+    async def _verificar_jugador_en_cancha(self, partido_id: int, jugador_id: int) -> None:
+        """TASK-017 (FUN-15): en vivo no se cargan eventos de un jugador
+        expulsado en este partido, ni de uno que salió por cambio y no volvió
+        a entrar. (El resultado directo, que carga un acta ya cerrada, no
+        pasa por acá.)"""
+        fila = (
+            await self.session.execute(
+                text(
+                    """
+                    SELECT
+                        COUNT(*) FILTER (WHERE ev.Nombre = 'Tarjeta Roja' AND ep.JUGADOR_ID = :j) AS rojas,
+                        COUNT(*) FILTER (WHERE ev.Nombre = 'Cambio' AND ep.JUGADOR_ID = :j) AS salidas,
+                        COUNT(*) FILTER (WHERE ev.Nombre = 'Cambio' AND ep.JUGADOR_ID_ENTRA = :j) AS entradas
+                      FROM EVENTOS_PARTIDO ep
+                      JOIN EVENTOS ev ON ev.ID = ep.EVENTOS_ID
+                     WHERE ep.PARTIDOS_ID = :p AND ep.Estado = 'Registrado'
+                    """
+                ),
+                {"p": partido_id, "j": jugador_id},
+            )
+        ).one()
+        if fila.rojas > 0:
+            raise DomainRuleError("Ese jugador fue expulsado en este partido: no se le pueden cargar más eventos.")
+        if fila.salidas > fila.entradas:
+            raise DomainRuleError("Ese jugador salió por cambio y no volvió a entrar: no está en cancha.")
 
     async def _validar_reglas_cambio(self, partido: Partido, data: EventoPartidoCreate, evento_catalogo) -> None:
         """Área 3 (T5): delega en `reglas_cambio.validar_reglas_cambio`

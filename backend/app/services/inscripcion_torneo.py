@@ -21,6 +21,7 @@ from app.repositories.jugador import JugadorRepository
 from app.repositories.jugador_equipo import JugadorEquipoRepository
 from app.repositories.jugador_perfil_disciplina import JugadorPerfilDisciplinaRepository
 from app.repositories.torneo import TorneoRepository
+from app.services.plantilla_reglas import validar_alta
 from app.schemas.inscripcion_torneo import (
     ConflictoPlantillaBase,
     InscripcionTorneoCreate,
@@ -176,8 +177,24 @@ class InscripcionTorneoService:
         sin_dorsal = 0
         conflictos: list[ConflictoPlantillaBase] = []
 
+        torneo = await self.torneo_repo.get_or_404(inscripcion.torneo_id)
         for candidato in candidatos:
             datos = candidatos_con_datos[candidato.jugador_perfil_id]
+            # TASK-017: misma regla de alta que el lote. Un rechazo (suspendido,
+            # tope lleno) no aborta la copia: se informa como conflicto.
+            try:
+                await validar_alta(
+                    self.session, jugador_perfil_id=candidato.jugador_perfil_id, inscripcion=inscripcion, torneo=torneo
+                )
+            except DomainRuleError as rechazo:
+                conflictos.append(
+                    ConflictoPlantillaBase(
+                        jugador_perfil_id=candidato.jugador_perfil_id,
+                        jugador_nombre=datos["jugador_nombre"],
+                        mensaje=f"{datos['jugador_nombre']}: {rechazo.detail}",
+                    )
+                )
+                continue
             resultado = await self._copiar_un_candidato(
                 candidato.jugador_perfil_id, inscripcion.id, candidato.dorsal_sugerido
             )

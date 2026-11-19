@@ -4,10 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import DomainRuleError
 from app.models.jugador_equipo import JugadorEquipo
+from app.models.torneo import Torneo
 from app.repositories.equipo import EquipoRepository
 from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.repositories.jugador_equipo import JugadorEquipoRepository
 from app.schemas.jugador_equipo import JugadorEquipoCreate, JugadorEquipoUpdate
+from app.services.plantilla_reglas import validar_alta
 
 
 class JugadorEquipoService:
@@ -15,6 +17,7 @@ class JugadorEquipoService:
     cumplir uq_dorsal_por_roster_vigente (03_indexes.sql, índice parcial)."""
 
     def __init__(self, session: AsyncSession):
+        self.session = session
         self.repo = JugadorEquipoRepository(session)
         self.inscripcion_repo = InscripcionTorneoRepository(session)
         self.equipo_repo = EquipoRepository(session)
@@ -107,6 +110,10 @@ class JugadorEquipoService:
         # que cae al 409 genérico de handlers.py sin decir "el dorsal ya
         # está ocupado". Se anticipa acá con el mismo mensaje que ya usa
         # registro_lote.py (EC-13) para el mismo caso.
+        # TASK-017: la misma regla de alta que el lote (suspensión, jugador
+        # activo, tope de la modalidad con su bloqueo).
+        torneo = await self.session.get(Torneo, inscripcion.torneo_id)
+        await validar_alta(self.session, jugador_perfil_id=data.jugador_perfil_id, inscripcion=inscripcion, torneo=torneo)
         if data.dorsal is not None and await self.repo.dorsal_en_uso(
             data.inscripcion_torneo_id, data.dorsal
         ):
@@ -118,5 +125,10 @@ class JugadorEquipoService:
 
     async def dar_de_baja(self, id_: int, fecha_fin) -> JugadorEquipo:
         """Cierra la vigencia de un jugador en el equipo (libera el dorsal)."""
+        vinculo = await self.repo.get_or_404(id_)
+        # TASK-017 (FUN-20): una baja anterior al alta dejaría una vigencia
+        # imposible.
+        if fecha_fin < vinculo.fecha_inicio:
+            raise DomainRuleError("La fecha de baja no puede ser anterior a la fecha de alta en el equipo.")
         return await self.repo.update(id_, fecha_fin=fecha_fin, estado="Inactivo")
 

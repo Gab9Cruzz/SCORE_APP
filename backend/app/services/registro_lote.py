@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.jugador import Jugador
 from app.models.jugador_equipo import JugadorEquipo
 from app.models.jugador_perfil_disciplina import JugadorPerfilDisciplina
-from app.models.modalidad import Modalidad
 from app.repositories.equipo import EquipoRepository
 from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.repositories.jugador import JugadorRepository
@@ -20,21 +19,12 @@ from app.repositories.jugador_perfil_disciplina import JugadorPerfilDisciplinaRe
 from app.repositories.modalidad import ModalidadRepository
 from app.repositories.torneo import TorneoRepository
 from app.schemas.registro_lote import FilaInvalida, FilaValida, RegistroLoteFila
+from app.services.plantilla_reglas import tope_de_plantilla
 
 
-def _tope_de_plantilla(modalidad: Modalidad) -> int | None:
-    """3B-4 (docs/plans/cierre-backlog-todos-plan.md): el tope real de esta
-    modalidad para el registro por lote — `Tamano_Plantilla_Max` si el
-    catálogo lo trae seteado (equipo grande con un roster máximo
-    explícito, ej. Fútbol 11=25), si no el mismo criterio de siempre para
-    Pareja (`tamano_equipo<=2`, EC-6). Para un equipo grande SIN
-    `Tamano_Plantilla_Max` seteado, sigue sin haber tope — mismo
-    comportamiento que antes de 3B-4."""
-    if modalidad.tamano_plantilla_max is not None:
-        return modalidad.tamano_plantilla_max
-    if modalidad.tamano_equipo <= 2:
-        return modalidad.tamano_equipo
-    return None
+# TASK-017: la regla vive en services/plantilla_reglas.py, compartida con
+# los otros caminos de alta.
+_tope_de_plantilla = tope_de_plantilla
 
 
 class RegistroLoteService:

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.errors import DomainRuleError
 from app.models.jugador_equipo import JugadorEquipo
+from app.models.torneo import Torneo
 from app.models.traspaso import Traspaso
 from app.repositories.equipo import EquipoRepository
 from app.repositories.hito_partido import HitoPartidoRepository
@@ -14,6 +15,7 @@ from app.repositories.inscripcion_torneo import InscripcionTorneoRepository
 from app.repositories.jugador_equipo import JugadorEquipoRepository
 from app.repositories.traspaso import TraspasoRepository
 from app.schemas.traspaso import TraspasoCreate, TraspasoOut
+from app.services.plantilla_reglas import validar_alta
 
 
 class TraspasoService:
@@ -154,6 +156,15 @@ class TraspasoService:
         # alcanza sola bajo concurrencia real, ver
         # JugadorEquipoRepository.lock_exclusividad_torneo.
         await self.jugador_equipo_repo.lock_exclusividad_torneo(data.jugador_perfil_id, inscripcion_destino.torneo_id)
+
+        # TASK-017: la misma regla de alta que el lote, sobre el destino.
+        torneo_destino = await self.session.get(Torneo, inscripcion_destino.torneo_id)
+        await validar_alta(
+            self.session,
+            jugador_perfil_id=data.jugador_perfil_id,
+            inscripcion=inscripcion_destino,
+            torneo=torneo_destino,
+        )
 
         nueva_membresia = JugadorEquipo(
             jugador_perfil_id=data.jugador_perfil_id,
