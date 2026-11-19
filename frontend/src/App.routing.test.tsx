@@ -190,6 +190,20 @@ describe("Ruteo y redirect por rol (roles-3-modulos-plan.md, Fase 2, D2)", () =>
     expect(screen.getByRole("link", { name: "Portal público" })).toBeInTheDocument();
   });
 
+  // TASK-040 (FUN-12): el enlace apuntaba a "/", que con sesión redirige
+  // al dashboard — hacer clic no llevaba al portal.
+  it("con sesión, el enlace Portal público muestra el feed y no el dashboard", async () => {
+    disciplinasDisponibles();
+    sembrarSesion("TorneoAdmin", 3);
+    renderApp("/torneo-admin");
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("link", { name: "Portal público" }));
+
+    expect(await screen.findByRole("heading", { name: /partidos/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Dashboard de Torneo" })).not.toBeInTheDocument();
+  });
+
   // TASK-036 (FE-03): antes el catch-all redirigía a "/" en silencio.
   it("una ruta inexistente muestra la 404; el anónimo vuelve al portal", async () => {
     disciplinasDisponibles();

@@ -106,8 +106,11 @@ export function NavBar() {
             {/* D6: con T1.2 mandando a un logueado siempre a /dashboard y sin
                 ningún link de vuelta al portal público, nadie con sesión podía
                 llegar al feed — ni el TorneoAdmin que acaba de cargar los
-                partidos. */}
-            <NavLink to="/">Portal público</NavLink>
+                partidos. TASK-040: va a /portal y no a "/", que con sesión
+                redirige al dashboard. */}
+            <NavLink to="/portal" className={claseActiva}>
+              Portal público
+            </NavLink>
             {(session?.rol === "TorneoAdmin" || session?.rol === "AdminGeneral" || session?.rol === "Arbitro") && (
               <NavLink to="/control-de-mesa" className={claseActiva}>
                 Control de Mesa

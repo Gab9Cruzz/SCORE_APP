@@ -35,6 +35,23 @@ describe("fechas", () => {
     expect(sumarDias(base, dias)).toBe(esperado);
   });
 
+  // TASK-040 (FUN-17): el resultado no depende de la zona del navegador.
+  // Node aplica un cambio de process.env.TZ en caliente.
+  it.each(["Pacific/Kiritimati", "Asia/Kolkata", "UTC", "America/Guayaquil", "Pacific/Pago_Pago"])(
+    "sumarDias da lo mismo con el navegador en %s",
+    (zona) => {
+      const original = process.env.TZ;
+      process.env.TZ = zona;
+      try {
+        expect(sumarDias("2026-05-10", 1)).toBe("2026-05-11");
+        expect(sumarDias("2026-03-08", -1)).toBe("2026-03-07");
+        expect(sumarDias("2026-11-01", 1)).toBe("2026-11-02");
+      } finally {
+        process.env.TZ = original;
+      }
+    },
+  );
+
   it("hoyISO es el día de la zona del negocio, no el de UTC", () => {
     // 2026-11-19 03:00 UTC = 2026-11-18 22:00 en Guayaquil (UTC−5).
     vi.useFakeTimers();

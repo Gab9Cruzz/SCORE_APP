@@ -69,6 +69,10 @@ export function App() {
               logueado sigue exactamente donde ya estaba, redirigido a
               /dashboard — el arranque de nadie con sesión cambia. */}
           <Route path="/" element={session ? <Navigate to="/dashboard" replace /> : <FeedPartidosPage />} />
+          {/* TASK-040 (FUN-12): el feed para todos, con o sin sesión. El
+              enlace "Portal público" apuntaba a "/", que con sesión
+              redirige al dashboard: el enlace no llevaba al portal. */}
+          <Route path="/portal" element={<FeedPartidosPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/login" element={<LoginPage />} />
           {/* TASK-033: cualquier cuenta con sesión, sin importar el rol. */}
