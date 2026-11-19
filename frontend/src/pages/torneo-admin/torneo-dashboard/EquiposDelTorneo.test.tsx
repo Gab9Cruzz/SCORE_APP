@@ -88,6 +88,8 @@ describe("EquiposDelTorneoPage — Pareja/Conjunto (tamano_equipo >= 2)", () => 
     renderPagina();
 
     await user.click(await screen.findByRole("button", { name: "Cancelar inscripción" }));
+    // TASK-038: la baja pide confirmación.
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
 
     await waitFor(() => expect(bodyRecibido).toEqual({ estado: "Cancelado" }));
   });

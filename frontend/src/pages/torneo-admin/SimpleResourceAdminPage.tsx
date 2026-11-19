@@ -24,6 +24,8 @@ interface SimpleResourceAdminPageProps<TOut extends RowBase> {
   isSelf?: (row: TOut) => boolean;
   /** equipos-jugadores-plan.md, Fase 2, Etapa D — ver ResourceTable.tsx `extraActions`. */
   renderRowExtra?: (row: TOut) => ReactNode;
+  /** TASK-038 — ver ResourceTable.tsx `confirmacion`. */
+  confirmacionBaja?: (row: TOut) => string;
 }
 
 /** Página de gestión CRUD para un recurso "simple" (Torneo, Equipo,
@@ -34,7 +36,7 @@ interface SimpleResourceAdminPageProps<TOut extends RowBase> {
  * torneo-dashboard/PartidosDelTorneo.tsx, torneo-dashboard/EquiposDelTorneo.tsx,
  * torneo-dashboard/PlantillasDelTorneo.tsx). */
 export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResourceAdminPageProps<TOut>) {
-  const { resourceKey, basePath, title, createFields, editFields, columns, emptyMessage, isSelf, renderRowExtra } =
+  const { resourceKey, basePath, title, createFields, editFields, columns, emptyMessage, isSelf, renderRowExtra, confirmacionBaja } =
     props;
   const crud = useResourceCrud<TOut, ValoresFormulario, ValoresFormulario>({ resourceKey, basePath });
   const [modo, setModo] = useState<Modo<TOut>>({ tipo: "lista" });
@@ -116,6 +118,7 @@ export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResou
         softDeletePending={crud.softDelete.isPending}
         isSelf={isSelf}
         extraActions={renderRowExtra}
+        confirmacion={confirmacionBaja}
       />
     </div>
   );

@@ -1026,6 +1026,22 @@ td:first-child {
   cursor: pointer;
 }
 
+/* TASK-038 (UX-06): confirmación de baja en la misma fila. */
+.table-actions--confirmando {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.table-actions__pregunta {
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.table-actions button.button-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 /* Disciplina/Modalidad heredadas del grupo en "Nueva edición"
  * (ediciones-catalogo-disciplinas-plan.md, Fase 2 parte A) — texto plano
  * a propósito, no un <select disabled>: ver el comentario en

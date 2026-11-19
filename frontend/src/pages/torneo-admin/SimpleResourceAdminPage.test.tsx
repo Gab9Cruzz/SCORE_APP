@@ -89,6 +89,8 @@ describe("SimpleResourceAdminPage", () => {
     await screen.findByText("Uno");
 
     await user.click(screen.getByRole("button", { name: "Dar de baja" }));
+    // TASK-038: la baja pide confirmación.
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
 
     await waitFor(() => expect(deleteHit).toBe(true));
   });
@@ -100,6 +102,8 @@ describe("SimpleResourceAdminPage", () => {
     await screen.findByText("Uno");
 
     await user.click(screen.getByRole("button", { name: "Dar de baja" }));
+    // TASK-038: la baja pide confirmación.
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
 
     expect(await screen.findByText("no podés desactivar tu propia cuenta")).toBeInTheDocument();
   });

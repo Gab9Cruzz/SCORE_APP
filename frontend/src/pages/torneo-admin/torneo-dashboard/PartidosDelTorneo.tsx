@@ -187,6 +187,11 @@ export function PartidosDelTorneoPage() {
         emptyMessage="Sin partidos programados todavía en esta edición."
         onSoftDelete={(fila) => crud.softDelete.mutate(fila.id)}
         softDeleteLabel="Cancelar"
+        confirmacion={(fila) =>
+          `¿Cancelar el partido ${fila.equipos_id_local != null ? (nombreEquipo.get(fila.equipos_id_local) ?? "?") : "Por definir"} vs ${
+            fila.equipos_id_visitante != null ? (nombreEquipo.get(fila.equipos_id_visitante) ?? "?") : "Por definir"
+          }?`
+        }
         softDeletePending={crud.softDelete.isPending}
         estadosDeBaja={["Cancelado"]}
         extraActions={(fila) => (

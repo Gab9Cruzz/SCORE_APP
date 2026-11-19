@@ -88,6 +88,9 @@ export function UsuariosAdminPage() {
         title="Usuarios"
         emptyMessage="No hay usuarios creados todavía."
         isSelf={(row) => row.id === session?.id}
+        confirmacionBaja={(row) =>
+          `¿Dar de baja a «${row.username}»? No va a poder iniciar sesión y se cierran sus sesiones abiertas.`
+        }
         createFields={[
           { name: "username", label: "Usuario", type: "text", required: true },
           { name: "nombre", label: "Nombre", type: "text", required: true },

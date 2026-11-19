@@ -197,6 +197,8 @@ describe("TraspasosDelTorneoPage", () => {
     renderPagina();
 
     await user.click(await screen.findByRole("button", { name: "Anular" }));
+    // TASK-038: la baja pide confirmación.
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
 
     await waitFor(() => expect(llamado).toBe(true));
   });

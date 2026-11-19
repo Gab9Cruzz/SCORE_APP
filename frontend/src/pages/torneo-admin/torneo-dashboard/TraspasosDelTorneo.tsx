@@ -237,6 +237,7 @@ export function TraspasosDelTorneoPage() {
           )
         }
         softDeleteLabel="Anular"
+        confirmacion={() => "¿Anular este traspaso? El jugador vuelve a su equipo de origen."}
         softDeletePending={crud.customAction.isPending}
         estadosDeBaja={["Anulado"]}
         // fixes-datos-traspasos-control-mesa-plan.md: el botón desaparece
