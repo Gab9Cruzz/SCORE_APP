@@ -1,13 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Button } from "./Button";
 import { Field } from "./Field";
-import { Modal } from "./Modal";
 import { Table } from "./Table";
 
-// TASK-034: una prueba (o un grupo) por componente base.
+// TASK-034: una prueba (o un grupo) por componente base. Modal tiene las
+// suyas en Modal.test.tsx (TASK-035).
 
 describe("Button", () => {
   it("es type=button por defecto: no envía el formulario que lo contiene", async () => {
@@ -105,76 +104,5 @@ describe("Table", () => {
     expect(screen.getByRole("table", { name: "Inscriptos" })).toBeInTheDocument();
     expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Equipo", "Acciones"]);
     expect(screen.getByRole("cell", { name: "Halcones" })).toBeInTheDocument();
-  });
-});
-
-describe("Modal", () => {
-  function ConDisparador({ onCerrar = vi.fn() }: { onCerrar?: () => void }) {
-    const [abierto, setAbierto] = useState(false);
-    return (
-      <>
-        <button type="button" onClick={() => setAbierto(true)}>
-          Abrir
-        </button>
-        {abierto && (
-          <Modal
-            titulo="Gestionar torneos"
-            onCerrar={() => {
-              onCerrar();
-              setAbierto(false);
-            }}
-          >
-            <input aria-label="Buscar" />
-            <button type="button">Guardar</button>
-          </Modal>
-        )}
-      </>
-    );
-  }
-
-  it("tiene nombre, el foco entra y Tab no sale del panel", async () => {
-    const user = userEvent.setup();
-    render(<ConDisparador />);
-    await user.click(screen.getByRole("button", { name: "Abrir" }));
-
-    expect(screen.getByRole("dialog", { name: "Gestionar torneos" })).toHaveAttribute("aria-modal", "true");
-    expect(screen.getByLabelText("Buscar")).toHaveFocus();
-
-    await user.tab();
-    expect(screen.getByRole("button", { name: "Guardar" })).toHaveFocus();
-    await user.tab();
-    expect(screen.getByLabelText("Buscar")).toHaveFocus();
-    await user.tab({ shift: true });
-    expect(screen.getByRole("button", { name: "Guardar" })).toHaveFocus();
-  });
-
-  it("Escape cierra y el foco vuelve al botón que lo abrió", async () => {
-    const user = userEvent.setup();
-    const onCerrar = vi.fn();
-    render(<ConDisparador onCerrar={onCerrar} />);
-    await user.click(screen.getByRole("button", { name: "Abrir" }));
-
-    await user.keyboard("{Escape}");
-    expect(onCerrar).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Abrir" })).toHaveFocus();
-  });
-
-  it("un redibujo del padre no le roba el foco al usuario", async () => {
-    const user = userEvent.setup();
-    function Padre() {
-      const [n, setN] = useState(0);
-      return (
-        <Modal titulo="Contador" onCerrar={() => {}}>
-          <input aria-label="Primero" />
-          <button type="button" onClick={() => setN(n + 1)}>
-            Sumar {n}
-          </button>
-        </Modal>
-      );
-    }
-    render(<Padre />);
-    await user.click(screen.getByRole("button", { name: "Sumar 0" }));
-    expect(screen.getByRole("button", { name: "Sumar 1" })).toHaveFocus();
   });
 });

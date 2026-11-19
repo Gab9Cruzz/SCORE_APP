@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, apiErrorMessage } from "../../../api/client";
+import { Modal } from "../../../components/ui/Modal";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
 import { AvatarJugador } from "../AvatarJugador";
 import { LOCALE, parsearFecha } from "../../../lib/fechas";
@@ -114,126 +115,129 @@ export function ModalPerfilJugador(props: ModalPerfilJugadorProps) {
   const perfil = query.data;
 
   return (
-    <div className="modal-overlay" role="dialog" aria-label="Perfil de Jugador">
-      <div className="modal-panel">
-        {query.isLoading && <p>Cargando...</p>}
-        {query.isError && <p className="error-text">{apiErrorMessage(query.error)}</p>}
+    <Modal
+      etiqueta="Perfil de Jugador"
+      onCerrar={onClose}
+      sinGuardar={editando}
+      cierreBloqueado={jugadores.update.isPending}
+    >
+      {query.isLoading && <p>Cargando...</p>}
+      {query.isError && <p className="error-text">{apiErrorMessage(query.error)}</p>}
 
-        {perfil && !editando && (
-          <>
-            <div className="perfil-jugador__header">
-              <AvatarJugador jugadorId={perfil.jugador_id} nombre={perfil.nombre} fotoUrl={perfil.foto_url} tamano="grande" />
-              <div className="perfil-jugador__datos">
-                <h2>{perfil.nombre}</h2>
-                <p className="muted">
-                  Cédula: {perfil.cedula} — Correo: {perfil.correo_electronico}
-                </p>
-              </div>
-              <button type="button" onClick={abrirEdicion}>
-                Editar
-              </button>
+      {perfil && !editando && (
+        <>
+          <div className="perfil-jugador__header">
+            <AvatarJugador jugadorId={perfil.jugador_id} nombre={perfil.nombre} fotoUrl={perfil.foto_url} tamano="grande" />
+            <div className="perfil-jugador__datos">
+              <h2>{perfil.nombre}</h2>
+              <p className="muted">
+                Cédula: {perfil.cedula} — Correo: {perfil.correo_electronico}
+              </p>
             </div>
+            <button type="button" onClick={abrirEdicion}>
+              Editar
+            </button>
+          </div>
 
-            {perfil.disciplinas.length === 0 && <p className="muted">Sin perfiles de disciplina todavía.</p>}
+          {perfil.disciplinas.length === 0 && <p className="muted">Sin perfiles de disciplina todavía.</p>}
 
-            {perfil.disciplinas.map((d) => (
-              <section key={d.jugador_perfil_id} className="card">
-                <h3>
-                  {d.disciplina} <span className={badgePorEstado[d.estado]}>{d.estado}</span>
-                </h3>
-                <p>Goles totales: {d.goles_totales}</p>
+          {perfil.disciplinas.map((d) => (
+            <section key={d.jugador_perfil_id} className="card">
+              <h3>
+                {d.disciplina} <span className={badgePorEstado[d.estado]}>{d.estado}</span>
+              </h3>
+              <p>Goles totales: {d.goles_totales}</p>
 
-                <h4>Equipos activos</h4>
-                {d.equipos_activos.length === 0 ? (
-                  <p className="muted">Sin equipos activos en esta disciplina.</p>
-                ) : (
-                  <ul>
-                    {d.equipos_activos.map((e) => (
-                      <li key={e.inscripcion_torneo_id}>
-                        {e.torneo} — {e.equipo} {e.dorsal != null && `(dorsal #${e.dorsal})`} — desde{" "}
-                        {formatearFecha(e.fecha_inicio)}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                <h4>Trayectoria</h4>
-                {d.trayectoria.length === 0 ? (
-                  <p className="muted">Sin traspasos registrados en esta disciplina.</p>
-                ) : (
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Fecha</th>
-                          <th>Origen</th>
-                          <th>Destino</th>
-                          <th>Motivo</th>
-                          <th>Estado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {d.trayectoria.map((t) => (
-                          <tr key={t.id}>
-                            <td>{formatearFechaHora(t.fecha_traspaso)}</td>
-                            <td>{t.origen ?? "Agencia libre"}</td>
-                            <td>{t.destino}</td>
-                            <td>{t.motivo ?? "—"}</td>
-                            <td>{t.estado}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
-            ))}
-
-            <div className="resource-form__actions">
-              <button type="button" className="link-button" onClick={onClose}>
-                Cerrar
-              </button>
-            </div>
-          </>
-        )}
-
-        {perfil && editando && (
-          <>
-            <h2>Editar datos personales</h2>
-            <div className="resource-form">
-              <label>
-                Nombre
-                <input value={form.nombre} onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} />
-              </label>
-              <label>
-                Cédula
-                <input value={form.cedula} onChange={(e) => setForm((f) => ({ ...f, cedula: e.target.value }))} />
-              </label>
-              <label>
-                Correo
-                <input
-                  value={form.correo_electronico}
-                  onChange={(e) => setForm((f) => ({ ...f, correo_electronico: e.target.value }))}
-                />
-              </label>
-              {/* Cédula duplicada (unique_jugador_cedula) llega acá como
-                  mensaje inline, no un toast genérico — estados de
-                  interacción del grid, Fase 2 del plan. */}
-              {jugadores.update.isError && (
-                <p className="error-text">{apiErrorMessage(jugadores.update.error, "No se pudo guardar.")}</p>
+              <h4>Equipos activos</h4>
+              {d.equipos_activos.length === 0 ? (
+                <p className="muted">Sin equipos activos en esta disciplina.</p>
+              ) : (
+                <ul>
+                  {d.equipos_activos.map((e) => (
+                    <li key={e.inscripcion_torneo_id}>
+                      {e.torneo} — {e.equipo} {e.dorsal != null && `(dorsal #${e.dorsal})`} — desde{" "}
+                      {formatearFecha(e.fecha_inicio)}
+                    </li>
+                  ))}
+                </ul>
               )}
-              <div className="resource-form__actions">
-                <button type="button" className="link-button" onClick={() => setEditando(false)}>
-                  Cancelar
-                </button>
-                <button type="button" disabled={jugadores.update.isPending} onClick={guardar}>
-                  {jugadores.update.isPending ? "Guardando..." : "Guardar"}
-                </button>
-              </div>
+
+              <h4>Trayectoria</h4>
+              {d.trayectoria.length === 0 ? (
+                <p className="muted">Sin traspasos registrados en esta disciplina.</p>
+              ) : (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Origen</th>
+                        <th>Destino</th>
+                        <th>Motivo</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {d.trayectoria.map((t) => (
+                        <tr key={t.id}>
+                          <td>{formatearFechaHora(t.fecha_traspaso)}</td>
+                          <td>{t.origen ?? "Agencia libre"}</td>
+                          <td>{t.destino}</td>
+                          <td>{t.motivo ?? "—"}</td>
+                          <td>{t.estado}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          ))}
+
+          <div className="resource-form__actions">
+            <button type="button" className="link-button" onClick={onClose}>
+              Cerrar
+            </button>
+          </div>
+        </>
+      )}
+
+      {perfil && editando && (
+        <>
+          <h2>Editar datos personales</h2>
+          <div className="resource-form">
+            <label>
+              Nombre
+              <input value={form.nombre} onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} />
+            </label>
+            <label>
+              Cédula
+              <input value={form.cedula} onChange={(e) => setForm((f) => ({ ...f, cedula: e.target.value }))} />
+            </label>
+            <label>
+              Correo
+              <input
+                value={form.correo_electronico}
+                onChange={(e) => setForm((f) => ({ ...f, correo_electronico: e.target.value }))}
+              />
+            </label>
+            {/* Cédula duplicada (unique_jugador_cedula) llega acá como
+                mensaje inline, no un toast genérico — estados de
+                interacción del grid, Fase 2 del plan. */}
+            {jugadores.update.isError && (
+              <p className="error-text">{apiErrorMessage(jugadores.update.error, "No se pudo guardar.")}</p>
+            )}
+            <div className="resource-form__actions">
+              <button type="button" className="link-button" onClick={() => setEditando(false)}>
+                Cancelar
+              </button>
+              <button type="button" disabled={jugadores.update.isPending} onClick={guardar}>
+                {jugadores.update.isPending ? "Guardando..." : "Guardar"}
+              </button>
             </div>
-          </>
-        )}
-      </div>
-    </div>
+          </div>
+        </>
+      )}
+    </Modal>
   );
 }

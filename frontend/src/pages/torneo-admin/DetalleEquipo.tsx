@@ -6,6 +6,7 @@ import { useCatalogo } from "../../hooks/useCatalogo";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
 import { iconoDisciplina } from "../../components/iconosDisciplina";
 import { SelectorJugadorBuscable, type JugadorBuscadoRow } from "../../components/admin/SelectorJugadorBuscable";
+import { Modal } from "../../components/ui/Modal";
 import type { Esquema } from "../../api/types";
 
 interface EquipoDetalle {
@@ -238,101 +239,103 @@ function ModalBuscarAgregarJugador(props: {
   const puedeCrear = nuevoJugador.cedula.trim() !== "" && nuevoJugador.nombre.trim() !== "" && nuevoJugador.correo_electronico.trim() !== "";
 
   return (
-    <div className="modal-overlay" role="dialog" aria-label="Buscar o agregar jugador">
-      <div className="modal-panel">
-        <h2>Buscar por nombre o cédula — {props.equipoNombre}</h2>
+    <Modal
+      etiqueta="Buscar o agregar jugador"
+      onCerrar={onClose}
+      sinGuardar={creando && Object.values(nuevoJugador).some((v) => v.trim() !== "")}
+    >
+      <h2>Buscar por nombre o cédula — {props.equipoNombre}</h2>
 
-        <div className={confirmando ? "is-inerte" : undefined} inert={confirmando != null}>
-          <SelectorJugadorBuscable elegido={elegido} onElegir={elegirJugador} onCambiar={volverABuscar} />
-        </div>
-
-        {confirmando && (
-          // Flujo 2: texto literal — el admin tiene que leerlo completo,
-          // no un warning que se pueda ignorar sin leer.
-          <div className="resource-form" aria-label="Advertencia de multimilitancia">
-            <p>
-              ⚠️ {confirmando.jugador.nombre} ya está inscrito en {(confirmando.conflicto.equipos ?? []).join(", ")}.
-            </p>
-            <p>{confirmando.conflicto.mensaje}</p>
-            <div className="resource-form__actions">
-              <button type="button" className="link-button" onClick={volverABuscar}>
-                Volver a buscar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onAgregado({ jugador_id: confirmando.jugador.id, dorsal: null });
-                  onClose();
-                }}
-              >
-                Agregar igual
-              </button>
-            </div>
-          </div>
-        )}
-
-        {elegido == null && (
-          <>
-            <p className="modal-panel__separador">— o —</p>
-            {!creando ? (
-              <button type="button" onClick={() => setCreando(true)}>
-                + Crear jugador nuevo
-              </button>
-            ) : (
-              <div className="resource-form">
-                <label>
-                  Cédula
-                  <input
-                    value={nuevoJugador.cedula}
-                    onChange={(e) => setNuevoJugador((j) => ({ ...j, cedula: e.target.value }))}
-                  />
-                </label>
-                <label>
-                  Nombre
-                  <input
-                    value={nuevoJugador.nombre}
-                    onChange={(e) => setNuevoJugador((j) => ({ ...j, nombre: e.target.value }))}
-                  />
-                </label>
-                <label>
-                  Correo
-                  <input
-                    value={nuevoJugador.correo_electronico}
-                    onChange={(e) => setNuevoJugador((j) => ({ ...j, correo_electronico: e.target.value }))}
-                  />
-                </label>
-                {crearJugador.create.isError && (
-                  <p className="error-text">{apiErrorMessage(crearJugador.create.error)}</p>
-                )}
-                <div className="resource-form__actions">
-                  <button
-                    type="button"
-                    disabled={!puedeCrear || crearJugador.create.isPending}
-                    onClick={() =>
-                      crearJugador.create.mutate(
-                        {
-                          nombre: nuevoJugador.nombre.trim(),
-                          cedula: nuevoJugador.cedula.trim(),
-                          correo_electronico: nuevoJugador.correo_electronico.trim(),
-                        },
-                        { onSuccess: (jugador) => elegirJugador(jugador as JugadorRow) },
-                      )
-                    }
-                  >
-                    {crearJugador.create.isPending ? "Creando..." : "Crear y agregar"}
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        <div className="resource-form__actions">
-          <button type="button" className="link-button" onClick={onClose}>
-            Cerrar
-          </button>
-        </div>
+      <div className={confirmando ? "is-inerte" : undefined} inert={confirmando != null}>
+        <SelectorJugadorBuscable elegido={elegido} onElegir={elegirJugador} onCambiar={volverABuscar} />
       </div>
-    </div>
+
+      {confirmando && (
+        // Flujo 2: texto literal — el admin tiene que leerlo completo,
+        // no un warning que se pueda ignorar sin leer.
+        <div className="resource-form" aria-label="Advertencia de multimilitancia">
+          <p>
+            ⚠️ {confirmando.jugador.nombre} ya está inscrito en {(confirmando.conflicto.equipos ?? []).join(", ")}.
+          </p>
+          <p>{confirmando.conflicto.mensaje}</p>
+          <div className="resource-form__actions">
+            <button type="button" className="link-button" onClick={volverABuscar}>
+              Volver a buscar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onAgregado({ jugador_id: confirmando.jugador.id, dorsal: null });
+                onClose();
+              }}
+            >
+              Agregar igual
+            </button>
+          </div>
+        </div>
+      )}
+
+      {elegido == null && (
+        <>
+          <p className="modal-panel__separador">— o —</p>
+          {!creando ? (
+            <button type="button" onClick={() => setCreando(true)}>
+              + Crear jugador nuevo
+            </button>
+          ) : (
+            <div className="resource-form">
+              <label>
+                Cédula
+                <input
+                  value={nuevoJugador.cedula}
+                  onChange={(e) => setNuevoJugador((j) => ({ ...j, cedula: e.target.value }))}
+                />
+              </label>
+              <label>
+                Nombre
+                <input
+                  value={nuevoJugador.nombre}
+                  onChange={(e) => setNuevoJugador((j) => ({ ...j, nombre: e.target.value }))}
+                />
+              </label>
+              <label>
+                Correo
+                <input
+                  value={nuevoJugador.correo_electronico}
+                  onChange={(e) => setNuevoJugador((j) => ({ ...j, correo_electronico: e.target.value }))}
+                />
+              </label>
+              {crearJugador.create.isError && (
+                <p className="error-text">{apiErrorMessage(crearJugador.create.error)}</p>
+              )}
+              <div className="resource-form__actions">
+                <button
+                  type="button"
+                  disabled={!puedeCrear || crearJugador.create.isPending}
+                  onClick={() =>
+                    crearJugador.create.mutate(
+                      {
+                        nombre: nuevoJugador.nombre.trim(),
+                        cedula: nuevoJugador.cedula.trim(),
+                        correo_electronico: nuevoJugador.correo_electronico.trim(),
+                      },
+                      { onSuccess: (jugador) => elegirJugador(jugador as JugadorRow) },
+                    )
+                  }
+                >
+                  {crearJugador.create.isPending ? "Creando..." : "Crear y agregar"}
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="resource-form__actions">
+        <button type="button" className="link-button" onClick={onClose}>
+          Cerrar
+        </button>
+      </div>
+    </Modal>
   );
 }

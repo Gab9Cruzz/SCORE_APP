@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { api, apiErrorMessage } from "../../api/client";
+import { Modal } from "../../components/ui/Modal";
 import {
   deriveEnCancha,
   deriveHistorialElegibilidad,
@@ -495,13 +496,27 @@ export function ModalResultadoDirecto(props: {
     (!requiereDesempate || (sinMarcadorTanda ? ganadorDesempateId !== null : tandaValida)) &&
     pendienteConfirmar === null;
 
+  // TASK-035: con goles, eventos o un desempate cargados, cerrar por
+  // Escape, por el fondo o con "Cancelar" pide confirmación — antes un
+  // Escape accidental no hacía nada y un "Cancelar" tiraba todo sin avisar.
+  const hayDatosCargados =
+    slots.length > 0 ||
+    otrosEventos.length > 0 ||
+    ganadorCorridoId !== null ||
+    ganadorDesempateId !== null ||
+    penalesLocal > 0 ||
+    penalesVisitante > 0;
+
   return (
-    <div
-      className="modal-overlay"
-      role="dialog"
-      aria-label={`Cargar resultado directo — ${nombreLocal} vs ${nombreVisitante}`}
+    <Modal
+      etiqueta={`Cargar resultado directo — ${nombreLocal} vs ${nombreVisitante}`}
+      onCerrar={onClose}
+      sinGuardar={hayDatosCargados}
+      cierreBloqueado={mutation.isPending}
+      className="modal-panel--resultado-directo"
     >
-      <div className="modal-panel" style={{ maxWidth: 640 }}>
+      {(pedirCierre) => (
+        <>
         <h2>Cargar resultado directo</h2>
         <p className="muted">
           {nombreLocal} vs {nombreVisitante} — cierra el partido sin usar el cronómetro en vivo.
@@ -608,39 +623,37 @@ export function ModalResultadoDirecto(props: {
             borrado silencioso: sugiere el más reciente, siempre con
             escape hatch. */}
         {pendienteConfirmar && (
-          <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-reconciliacion-titulo">
-            <div className="modal-panel">
-              <h2 id="modal-reconciliacion-titulo">
-                Bajaste el marcador — hay {pendienteConfirmar.candidatos.length} goles cargados
-              </h2>
-              <p className="muted">¿Cuál descartás?</p>
-              <div className="modal-panel__checklist">
-                {pendienteConfirmar.candidatos.map((c) => {
-                  const jugador = plantillaCombinada.find((j) => j.jugador_id === c.jugadorId);
-                  return (
-                    <label key={c.id} className="modal-panel__equipo-fila">
-                      <input
-                        type="radio"
-                        name="candidato-descartar"
-                        checked={candidatoElegido === c.id}
-                        onChange={() => setCandidatoElegido(c.id)}
-                      />
-                      {jugador?.dorsal ? `#${jugador.dorsal} ` : ""}
-                      {jugador?.jugador ?? `#${c.jugadorId}`} — min {c.minuto}
-                    </label>
-                  );
-                })}
-              </div>
-              <div className="resource-form__actions">
-                <button type="button" className="link-button" onClick={cancelarReconciliacion}>
-                  Cancelar — mantener marcador anterior
-                </button>
-                <button type="button" disabled={candidatoElegido == null} onClick={confirmarDescarte}>
-                  Descartar seleccionado
-                </button>
-              </div>
+          <Modal
+            titulo={`Bajaste el marcador — hay ${pendienteConfirmar.candidatos.length} goles cargados`}
+            onCerrar={cancelarReconciliacion}
+          >
+            <p className="muted">¿Cuál descartás?</p>
+            <div className="modal-panel__checklist">
+              {pendienteConfirmar.candidatos.map((c) => {
+                const jugador = plantillaCombinada.find((j) => j.jugador_id === c.jugadorId);
+                return (
+                  <label key={c.id} className="modal-panel__equipo-fila">
+                    <input
+                      type="radio"
+                      name="candidato-descartar"
+                      checked={candidatoElegido === c.id}
+                      onChange={() => setCandidatoElegido(c.id)}
+                    />
+                    {jugador?.dorsal ? `#${jugador.dorsal} ` : ""}
+                    {jugador?.jugador ?? `#${c.jugadorId}`} — min {c.minuto}
+                  </label>
+                );
+              })}
             </div>
-          </div>
+            <div className="resource-form__actions">
+              <button type="button" className="link-button" onClick={cancelarReconciliacion}>
+                Cancelar — mantener marcador anterior
+              </button>
+              <button type="button" disabled={candidatoElegido == null} onClick={confirmarDescarte}>
+                Descartar seleccionado
+              </button>
+            </div>
+          </Modal>
         )}
 
         {/* Zona terciaria: Quick Action Bar. */}
@@ -899,14 +912,15 @@ export function ModalResultadoDirecto(props: {
           <p className="muted">Completá jugador y minuto de todos los goles antes de guardar.</p>
         )}
         <div className="resource-form__actions">
-          <button type="button" className="link-button" onClick={onClose}>
+          <button type="button" className="link-button" onClick={pedirCierre}>
             Cancelar
           </button>
           <button type="button" disabled={!puedeGuardar || mutation.isPending} onClick={() => mutation.mutate()}>
             {mutation.isPending ? "Guardando..." : "Guardar resultado"}
           </button>
         </div>
-      </div>
-    </div>
+        </>
+      )}
+    </Modal>
   );
 }

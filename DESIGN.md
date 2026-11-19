@@ -158,18 +158,26 @@ Reglas:
 
 ## 9. Modales
 
-`<Modal titulo onCerrar ancho>`, en `components/ui/Modal.tsx`.
+`<Modal titulo|etiqueta|idTitulo onCerrar sinGuardar cierreBloqueado ancho>`,
+en `components/ui/Modal.tsx`. Todos los modales de la aplicación lo usan
+(TASK-035).
 
-- Usa `role="dialog"` y `aria-modal`, y toma su nombre del título (`h2`).
-- Al abrirse, el foco va al primer control. Tab y Shift+Tab no salen del
-  modal. Escape cierra. Al cerrar, el foco vuelve a quien lo abrió.
-- Un clic fuera **no** cierra: no se puede perder lo cargado por un clic de
-  más.
+- Usa `role="dialog"` y `aria-modal`. Toma su nombre del título (`titulo`).
+  Si el título cambia según el paso, lo da `etiqueta` o `idTitulo`.
+- Al abrirse, el foco va al primer control, salvo que uno tenga `autoFocus`.
+  Tab y Shift+Tab no salen del modal. Al cerrar, el foco vuelve a quien lo
+  abrió. Todo eso lo hace `hooks/useModalFocusTrap.ts`.
+- Escape y un clic en el fondo cierran. Con `sinGuardar` (hay datos que se
+  perderían), en vez de cerrar muestran "Hay datos sin guardar" con dos
+  botones: "Seguir editando", que recibe el foco, y "Descartar y cerrar". El
+  "Cancelar" del modal pasa por la misma pregunta si usa `pedirCierre`, que
+  el modal le da cuando su contenido es una función.
+- Con `cierreBloqueado` (guardando), no se cierra.
+- Un modal dentro de otro funciona: Escape y Tab los atiende solo el de
+  adelante.
+- Mientras haya un modal abierto, la página de atrás no se desplaza.
 - El ancho es 480px; con `ancho`, 560px (contenido con tablas o pasos).
 - Los botones van al pie, dentro de `.resource-form__actions`.
-
-Hoy solo `AsignarTorneosModal` usa `<Modal>`. Los otros ocho se migran en
-TASK-035.
 
 ## 10. Estado de la migración
 
@@ -178,7 +186,7 @@ TASK-035.
 | `Login` | TASK-034 | `Field` y `Button` |
 | `UsuariosAdmin` y su modal | TASK-034 | Mediante los componentes compartidos de abajo |
 | `SimpleResourceAdminPage`, `ResourceForm`, `ResourceTable` | TASK-034 | También las usan Torneos, Jugadores y Equipos, que reciben el mismo cambio |
-| Los demás modales | TASK-035 | |
+| Los nueve modales | TASK-035 | Solo cambia la envoltura; su contenido sigue igual |
 | Todo lo demás | — | Se migra al tocarlo |
 
 Los componentes base tienen especificidad baja (una clase), así que las reglas

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiErrorMessage } from "../../../api/client";
+import { Modal } from "../../../components/ui/Modal";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
 import { useEtiquetaJugadorPorPerfil } from "../../../hooks/useEtiquetaJugadorPorPerfil";
 import type { RegistroLotePreResuelto } from "../RegistroLoteAdmin";
@@ -184,117 +185,120 @@ export function ModalGestionarPlantilla(props: ModalGestionarPlantillaProps) {
     plantillas.listQuery.isLoading || jugadores.listQuery.isLoading || perfiles.listQuery.isLoading;
 
   return (
-    <div className="modal-overlay" role="dialog" aria-label={`Gestionar plantilla — ${equipoNombre}`}>
-      <div className="modal-panel">
-        <h2>Gestionar plantilla — {equipoNombre}</h2>
-        <p className="muted">{torneoContexto}</p>
+    <Modal
+      etiqueta={`Gestionar plantilla — ${equipoNombre}`}
+      onCerrar={onClose}
+      sinGuardar={Object.values(fila).some((v) => String(v).trim() !== "")}
+      cierreBloqueado={resolviendo}
+    >
+      <h2>Gestionar plantilla — {equipoNombre}</h2>
+      <p className="muted">{torneoContexto}</p>
 
-        <h3>Jugadores actuales ({roster.length})</h3>
-        {cargandoRoster && <p>Cargando...</p>}
-        {!cargandoRoster && roster.length === 0 && (
-          <p className="muted">Este equipo todavía no tiene jugadores en este torneo.</p>
-        )}
-        {!cargandoRoster && roster.length > 0 && (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Jugador</th>
-                  <th>Dorsal</th>
-                  <th>Estado</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {roster.map((r) => (
-                  <tr key={r.id}>
-                    <td>{etiquetaJugador(r.jugador_perfil_id)}</td>
-                    <td>{r.dorsal != null ? `#${r.dorsal}` : "—"}</td>
-                    <td>{r.estado}</td>
-                    <td>
-                      {confirmandoBajaId === r.id ? (
-                        <span>
-                          ¿Quitar a {etiquetaJugador(r.jugador_perfil_id)} de este equipo?{" "}
-                          <button
-                            type="button"
-                            disabled={plantillas.customAction.isPending}
-                            onClick={() => confirmarBaja(r)}
-                          >
-                            {plantillas.customAction.isPending ? "Quitando..." : "Sí, quitar"}
-                          </button>{" "}
-                          <button type="button" className="link-button" onClick={() => setConfirmandoBajaId(null)}>
-                            Cancelar
-                          </button>
-                        </span>
-                      ) : (
-                        <button type="button" className="link-button" onClick={() => setConfirmandoBajaId(r.id)}>
-                          Quitar
+      <h3>Jugadores actuales ({roster.length})</h3>
+      {cargandoRoster && <p>Cargando...</p>}
+      {!cargandoRoster && roster.length === 0 && (
+        <p className="muted">Este equipo todavía no tiene jugadores en este torneo.</p>
+      )}
+      {!cargandoRoster && roster.length > 0 && (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Jugador</th>
+                <th>Dorsal</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {roster.map((r) => (
+                <tr key={r.id}>
+                  <td>{etiquetaJugador(r.jugador_perfil_id)}</td>
+                  <td>{r.dorsal != null ? `#${r.dorsal}` : "—"}</td>
+                  <td>{r.estado}</td>
+                  <td>
+                    {confirmandoBajaId === r.id ? (
+                      <span>
+                        ¿Quitar a {etiquetaJugador(r.jugador_perfil_id)} de este equipo?{" "}
+                        <button
+                          type="button"
+                          disabled={plantillas.customAction.isPending}
+                          onClick={() => confirmarBaja(r)}
+                        >
+                          {plantillas.customAction.isPending ? "Quitando..." : "Sí, quitar"}
+                        </button>{" "}
+                        <button type="button" className="link-button" onClick={() => setConfirmandoBajaId(null)}>
+                          Cancelar
                         </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <h3>+ Agregar jugador</h3>
-        <div className="resource-form">
-          <label>
-            Cédula
-            <input
-              aria-label="Cédula"
-              value={fila.cedula}
-              onChange={(e) => setFila((f) => ({ ...f, cedula: e.target.value }))}
-            />
-          </label>
-          <label>
-            Nombre
-            <input
-              aria-label="Nombre"
-              value={fila.nombre}
-              onChange={(e) => setFila((f) => ({ ...f, nombre: e.target.value }))}
-            />
-          </label>
-          <label>
-            Correo
-            <input
-              aria-label="Correo"
-              value={fila.correo_electronico}
-              onChange={(e) => setFila((f) => ({ ...f, correo_electronico: e.target.value }))}
-            />
-          </label>
-          <label>
-            Dorsal
-            <input
-              aria-label="Dorsal"
-              type="number"
-              value={fila.dorsal}
-              onChange={(e) => setFila((f) => ({ ...f, dorsal: e.target.value }))}
-            />
-          </label>
-          {errorAlta && <p className="error-text">{errorAlta}</p>}
-          <div className="resource-form__actions">
-            <button type="button" disabled={resolviendo} onClick={agregarJugador}>
-              {resolviendo ? "Agregando..." : "Agregar"}
-            </button>
-          </div>
+                      </span>
+                    ) : (
+                      <button type="button" className="link-button" onClick={() => setConfirmandoBajaId(r.id)}>
+                        Quitar
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+      )}
 
-        <p className="modal-panel__separador">
-          ¿Vas a cargar varios de una vez?{" "}
-          <button type="button" className="link-button" onClick={irARegistroLote}>
-            Registro por lote
-          </button>
-        </p>
-
+      <h3>+ Agregar jugador</h3>
+      <div className="resource-form">
+        <label>
+          Cédula
+          <input
+            aria-label="Cédula"
+            value={fila.cedula}
+            onChange={(e) => setFila((f) => ({ ...f, cedula: e.target.value }))}
+          />
+        </label>
+        <label>
+          Nombre
+          <input
+            aria-label="Nombre"
+            value={fila.nombre}
+            onChange={(e) => setFila((f) => ({ ...f, nombre: e.target.value }))}
+          />
+        </label>
+        <label>
+          Correo
+          <input
+            aria-label="Correo"
+            value={fila.correo_electronico}
+            onChange={(e) => setFila((f) => ({ ...f, correo_electronico: e.target.value }))}
+          />
+        </label>
+        <label>
+          Dorsal
+          <input
+            aria-label="Dorsal"
+            type="number"
+            value={fila.dorsal}
+            onChange={(e) => setFila((f) => ({ ...f, dorsal: e.target.value }))}
+          />
+        </label>
+        {errorAlta && <p className="error-text">{errorAlta}</p>}
         <div className="resource-form__actions">
-          <button type="button" className="link-button" onClick={onClose}>
-            Cerrar
+          <button type="button" disabled={resolviendo} onClick={agregarJugador}>
+            {resolviendo ? "Agregando..." : "Agregar"}
           </button>
         </div>
       </div>
-    </div>
+
+      <p className="modal-panel__separador">
+        ¿Vas a cargar varios de una vez?{" "}
+        <button type="button" className="link-button" onClick={irARegistroLote}>
+          Registro por lote
+        </button>
+      </p>
+
+      <div className="resource-form__actions">
+        <button type="button" className="link-button" onClick={onClose}>
+          Cerrar
+        </button>
+      </div>
+    </Modal>
   );
 }

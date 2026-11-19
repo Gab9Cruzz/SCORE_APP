@@ -1,4 +1,5 @@
 import { BadgeTarjeta } from "./BadgeTarjeta";
+import { Modal } from "./ui/Modal";
 import type { EstadoTarjeta, PlantillaJugador } from "./eventos";
 
 /** Modal contextual de sustitución (modo-vivo-sustituciones-cierre-plan.md,
@@ -38,60 +39,65 @@ export function ModalSustitucion(props: {
     props;
 
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-sustitucion-titulo">
-      <div className="modal-panel">
-        <h2 id="modal-sustitucion-titulo">
+    // Sin datos que perder: elegir el reemplazo es el único paso. Mientras
+    // se guarda el cambio, no se cierra (mismo criterio que "Cancelar").
+    <Modal
+      titulo={
+        <>
           Sale {jugadorSale.dorsal != null ? `#${jugadorSale.dorsal} ` : ""}
           {jugadorSale.jugador} — ¿Por quién ingresa?
-        </h2>
+        </>
+      }
+      onCerrar={onCancelar}
+      cierreBloqueado={confirmando}
+    >
 
-        {error && <p className="error-text">{error}</p>}
+      {error && <p className="error-text">{error}</p>}
 
-        {elegibles.length === 0 ? (
-          // Pass 2 (Design Fase 2): estado vacío que NO es un callejón sin
-          // salida — el operador solo puede cancelar acá (la alta tardía de
-          // un suplente vive en "Gestionar Partido › Convocatoria", fuera
-          // del alcance directo de este panel de eventos).
-          <>
-            <p className="muted">
-              No hay suplentes disponibles para entrar (todos ya entraron o fueron expulsados). Sumá un
-              suplente desde la convocatoria del partido si llegó alguien tarde.
-            </p>
-            {onIrAConvocatoria && (
-              <div className="confirmar-evento__acciones">
-                <button type="button" onClick={onIrAConvocatoria}>
-                  Ir a Convocatoria
-                </button>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="tap-grid">
-            {elegibles.map((j) => {
-              const estadoTarjeta = estadoTarjetasPorJugador?.get(j.jugador_id);
-              return (
-                <button
-                  key={j.jugador_id}
-                  type="button"
-                  className="tap-button"
-                  disabled={confirmando}
-                  onClick={() => onConfirmar(j.jugador_id)}
-                >
-                  {j.dorsal != null ? `#${j.dorsal} ` : ""}
-                  {j.jugador}
-                  {estadoTarjeta && <BadgeTarjeta estado={estadoTarjeta} />}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="confirmar-evento__acciones">
-          <button type="button" className="link-button" onClick={onCancelar} disabled={confirmando}>
-            Cancelar
-          </button>
+      {elegibles.length === 0 ? (
+        // Pass 2 (Design Fase 2): estado vacío que NO es un callejón sin
+        // salida — el operador solo puede cancelar acá (la alta tardía de
+        // un suplente vive en "Gestionar Partido › Convocatoria", fuera
+        // del alcance directo de este panel de eventos).
+        <>
+          <p className="muted">
+            No hay suplentes disponibles para entrar (todos ya entraron o fueron expulsados). Sumá un
+            suplente desde la convocatoria del partido si llegó alguien tarde.
+          </p>
+          {onIrAConvocatoria && (
+            <div className="confirmar-evento__acciones">
+              <button type="button" onClick={onIrAConvocatoria}>
+                Ir a Convocatoria
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="tap-grid">
+          {elegibles.map((j) => {
+            const estadoTarjeta = estadoTarjetasPorJugador?.get(j.jugador_id);
+            return (
+              <button
+                key={j.jugador_id}
+                type="button"
+                className="tap-button"
+                disabled={confirmando}
+                onClick={() => onConfirmar(j.jugador_id)}
+              >
+                {j.dorsal != null ? `#${j.dorsal} ` : ""}
+                {j.jugador}
+                {estadoTarjeta && <BadgeTarjeta estado={estadoTarjeta} />}
+              </button>
+            );
+          })}
         </div>
+      )}
+
+      <div className="confirmar-evento__acciones">
+        <button type="button" className="link-button" onClick={onCancelar} disabled={confirmando}>
+          Cancelar
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { api, apiErrorMessage } from "../../../api/client";
-import { useModalFocusTrap } from "../../../hooks/useModalFocusTrap";
+import { Modal } from "../../../components/ui/Modal";
 import { LOCALE } from "../../../lib/fechas";
 
 type AccionDisponible = "cerrar_directo" | "generar_playoffs";
@@ -85,12 +85,6 @@ export function ModalSiguienteFase(props: {
   );
   const mostrarPaso1 = accionesDisponibles.length > 1;
 
-  const panelRef = useRef<HTMLDivElement>(null);
-  // D9 (Design review, Pass 6): trap de Tab + Escape + foco de vuelta al
-  // disparador — antes gap de `ModalClasificadosPorGrupo` (aria-modal sin
-  // ninguna de las tres), que este modal más largo habría profundizado.
-  useModalFocusTrap(panelRef, onClose);
-
   function invalidar() {
     queryClient.invalidateQueries({ queryKey: ["partidos"] });
     queryClient.invalidateQueries({ queryKey: ["bracket", torneoId] });
@@ -102,71 +96,77 @@ export function ModalSiguienteFase(props: {
   const anchoPaso2 = camino != null;
 
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-siguiente-fase-titulo">
-      <div ref={panelRef} className={`modal-panel${anchoPaso2 ? " modal-panel--ancho" : ""}`}>
-        {mostrarPaso1 && camino == null && (
-          <>
-            <p className="modal-panel__paso">Paso 1 de 2 · Camino</p>
-            <h2 id="modal-siguiente-fase-titulo">Configurar Siguiente Fase</h2>
-            <div className="resource-form">
-              {accionesDisponibles.includes("cerrar_directo") && (
-                <label className="modal-panel__equipo-fila">
-                  <input type="radio" name="camino" checked={false} onChange={() => setCamino("cerrar_directo")} />
-                  <span>
-                    Terminar el torneo (campeones por tabla)
-                    <br />
-                    <span className="muted--cuerpo">No vas a poder cargar más resultados después de esto.</span>
-                  </span>
-                </label>
-              )}
-              {accionesDisponibles.includes("generar_playoffs") && (
-                <label className="modal-panel__equipo-fila">
-                  <input type="radio" name="camino" checked={false} onChange={() => setCamino("generar_playoffs")} />
-                  <span>Jugar Playoffs</span>
-                </label>
-              )}
-            </div>
-            <div className="resource-form__actions">
-              <button type="button" className="link-button" onClick={onClose}>
-                Cancelar
-              </button>
-            </div>
-          </>
-        )}
+    // D9 (Design review, Pass 6): trap de Tab + Escape + foco de vuelta al
+    // disparador, ahora en el Modal común (TASK-035). En el paso 2 hay una
+    // configuración elegida (formato, orden de empates): Escape pregunta.
+    <Modal
+      idTitulo="modal-siguiente-fase-titulo"
+      onCerrar={onClose}
+      ancho={anchoPaso2}
+      sinGuardar={camino !== null}
+    >
+      {mostrarPaso1 && camino == null && (
+        <>
+          <p className="modal-panel__paso">Paso 1 de 2 · Camino</p>
+          <h2 id="modal-siguiente-fase-titulo">Configurar Siguiente Fase</h2>
+          <div className="resource-form">
+            {accionesDisponibles.includes("cerrar_directo") && (
+              <label className="modal-panel__equipo-fila">
+                <input type="radio" name="camino" checked={false} onChange={() => setCamino("cerrar_directo")} />
+                <span>
+                  Terminar el torneo (campeones por tabla)
+                  <br />
+                  <span className="muted--cuerpo">No vas a poder cargar más resultados después de esto.</span>
+                </span>
+              </label>
+            )}
+            {accionesDisponibles.includes("generar_playoffs") && (
+              <label className="modal-panel__equipo-fila">
+                <input type="radio" name="camino" checked={false} onChange={() => setCamino("generar_playoffs")} />
+                <span>Jugar Playoffs</span>
+              </label>
+            )}
+          </div>
+          <div className="resource-form__actions">
+            <button type="button" className="link-button" onClick={onClose}>
+              Cancelar
+            </button>
+          </div>
+        </>
+      )}
 
-        {camino === "cerrar_directo" && (
-          <PasoCerrarDirecto
-            torneoId={torneoId}
-            mostrarVolver={mostrarPaso1}
-            onVolver={() => setCamino(null)}
-            onCancelar={onClose}
-            onCerrado={() => {
-              invalidar();
-              onCerrado();
-            }}
-          />
-        )}
+      {camino === "cerrar_directo" && (
+        <PasoCerrarDirecto
+          torneoId={torneoId}
+          mostrarVolver={mostrarPaso1}
+          onVolver={() => setCamino(null)}
+          onCancelar={onClose}
+          onCerrado={() => {
+            invalidar();
+            onCerrado();
+          }}
+        />
+      )}
 
-        {camino === "generar_playoffs" && (
-          <PasoGenerarPlayoffs
-            torneoId={torneoId}
-            formatoTorneo={formatoTorneo}
-            formatoEliminatoriaActual={formatoEliminatoriaActual}
-            metodoDesempateEliminatoriaActual={metodoDesempateEliminatoriaActual}
-            tipoCronometro={tipoCronometro}
-            clasificadosPorGrupoActual={clasificadosPorGrupoActual}
-            fechaInicioTorneo={fechaInicioTorneo}
-            mostrarVolver={mostrarPaso1}
-            onVolver={() => setCamino(null)}
-            onCancelar={onClose}
-            onGenerado={() => {
-              invalidar();
-              onPlayoffsGenerados();
-            }}
-          />
-        )}
-      </div>
-    </div>
+      {camino === "generar_playoffs" && (
+        <PasoGenerarPlayoffs
+          torneoId={torneoId}
+          formatoTorneo={formatoTorneo}
+          formatoEliminatoriaActual={formatoEliminatoriaActual}
+          metodoDesempateEliminatoriaActual={metodoDesempateEliminatoriaActual}
+          tipoCronometro={tipoCronometro}
+          clasificadosPorGrupoActual={clasificadosPorGrupoActual}
+          fechaInicioTorneo={fechaInicioTorneo}
+          mostrarVolver={mostrarPaso1}
+          onVolver={() => setCamino(null)}
+          onCancelar={onClose}
+          onGenerado={() => {
+            invalidar();
+            onPlayoffsGenerados();
+          }}
+        />
+      )}
+    </Modal>
   );
 }
 

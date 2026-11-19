@@ -148,6 +148,61 @@ describe("ModalResultadoDirecto — slots por marcador", () => {
   });
 });
 
+describe("ModalResultadoDirecto — cierre sin perder lo cargado (TASK-035)", () => {
+  function montarConCierre() {
+    const onClose = vi.fn();
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <ModalResultadoDirecto partido={PARTIDO} nombreEquipo={NOMBRE_EQUIPO} onClose={onClose} onGuardado={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    return onClose;
+  }
+
+  it("sin nada cargado, Escape cierra directo", async () => {
+    sembrarBackend();
+    const user = userEvent.setup();
+    const onClose = montarConCierre();
+    await screen.findByLabelText(/Goles Tiburones FC/);
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("con goles cargados, Escape y Cancelar piden confirmación", async () => {
+    sembrarBackend();
+    const user = userEvent.setup();
+    const onClose = montarConCierre();
+    await escribirMarcador("Local", "1");
+
+    await user.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Hay datos sin guardar");
+    await user.click(screen.getByRole("button", { name: "Seguir editando" }));
+    expect(screen.getAllByLabelText(/Goleador, Tiburones FC/)).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(onClose).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Descartar y cerrar" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("Escape en la reconciliación de goles cierra solo esa ventana", async () => {
+    sembrarBackend();
+    const user = userEvent.setup();
+    const onClose = montarConCierre();
+    await escribirMarcador("Local", "2");
+    await user.selectOptions(screen.getAllByLabelText(/Goleador, Tiburones FC/)[0], String(JUGADOR_LOCAL.jugador_id));
+    await user.type(screen.getAllByLabelText(/Minuto, Tiburones FC/)[0], "23");
+    await escribirMarcador("Local", "0");
+    expect(await screen.findByRole("dialog", { name: /Bajaste el marcador/ })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: /Bajaste el marcador/ })).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText(/Goleador, Tiburones FC/)).toHaveLength(2);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
 describe("ModalResultadoDirecto — Quick Action Bar y filtrado de Cambio", () => {
   it("Amarilla abre un formulario chico pidiendo jugador y minuto", async () => {
     sembrarBackend();

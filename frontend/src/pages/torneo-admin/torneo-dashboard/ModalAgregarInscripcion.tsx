@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Equipo as EquipoRow, Modalidad as ModalidadRow } from "../../../api/types";
 import { api, apiErrorMessage } from "../../../api/client";
+import { Modal } from "../../../components/ui/Modal";
 import { useCatalogo } from "../../../hooks/useCatalogo";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
 import type { RegistroLotePreResuelto } from "../RegistroLoteAdmin";
@@ -73,11 +74,9 @@ export function ModalAgregarInscripcion(props: ModalAgregarInscripcionProps) {
   // no se reinicializa solo (la lazy init de useState solo corre una vez).
   if (tamanoEquipo == null) {
     return (
-      <div className="modal-overlay" role="dialog" aria-label="Agregar inscripción">
-        <div className="modal-panel">
-          <p>Cargando...</p>
-        </div>
-      </div>
+      <Modal etiqueta="Agregar inscripción" onCerrar={onClose}>
+        <p>Cargando...</p>
+      </Modal>
     );
   }
 
@@ -149,82 +148,85 @@ function ModalIndividual(props: { torneoId: number; torneoContexto: string; onCl
     nuevoJugador.cedula.trim() !== "" && nuevoJugador.nombre.trim() !== "" && nuevoJugador.correo_electronico.trim() !== "";
 
   return (
-    <div className="modal-overlay" role="dialog" aria-label="Agregar jugador">
-      <div className="modal-panel">
-        <h2>Agregar jugador — {torneoContexto}</h2>
-        <input
-          aria-label="Buscar jugador existente"
-          placeholder="Buscar por cédula o nombre..."
-          value={busqueda}
-          onChange={(e) => {
-            setBusqueda(e.target.value);
-            setInscritoOk(null);
-          }}
-        />
-        {busqueda.trim() !== "" && jugadoresDisponibles.length === 0 && (
-          <p className="muted">No hay jugadores con ese nombre/cédula. ¿Es nuevo?</p>
-        )}
-        {jugadoresDisponibles.map((j) => (
-          <div key={j.id} className="modal-panel__equipo-fila">
-            <span>
-              {j.nombre} — {j.cedula}
-            </span>
-            <button type="button" disabled={inscribir.isPending} onClick={() => inscribir.mutate(j)}>
-              {inscribir.isPending ? "Inscribiendo..." : "Inscribir"}
-            </button>
-          </div>
-        ))}
-
-        <p className="modal-panel__separador">— o —</p>
-        {!mostrarCrear ? (
-          <button type="button" onClick={() => setMostrarCrear(true)}>
-            + Crear jugador
-          </button>
-        ) : (
-          <div className="resource-form">
-            <label>
-              Cédula
-              <input
-                value={nuevoJugador.cedula}
-                onChange={(e) => setNuevoJugador((j) => ({ ...j, cedula: e.target.value }))}
-              />
-            </label>
-            <label>
-              Nombre
-              <input
-                value={nuevoJugador.nombre}
-                onChange={(e) => setNuevoJugador((j) => ({ ...j, nombre: e.target.value }))}
-              />
-            </label>
-            <label>
-              Correo
-              <input
-                value={nuevoJugador.correo_electronico}
-                onChange={(e) => setNuevoJugador((j) => ({ ...j, correo_electronico: e.target.value }))}
-              />
-            </label>
-            <div className="resource-form__actions">
-              <button
-                type="button"
-                disabled={!puedeCrear || inscribir.isPending}
-                onClick={() => inscribir.mutate(nuevoJugador)}
-              >
-                {inscribir.isPending ? "Validando..." : "Validar e inscribir"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {inscribir.isError && <p className="error-text">{apiErrorMessage(inscribir.error)}</p>}
-        {inscritoOk && <p className="success-text">{inscritoOk}</p>}
-
-        <div className="resource-form__actions">
-          <button type="button" className="link-button" onClick={onClose}>
-            Cerrar
+    <Modal
+      etiqueta="Agregar jugador"
+      onCerrar={onClose}
+      sinGuardar={mostrarCrear && Object.values(nuevoJugador).some((v) => v.trim() !== "")}
+      cierreBloqueado={inscribir.isPending}
+    >
+      <h2>Agregar jugador — {torneoContexto}</h2>
+      <input
+        aria-label="Buscar jugador existente"
+        placeholder="Buscar por cédula o nombre..."
+        value={busqueda}
+        onChange={(e) => {
+          setBusqueda(e.target.value);
+          setInscritoOk(null);
+        }}
+      />
+      {busqueda.trim() !== "" && jugadoresDisponibles.length === 0 && (
+        <p className="muted">No hay jugadores con ese nombre/cédula. ¿Es nuevo?</p>
+      )}
+      {jugadoresDisponibles.map((j) => (
+        <div key={j.id} className="modal-panel__equipo-fila">
+          <span>
+            {j.nombre} — {j.cedula}
+          </span>
+          <button type="button" disabled={inscribir.isPending} onClick={() => inscribir.mutate(j)}>
+            {inscribir.isPending ? "Inscribiendo..." : "Inscribir"}
           </button>
         </div>
+      ))}
+
+      <p className="modal-panel__separador">— o —</p>
+      {!mostrarCrear ? (
+        <button type="button" onClick={() => setMostrarCrear(true)}>
+          + Crear jugador
+        </button>
+      ) : (
+        <div className="resource-form">
+          <label>
+            Cédula
+            <input
+              value={nuevoJugador.cedula}
+              onChange={(e) => setNuevoJugador((j) => ({ ...j, cedula: e.target.value }))}
+            />
+          </label>
+          <label>
+            Nombre
+            <input
+              value={nuevoJugador.nombre}
+              onChange={(e) => setNuevoJugador((j) => ({ ...j, nombre: e.target.value }))}
+            />
+          </label>
+          <label>
+            Correo
+            <input
+              value={nuevoJugador.correo_electronico}
+              onChange={(e) => setNuevoJugador((j) => ({ ...j, correo_electronico: e.target.value }))}
+            />
+          </label>
+          <div className="resource-form__actions">
+            <button
+              type="button"
+              disabled={!puedeCrear || inscribir.isPending}
+              onClick={() => inscribir.mutate(nuevoJugador)}
+            >
+              {inscribir.isPending ? "Validando..." : "Validar e inscribir"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {inscribir.isError && <p className="error-text">{apiErrorMessage(inscribir.error)}</p>}
+      {inscritoOk && <p className="success-text">{inscritoOk}</p>}
+
+      <div className="resource-form__actions">
+        <button type="button" className="link-button" onClick={onClose}>
+          Cerrar
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -413,8 +415,13 @@ function ModalEquipo(props: {
   const botonCrear = esPareja ? "+ Crear pareja nueva" : "+ Crear equipo nuevo";
 
   return (
-    <div className="modal-overlay" role="dialog" aria-label={esPareja ? "Agregar pareja" : "Agregar equipo"}>
-      <div className="modal-panel">
+    <>
+    <Modal
+      etiqueta={esPareja ? "Agregar pareja" : "Agregar equipo"}
+      onCerrar={onClose}
+      sinGuardar={modo.tipo === "crear" && (nombreNuevoEquipo.trim() !== "" || filasConDato.length > 0)}
+      cierreBloqueado={crearYRegistrar.isPending}
+    >
         {modo.tipo === "buscar" && (
           <>
             <h2>{esPareja ? "Agregar pareja" : "Agregar equipo"}</h2>
@@ -555,29 +562,27 @@ function ModalEquipo(props: {
             </div>
           </>
         )}
-      </div>
+    </Modal>
 
       {resumenConflictos && (
-        <div className="modal-overlay" role="dialog" aria-label="Conflictos de plantilla base">
-          <div className="modal-panel">
-            <p>
-              Equipo inscrito. {resumenConflictos.insertados} jugador{resumenConflictos.insertados === 1 ? "" : "es"}{" "}
-              agregado{resumenConflictos.insertados === 1 ? "" : "s"}.
+        <Modal etiqueta="Conflictos de plantilla base" onCerrar={() => setResumenConflictos(null)}>
+          <p>
+            Equipo inscrito. {resumenConflictos.insertados} jugador{resumenConflictos.insertados === 1 ? "" : "es"}{" "}
+            agregado{resumenConflictos.insertados === 1 ? "" : "s"}.
+          </p>
+          <p>⚠️ Alerta crítica:</p>
+          {resumenConflictos.conflictos.map((c) => (
+            <p key={c.jugador_perfil_id}>
+              {c.jugador_nombre} — {c.mensaje}
             </p>
-            <p>⚠️ Alerta crítica:</p>
-            {resumenConflictos.conflictos.map((c) => (
-              <p key={c.jugador_perfil_id}>
-                {c.jugador_nombre} — {c.mensaje}
-              </p>
-            ))}
-            <div className="resource-form__actions">
-              <button type="button" onClick={() => setResumenConflictos(null)}>
-                Entendido
-              </button>
-            </div>
+          ))}
+          <div className="resource-form__actions">
+            <button type="button" onClick={() => setResumenConflictos(null)}>
+              Entendido
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
-    </div>
+    </>
   );
 }

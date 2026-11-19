@@ -1257,6 +1257,30 @@ td:first-child {
   max-width: 560px;
 }
 
+/* Resultado directo: marcador + goles + eventos en dos columnas. Antes era
+   un style en línea (TASK-035). */
+.modal-panel--resultado-directo {
+  max-width: 640px;
+}
+
+/* El panel toma el foco solo si no tiene ningún control; el contorno de
+   foco del navegador ahí no ayuda (TASK-035). */
+.modal-panel:focus {
+  outline: none;
+}
+
+/* TASK-035: "Hay datos sin guardar" al cerrar con Escape, fondo o Cancelar. */
+.modal-panel__descartar {
+  border: 1px solid var(--warning);
+  border-radius: var(--radius);
+  padding: var(--espacio-3) var(--espacio-4);
+  margin-bottom: var(--espacio-4);
+}
+
+.modal-panel__descartar p {
+  margin: 0 0 var(--espacio-2);
+}
+
 .modal-panel__paso {
   color: var(--text-muted);
   font-size: 0.85rem;
