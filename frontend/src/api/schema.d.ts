@@ -1754,7 +1754,7 @@ export interface components {
              * Scope
              * @default
              */
-            scope: string;
+            scope?: string;
             /** Client Id */
             client_id?: string | null;
             /**
@@ -1849,7 +1849,7 @@ export interface components {
              * Equipos
              * @default []
              */
-            equipos: string[];
+            equipos?: string[];
             /** Mensaje */
             mensaje?: string | null;
         };
@@ -1886,7 +1886,7 @@ export interface components {
              * Titular
              * @default false
              */
-            titular: boolean;
+            titular?: boolean;
             /** Minuto Ingreso */
             minuto_ingreso?: number | null;
         };
@@ -1902,7 +1902,7 @@ export interface components {
              * Titular
              * @default false
              */
-            titular: boolean;
+            titular?: boolean;
         };
         /** ConvocadoOut */
         ConvocadoOut: {
@@ -1977,7 +1977,7 @@ export interface components {
              * Modalidades
              * @default []
              */
-            modalidades: components["schemas"]["ModalidadOut"][];
+            modalidades?: components["schemas"]["ModalidadOut"][];
         };
         /**
          * DisciplinaConPartidosOut
@@ -2162,7 +2162,7 @@ export interface components {
              * Plantilla Total
              * @default 0
              */
-            plantilla_total: number;
+            plantilla_total?: number;
             /**
              * Estado
              * @enum {string}
@@ -2613,7 +2613,7 @@ export interface components {
              * Forzado
              * @default false
              */
-            forzado: boolean;
+            forzado?: boolean;
             /** Motivo Cierre */
             motivo_cierre?: ("Clima" | "Incidente" | "Lesion_Grave" | "Orden_Seguridad" | "Otro") | null;
             /** Motivo Cierre Detalle */
@@ -2650,7 +2650,7 @@ export interface components {
              * Forzado
              * @default false
              */
-            forzado: boolean;
+            forzado?: boolean;
             /** Motivo Cierre */
             motivo_cierre?: ("Clima" | "Incidente" | "Lesion_Grave" | "Orden_Seguridad" | "Otro") | null;
             /** Motivo Cierre Detalle */
@@ -2963,7 +2963,7 @@ export interface components {
              * @default Regular
              * @enum {string}
              */
-            fase: "Regular" | "Grupos" | "Octavos" | "Cuartos" | "Semifinal" | "Final" | "Tercer puesto";
+            fase?: "Regular" | "Grupos" | "Octavos" | "Cuartos" | "Semifinal" | "Final" | "Tercer puesto";
             /** Grupo */
             grupo?: string | null;
         };
@@ -2987,7 +2987,7 @@ export interface components {
              * @default Regular
              * @enum {string}
              */
-            fase: "Regular" | "Grupos" | "Octavos" | "Cuartos" | "Semifinal" | "Final" | "Tercer puesto";
+            fase?: "Regular" | "Grupos" | "Octavos" | "Cuartos" | "Semifinal" | "Final" | "Tercer puesto";
             /** Grupo */
             grupo?: string | null;
             /** Id */
@@ -3029,14 +3029,14 @@ export interface components {
              * Hubo Tiempo Extra
              * @default false
              */
-            hubo_tiempo_extra: boolean;
+            hubo_tiempo_extra?: boolean;
             /** Metodo Desempate Aplicable */
             metodo_desempate_aplicable?: ("Manual" | "Penales_Directo" | "Tiempo_Extra_Penales") | null;
             /**
              * Elegible Desempate
              * @default false
              */
-            elegible_desempate: boolean;
+            elegible_desempate?: boolean;
             /** Goles Previos Global Local */
             goles_previos_global_local?: number | null;
             /** Goles Previos Global Visitante */
@@ -3045,7 +3045,7 @@ export interface components {
              * Es Walkover
              * @default false
              */
-            es_walkover: boolean;
+            es_walkover?: boolean;
             /** Walkover Equipo Ausente Id */
             walkover_equipo_ausente_id?: number | null;
             /** Ganador Reclamo Id */
@@ -3156,7 +3156,7 @@ export interface components {
              * Conflictos
              * @default []
              */
-            conflictos: components["schemas"]["ConflictoPlantillaBase"][];
+            conflictos?: components["schemas"]["ConflictoPlantillaBase"][];
         };
         /** PlantillaJugadorOut */
         PlantillaJugadorOut: {
@@ -3366,7 +3366,7 @@ export interface components {
              * Eventos
              * @default []
              */
-            eventos: components["schemas"]["ResultadoDirectoEvento"][];
+            eventos?: components["schemas"]["ResultadoDirectoEvento"][];
             /** Ganador Corrido Id */
             ganador_corrido_id?: number | null;
             /** Ganador Desempate Id */
@@ -3379,7 +3379,7 @@ export interface components {
              * Hubo Tiempo Extra
              * @default false
              */
-            hubo_tiempo_extra: boolean;
+            hubo_tiempo_extra?: boolean;
         };
         /**
          * ResultadoDirectoEvento
@@ -3441,7 +3441,7 @@ export interface components {
              * Hubo Tiempo Extra
              * @default false
              */
-            hubo_tiempo_extra: boolean;
+            hubo_tiempo_extra?: boolean;
             /** Penales Local */
             penales_local?: number | null;
             /** Penales Visitante */
@@ -3480,7 +3480,7 @@ export interface components {
              * Token Type
              * @default bearer
              */
-            token_type: string;
+            token_type?: string;
             /** Rol */
             rol: string;
         };
@@ -3507,12 +3507,12 @@ export interface components {
              * @default Liga
              * @enum {string}
              */
-            formato: "Liga" | "Eliminacion" | "Grupos_Playoffs";
+            formato?: "Liga" | "Eliminacion" | "Grupos_Playoffs";
             /**
              * Ida Vuelta
              * @default false
              */
-            ida_vuelta: boolean;
+            ida_vuelta?: boolean;
             /** Equipos Por Grupo */
             equipos_por_grupo?: number | null;
             /** Clasificados Por Grupo */
@@ -3521,19 +3521,19 @@ export interface components {
              * Incluye Tercer Lugar
              * @default true
              */
-            incluye_tercer_lugar: boolean;
+            incluye_tercer_lugar?: boolean;
             /**
              * Formato Eliminatoria
              * @default Unico
              * @enum {string}
              */
-            formato_eliminatoria: "Unico" | "Ida_Vuelta" | "Mixto";
+            formato_eliminatoria?: "Unico" | "Ida_Vuelta" | "Mixto";
             /**
              * Metodo Desempate Eliminatoria
              * @default Manual
              * @enum {string}
              */
-            metodo_desempate_eliminatoria: "Manual" | "Penales_Directo";
+            metodo_desempate_eliminatoria?: "Manual" | "Penales_Directo";
             config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoCreate"] | null;
             /** Cupo Maximo Inscripciones */
             cupo_maximo_inscripciones?: number | null;
@@ -3541,7 +3541,7 @@ export interface components {
              * Permite Walkover Grupos
              * @default false
              */
-            permite_walkover_grupos: boolean;
+            permite_walkover_grupos?: boolean;
             /** Minimo Jugadores Para Iniciar */
             minimo_jugadores_para_iniciar?: number | null;
             /** Maximo Titulares Permitido */
@@ -3550,7 +3550,7 @@ export interface components {
              * Permite Cambios Ilimitados
              * @default false
              */
-            permite_cambios_ilimitados: boolean;
+            permite_cambios_ilimitados?: boolean;
             /** Maximo Cambios Por Equipo */
             maximo_cambios_por_equipo?: number | null;
             /** Torneo Grupo Id */
@@ -3662,12 +3662,12 @@ export interface components {
              * @default Liga
              * @enum {string}
              */
-            formato: "Liga" | "Eliminacion" | "Grupos_Playoffs";
+            formato?: "Liga" | "Eliminacion" | "Grupos_Playoffs";
             /**
              * Ida Vuelta
              * @default false
              */
-            ida_vuelta: boolean;
+            ida_vuelta?: boolean;
             /** Equipos Por Grupo */
             equipos_por_grupo?: number | null;
             /** Clasificados Por Grupo */
@@ -3676,19 +3676,19 @@ export interface components {
              * Incluye Tercer Lugar
              * @default true
              */
-            incluye_tercer_lugar: boolean;
+            incluye_tercer_lugar?: boolean;
             /**
              * Formato Eliminatoria
              * @default Unico
              * @enum {string}
              */
-            formato_eliminatoria: "Unico" | "Ida_Vuelta" | "Mixto";
+            formato_eliminatoria?: "Unico" | "Ida_Vuelta" | "Mixto";
             /**
              * Metodo Desempate Eliminatoria
              * @default Manual
              * @enum {string}
              */
-            metodo_desempate_eliminatoria: "Manual" | "Penales_Directo";
+            metodo_desempate_eliminatoria?: "Manual" | "Penales_Directo";
             config_tiempo?: components["schemas"]["ConfiguracionTiempoTorneoOut"] | null;
             /** Cupo Maximo Inscripciones */
             cupo_maximo_inscripciones?: number | null;
@@ -3696,7 +3696,7 @@ export interface components {
              * Permite Walkover Grupos
              * @default false
              */
-            permite_walkover_grupos: boolean;
+            permite_walkover_grupos?: boolean;
             /** Minimo Jugadores Para Iniciar */
             minimo_jugadores_para_iniciar?: number | null;
             /** Maximo Titulares Permitido */
@@ -3705,7 +3705,7 @@ export interface components {
              * Permite Cambios Ilimitados
              * @default false
              */
-            permite_cambios_ilimitados: boolean;
+            permite_cambios_ilimitados?: boolean;
             /** Maximo Cambios Por Equipo */
             maximo_cambios_por_equipo?: number | null;
             /** Id */
@@ -3827,7 +3827,7 @@ export interface components {
              * Puede Anularse
              * @default false
              */
-            puede_anularse: boolean;
+            puede_anularse?: boolean;
         };
         /** TraspasoTrayectoriaOut */
         TraspasoTrayectoriaOut: {
@@ -3863,7 +3863,7 @@ export interface components {
              * @default Publico
              * @enum {string}
              */
-            rol: "AdminGeneral" | "TorneoAdmin" | "Arbitro" | "Publico";
+            rol?: "AdminGeneral" | "TorneoAdmin" | "Arbitro" | "Publico";
         };
         /** UsuarioOut */
         UsuarioOut: {

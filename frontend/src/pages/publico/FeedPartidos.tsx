@@ -59,7 +59,7 @@ export function FeedPartidosPage() {
             ventana_fallback_dias: fechaUrl ? 0 : 7,
           },
         },
-      } as never);
+      });
       if (error) throw error;
       return data as FeedResponse;
     },

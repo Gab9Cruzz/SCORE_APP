@@ -85,7 +85,7 @@ export function PartidoEnVivoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}", {
         params: { path: { torneo_id: torneoId as number } },
-      } as never);
+      });
       if (error) throw error;
       return data as { id: number; torneo_grupo_id: number };
     },
@@ -98,7 +98,7 @@ export function PartidoEnVivoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneo-grupos/{torneo_grupo_id}", {
         params: { path: { torneo_grupo_id: grupoIdParaHeader as number } },
-      } as never);
+      });
       if (error) throw error;
       return data as { nombre: string; pais: string | null };
     },

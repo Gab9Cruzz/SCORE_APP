@@ -4,6 +4,7 @@ import { api, apiErrorMessage } from "../../../api/client";
 import { useResourceCrud } from "../../../hooks/useResourceCrud";
 import { AvatarJugador } from "../AvatarJugador";
 import { LOCALE, parsearFecha } from "../../../lib/fechas";
+import type { Esquema } from "../../../api/types";
 
 interface EquipoActivo {
   inscripcion_torneo_id: number;
@@ -73,7 +74,10 @@ export function ModalPerfilJugador(props: ModalPerfilJugadorProps) {
   const [editando, setEditando] = useState(false);
   const [form, setForm] = useState({ nombre: "", cedula: "", correo_electronico: "" });
 
-  const jugadores = useResourceCrud<JugadorRow>({ resourceKey: "jugadores", basePath: "/api/v1/jugadores" });
+  const jugadores = useResourceCrud<JugadorRow, Esquema<"JugadorCreate">, Esquema<"JugadorUpdate">>({
+    resourceKey: "jugadores",
+    basePath: "/api/v1/jugadores",
+  });
 
   const query = useQuery({
     queryKey: ["perfil-jugador", jugadorId],
@@ -94,7 +98,7 @@ export function ModalPerfilJugador(props: ModalPerfilJugadorProps) {
 
   function guardar() {
     jugadores.update.mutate(
-      { id: jugadorId, body: form as never },
+      { id: jugadorId, body: form },
       {
         onSuccess: () => {
           // Refresca el perfil (este modal) y las listas de jugadores que

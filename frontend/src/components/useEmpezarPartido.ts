@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import type { Esquema } from "../api/types";
 
 /** Arranca un partido correctamente, sea cual sea el tipo de cronómetro
  * (gestionar-partido-alineaciones-plan.md, H-10).
@@ -25,11 +26,11 @@ export function useEmpezarPartido(partidoId: number | null) {
   return useMutation({
     mutationFn: async (tipoCronometro: "Periodos" | "Corrido") => {
       if (partidoId == null) throw new Error("Sin partido");
-      const registrar = async (body: Record<string, unknown>) => {
+      const registrar = async (body: Esquema<"HitoPartidoCreate">) => {
         const { data, error } = await api.POST("/api/v1/partidos/{partido_id}/hitos", {
           params: { path: { partido_id: partidoId } },
           body,
-        } as never);
+        });
         if (error) throw error;
         return data;
       };

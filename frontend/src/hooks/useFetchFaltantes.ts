@@ -1,6 +1,6 @@
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { api } from "../api/client";
+import { pedirRutaDinamica } from "../api/rutaDinamica";
 
 /**
  * Bug 2 (fixes-datos-traspasos-control-mesa-plan.md, D2): resolución
@@ -28,9 +28,7 @@ export function useFetchFaltantes<T extends { id: number }>(basePath: string, id
     queries: idsFaltantes.map((id) => ({
       queryKey: [basePath, "individual", id] as const,
       queryFn: async () => {
-        const { data, error } = await api.GET(`${basePath}/{id}` as never, {
-          params: { path: { id } },
-        } as never);
+        const { data, error } = await pedirRutaDinamica("GET", `${basePath}/{id}`, { path: { id } });
         if (error) throw error;
         return data as T;
       },

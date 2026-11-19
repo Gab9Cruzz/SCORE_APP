@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { pedirRutaDinamica } from "../api/rutaDinamica";
 
 /**
  * CRUD genérico sobre TanStack Query, para los recursos del módulo Torneo
@@ -18,7 +18,7 @@ import { api } from "../api/client";
  * Los paths se pasan como string plano, no como el literal tipado que
  * openapi-fetch preferiría (`keyof paths`) — a propósito: una función
  * genérica que sirve para cualquier recurso no puede a la vez fijar un
- * path literal. Lo que SÍ queda tipado, vía los genéricos <TOut, TCreate,
+ * path literal (ver api/rutaDinamica.ts). Lo que SÍ queda tipado, vía los genéricos <TOut, TCreate,
  * TUpdate> que cada página pasa explícitamente, es la FORMA de los datos
  * — que es lo que realmente atrapa bugs (nombre de campo mal escrito,
  * tipo equivocado), no la URL en sí.
@@ -70,11 +70,11 @@ export function useResourceCrud<
     queryKey,
     enabled,
     queryFn: async (): Promise<{ filas: TOut[]; total: number | null }> => {
-      const { data, error, response } = await api.GET(basePath as never, {
-        params: { query: { limit: LIMITE_LISTA, ...listParams } },
-      } as never);
+      const { data, error, response } = await pedirRutaDinamica("GET", basePath, {
+        query: { limit: LIMITE_LISTA, ...listParams },
+      });
       if (error) throw error;
-      const cabecera = (response as Response | undefined)?.headers.get("X-Total-Count");
+      const cabecera = response?.headers.get("X-Total-Count");
       const total = cabecera != null && cabecera !== "" ? Number(cabecera) : null;
       return { filas: data as TOut[], total: Number.isFinite(total) ? total : null };
     },
@@ -89,7 +89,7 @@ export function useResourceCrud<
 
   const create = useMutation({
     mutationFn: async (body: TCreate) => {
-      const { data, error } = await api.POST(basePath as never, { body } as never);
+      const { data, error } = await pedirRutaDinamica("POST", basePath, { body });
       if (error) throw error;
       return data as TOut;
     },
@@ -98,7 +98,7 @@ export function useResourceCrud<
 
   const update = useMutation({
     mutationFn: async ({ id, body }: { id: number; body: TUpdate }) => {
-      const { data, error } = await api.PATCH(`${basePath}/${id}` as never, { body } as never);
+      const { data, error } = await pedirRutaDinamica("PATCH", `${basePath}/${id}`, { body });
       if (error) throw error;
       return data as TOut;
     },
@@ -107,7 +107,7 @@ export function useResourceCrud<
 
   const softDelete = useMutation({
     mutationFn: async (id: number) => {
-      const { data, error } = await api.DELETE(`${basePath}/${id}` as never, {} as never);
+      const { data, error } = await pedirRutaDinamica("DELETE", `${basePath}/${id}`);
       if (error) throw error;
       return data as TOut;
     },
@@ -124,11 +124,7 @@ export function useResourceCrud<
       query?: Record<string, unknown>;
     }) => {
       const { path, method = "POST", body, query } = args;
-      const fn = method === "POST" ? api.POST : api.PATCH;
-      const { data, error } = await fn(path as never, {
-        body,
-        params: query ? { query } : undefined,
-      } as never);
+      const { data, error } = await pedirRutaDinamica(method, path, { body, query });
       if (error) throw error;
       return data;
     },

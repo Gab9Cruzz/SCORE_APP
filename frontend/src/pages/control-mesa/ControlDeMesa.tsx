@@ -28,7 +28,7 @@ export function ControlDeMesaPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneos", {
         params: { query: { solo_mios: true, limit: 200 } },
-      } as never);
+      });
       if (error) throw error;
       return data as { id: number; nombre: string }[];
     },
@@ -52,7 +52,7 @@ export function ControlDeMesaPage() {
             ...(torneoIdSeleccionado != null ? { torneo_id: torneoIdSeleccionado } : {}),
           },
         },
-      } as never);
+      });
       if (error) throw error;
       return {
         total: totalDeRespuesta(response as Response | undefined),
@@ -76,7 +76,7 @@ export function ControlDeMesaPage() {
   const equiposQuery = useQuery({
     queryKey: ["equipos-mesa"],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/equipos", { params: { query: { limit: 200 } } } as never);
+      const { data, error } = await api.GET("/api/v1/equipos", { params: { query: { limit: 200 } } });
       if (error) throw error;
       return data as { id: number; nombre: string }[];
     },

@@ -86,7 +86,7 @@ export function BracketView({
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}/bracket", {
         params: { path: { torneo_id: torneoId } },
-      } as never);
+      });
       if (error) throw error;
       return data as PartidoBracket[];
     },
@@ -102,7 +102,7 @@ export function BracketView({
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/estadisticas/torneos/{torneo_id}/resultados", {
         params: { path: { torneo_id: torneoId } },
-      } as never);
+      });
       if (error) throw error;
       return data as ResultadoRow[];
     },

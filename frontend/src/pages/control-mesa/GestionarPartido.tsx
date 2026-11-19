@@ -93,7 +93,7 @@ export function GestionarPartidoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}", {
         params: { path: { torneo_id: partido!.torneo_id } },
-      } as never);
+      });
       if (error) throw error;
       return data as { estado: string; fecha_cierre: string | null };
     },
@@ -124,7 +124,7 @@ export function GestionarPartidoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/partidos/{partido_id}/preflight-inicio", {
         params: { path: { partido_id: id } },
-      } as never);
+      });
       if (error) throw error;
       return data as {
         minimo_para_iniciar: number;
@@ -166,7 +166,7 @@ export function GestionarPartidoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/estadisticas/equipos/{equipo_id}/plantilla", {
         params: { path: { equipo_id: equipoLocalId as number }, query: { torneo_id: partido!.torneo_id } },
-      } as never);
+      });
       if (error) throw error;
       return data as unknown as JugadorPlantilla[];
     },
@@ -177,7 +177,7 @@ export function GestionarPartidoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/estadisticas/equipos/{equipo_id}/plantilla", {
         params: { path: { equipo_id: equipoVisitanteId as number }, query: { torneo_id: partido!.torneo_id } },
-      } as never);
+      });
       if (error) throw error;
       return data as unknown as JugadorPlantilla[];
     },
@@ -187,7 +187,7 @@ export function GestionarPartidoPage() {
   const equiposQuery = useQuery({
     queryKey: ["equipos-mesa"],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/equipos", { params: { query: { limit: 200 } } } as never);
+      const { data, error } = await api.GET("/api/v1/equipos", { params: { query: { limit: 200 } } });
       if (error) throw error;
       return data as { id: number; nombre: string }[];
     },
@@ -313,7 +313,7 @@ export function GestionarPartidoPage() {
       const { data, error } = await api.PUT("/api/v1/partidos/{partido_id}/convocados", {
         params: { path: { partido_id: id } },
         body: { convocados, version },
-      } as never);
+      });
       if (error) throw error;
       return data;
     },
@@ -334,7 +334,7 @@ export function GestionarPartidoPage() {
       const { data, error } = await api.POST("/api/v1/partidos/{partido_id}/convocados", {
         params: { path: { partido_id: id } },
         body: { jugador_perfil_id: perfilId, titular: false },
-      } as never);
+      });
       if (error) throw error;
       return data;
     },
@@ -586,7 +586,7 @@ export function GestionarPartidoPage() {
                 .PATCH("/api/v1/partidos/{partido_id}", {
                   params: { path: { partido_id: partido.id } },
                   body: { fecha_partido: fecha },
-                } as never)
+                })
                 .then(() => queryClient.invalidateQueries({ queryKey: ["partido", id] }));
             }}
             guardando={false}
@@ -611,7 +611,7 @@ export function GestionarPartidoPage() {
                 .POST("/api/v1/partidos/{partido_id}/walkover", {
                   params: { path: { partido_id: partido.id } },
                   body: { equipo_ausente_id: equipoAusenteId },
-                } as never)
+                })
                 .then(() => {
                   queryClient.invalidateQueries({ queryKey: ["partido", id] });
                   queryClient.invalidateQueries({ queryKey: ["partidos-mesa"] });

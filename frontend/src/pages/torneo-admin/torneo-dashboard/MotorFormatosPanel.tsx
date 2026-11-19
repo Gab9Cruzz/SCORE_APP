@@ -53,7 +53,7 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}/estado-fase", {
         params: { path: { torneo_id: torneoId } },
-      } as never);
+      });
       if (error) throw error;
       return data as EstadoFase;
     },
@@ -68,7 +68,7 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}", {
         params: { path: { torneo_id: torneoId } },
-      } as never);
+      });
       if (error) throw error;
       return data as {
         clasificados_por_grupo: number | null;
@@ -85,7 +85,7 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
     mutationFn: async () => {
       const { data, error } = await api.POST("/api/v1/torneos/{torneo_id}/fixture", {
         params: { path: { torneo_id: torneoId } },
-      } as never);
+      });
       if (error) throw error;
       return data;
     },
@@ -96,7 +96,7 @@ export function MotorFormatosPanel(props: MotorFormatosPanelProps) {
       const { data, error } = await api.POST("/api/v1/torneos/{torneo_id}/sorteo", {
         params: { path: { torneo_id: torneoId } },
         body: {},
-      } as never);
+      });
       if (error) throw error;
       return data;
     },

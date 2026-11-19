@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { Equipo as EquipoRow } from "../../api/types";
 import { apiErrorMessage } from "../../api/client";
 import { FiltrosRecurso } from "../../components/admin/FiltrosRecurso";
-import { ResourceForm, type ResourceFieldValue, type ResourceFormField } from "../../components/admin/ResourceForm";
+import { ResourceForm, type ResourceFieldValue, type ResourceFormField, type ValoresFormulario } from "../../components/admin/ResourceForm";
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
 import { useCatalogo } from "../../hooks/useCatalogo";
 import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
@@ -47,7 +47,7 @@ export function EquiposAdminPage() {
     return params;
   }, [disciplinaFiltro, modalidadFiltro, estadoFiltro]);
 
-  const crud = useResourceCrud<EquipoRow>({
+  const crud = useResourceCrud<EquipoRow, ValoresFormulario, ValoresFormulario>({
     resourceKey: "equipos",
     basePath: "/api/v1/equipos",
     listParams,
@@ -178,12 +178,12 @@ export function EquiposAdminPage() {
           initialValues={initialValues}
           onSubmit={(values) =>
             editando
-              ? crud.update.mutate({ id: modo.fila.id, body: values as never }, { onSuccess: volver })
+              ? crud.update.mutate({ id: modo.fila.id, body: values }, { onSuccess: volver })
               : // Flujo 1 del plan: redirección post-creación al Detalle
                 // del Equipo — la carga de jugadores (Plantilla Base,
                 // D1-C) queda habilitada de inmediato, sin depender de un
                 // torneo.
-                crud.create.mutate(values as never, {
+                crud.create.mutate(values, {
                   onSuccess: (equipo) => irAlDetalle((equipo as { id: number }).id),
                 })
           }

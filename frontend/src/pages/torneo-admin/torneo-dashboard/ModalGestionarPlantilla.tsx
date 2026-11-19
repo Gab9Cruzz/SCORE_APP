@@ -5,6 +5,7 @@ import { useResourceCrud } from "../../../hooks/useResourceCrud";
 import { useEtiquetaJugadorPorPerfil } from "../../../hooks/useEtiquetaJugadorPorPerfil";
 import type { RegistroLotePreResuelto } from "../RegistroLoteAdmin";
 import { hoyISO } from "../../../lib/fechas";
+import type { Esquema } from "../../../api/types";
 
 interface PlantillaRow {
   id: number;
@@ -60,7 +61,7 @@ export function ModalGestionarPlantilla(props: ModalGestionarPlantillaProps) {
   const { inscripcionTorneoId, equipoNombre, torneoId, torneoContexto, disciplinaId, onClose } = props;
   const navigate = useNavigate();
 
-  const plantillas = useResourceCrud<PlantillaRow>({
+  const plantillas = useResourceCrud<PlantillaRow, Esquema<"JugadorEquipoCreate">>({
     resourceKey: "plantillas",
     basePath: "/api/v1/plantillas",
     listParams: { inscripcion_torneo_id: inscripcionTorneoId },
@@ -134,7 +135,7 @@ export function ModalGestionarPlantilla(props: ModalGestionarPlantillaProps) {
           cedula,
           nombre,
           correo_electronico: correo,
-        } as never);
+        });
       }
 
       let perfil = (perfiles.listQuery.data ?? []).find((p) => p.jugador_id === jugador!.id);
@@ -147,7 +148,7 @@ export function ModalGestionarPlantilla(props: ModalGestionarPlantillaProps) {
         inscripcion_torneo_id: inscripcionTorneoId,
         dorsal: fila.dorsal.trim() === "" ? null : Number(fila.dorsal),
         fecha_inicio: hoyISO(),
-      } as never);
+      });
       setFila(FILA_VACIA);
     } catch (e) {
       // El dorsal duplicado (EC-45) y "ya juega en otro equipo" (exclusividad

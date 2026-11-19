@@ -488,7 +488,7 @@ export function MesaPanel({
       const { data, error } = await api.PATCH("/api/v1/eventos-partido/{evento_partido_id}", {
         params: { path: { evento_partido_id: id } },
         body: { minuto },
-      } as never);
+      });
       if (error) throw error;
       return data;
     },

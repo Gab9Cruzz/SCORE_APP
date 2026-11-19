@@ -184,7 +184,7 @@ export function TorneosAdminPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneo-grupos", {
         params: { query: { incluir_archivados: verArchivados } },
-      } as never);
+      });
       if (error) throw error;
       return data as TorneoGrupo[];
     },
@@ -206,7 +206,7 @@ export function TorneosAdminPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneos", {
         params: { query: { solo_mios: true, limit: 200 } },
-      } as never);
+      });
       if (error) throw error;
       return data as { id: number }[];
     },
@@ -303,7 +303,7 @@ export function TorneosAdminPage() {
       const { data, error } = await api.PATCH("/api/v1/torneo-grupos/{torneo_grupo_id}", {
         params: { path: { torneo_grupo_id: id } },
         body: { estado },
-      } as never);
+      });
       if (error) throw error;
       return data;
     },
@@ -318,7 +318,7 @@ export function TorneosAdminPage() {
       const { data, error } = await api.PATCH("/api/v1/torneos/{torneo_id}", {
         params: { path: { torneo_id: torneoId } },
         body: { publicado },
-      } as never);
+      });
       if (error) throw error;
       return data;
     },
@@ -344,7 +344,7 @@ export function TorneosAdminPage() {
           formato_eliminatoria: formatoEliminatoria,
           metodo_desempate_eliminatoria: metodoDesempateEliminatoria,
         },
-      } as never);
+      });
       if (error) throw error;
       return data;
     },
@@ -372,7 +372,7 @@ export function TorneosAdminPage() {
       const { data, error } = await api.PATCH("/api/v1/torneo-grupos/{torneo_grupo_id}", {
         params: { path: { torneo_grupo_id: id } },
         body: { nombre, pais, logo_url },
-      } as never);
+      });
       if (error) throw error;
       return data;
     },
@@ -381,7 +381,7 @@ export function TorneosAdminPage() {
 
   const crearTorneo = useMutation({
     mutationFn: async (body: TorneoCreatePayload) => {
-      const { data, error } = await api.POST("/api/v1/torneos", { body } as never);
+      const { data, error } = await api.POST("/api/v1/torneos", { body });
       if (error) throw error;
       return data as { id: number; disciplina_id: number };
     },
@@ -966,16 +966,17 @@ function PanelEditarDesempate(props: {
       <ResourceForm
         fields={campos}
         initialValues={{
-          formato_eliminatoria: torneo.formato_eliminatoria,
-          metodo_desempate_eliminatoria: torneo.metodo_desempate_eliminatoria,
+          formato_eliminatoria: torneo.formato_eliminatoria ?? "Unico",
+          metodo_desempate_eliminatoria: torneo.metodo_desempate_eliminatoria ?? "Manual",
         }}
         onSubmit={(values) =>
           onGuardar(
-            (values.formato_eliminatoria as "Unico" | "Ida_Vuelta" | "Mixto" | null) ?? torneo.formato_eliminatoria,
+            (values.formato_eliminatoria as "Unico" | "Ida_Vuelta" | "Mixto" | null) ?? torneo.formato_eliminatoria ?? "Unico",
             tipoCronometro === "Corrido"
               ? "Manual"
               : ((values.metodo_desempate_eliminatoria as "Manual" | "Penales_Directo" | null) ??
-                  torneo.metodo_desempate_eliminatoria),
+                  torneo.metodo_desempate_eliminatoria ??
+                  "Manual"),
           )
         }
         submitting={submitting}

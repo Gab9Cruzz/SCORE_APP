@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
-import type { Equipo as EquipoRow } from "../../../api/types";
+import type { Equipo as EquipoRow, Esquema } from "../../../api/types";
 import { apiErrorMessage } from "../../../api/client";
 import { useNombrePorIdConFaltantes } from "../../../hooks/useFetchFaltantes";
 import { ResourceTable } from "../../../components/admin/ResourceTable";
@@ -38,7 +38,8 @@ interface UsuarioRow {
   nombre: string;
 }
 
-const FASES = ["Regular", "Grupos", "Octavos", "Cuartos", "Semifinal", "Final", "Tercer puesto"];
+const FASES = ["Regular", "Grupos", "Octavos", "Cuartos", "Semifinal", "Final", "Tercer puesto"] as const;
+type Fase = (typeof FASES)[number];
 
 type Modo = { tipo: "lista" } | { tipo: "crear" };
 
@@ -60,7 +61,7 @@ export function PartidosDelTorneoPage() {
   const navigate = useNavigate();
   const [modo, setModo] = useState<Modo>({ tipo: "lista" });
 
-  const crud = useResourceCrud<PartidoRow>({
+  const crud = useResourceCrud<PartidoRow, Esquema<"PartidoCreate">, Esquema<"PartidoUpdate">>({
     resourceKey: "partidos",
     basePath: "/api/v1/partidos",
     listParams: { torneo_id: torneoId },
@@ -208,7 +209,7 @@ export function PartidosDelTorneoPage() {
               partido={fila}
               arbitros={arbitros.listQuery.data ?? []}
               cargandoArbitros={arbitros.listQuery.isLoading}
-              onAsignar={(arbitroId) => crud.update.mutate({ id: fila.id, body: { arbitro_id: arbitroId } as never })}
+              onAsignar={(arbitroId) => crud.update.mutate({ id: fila.id, body: { arbitro_id: arbitroId } })}
               asignando={crud.update.isPending}
             />
           </>
@@ -290,10 +291,10 @@ function CrearPartidoDelTorneo({ torneoId, torneoContexto, equiposInscritos, car
   const [equipoVisitante, setEquipoVisitante] = useState<number | null>(null);
   const [fechaPartido, setFechaPartido] = useState("");
   const [jornada, setJornada] = useState("");
-  const [fase, setFase] = useState("Regular");
+  const [fase, setFase] = useState<Fase>("Regular");
   const [grupo, setGrupo] = useState("");
 
-  const crud = useResourceCrud<PartidoRow>({ resourceKey: "partidos", basePath: "/api/v1/partidos" });
+  const crud = useResourceCrud<PartidoRow, Esquema<"PartidoCreate">>({ resourceKey: "partidos", basePath: "/api/v1/partidos" });
 
   const puedeConfirmar = equipoLocal !== null && equipoVisitante !== null && equipoLocal !== equipoVisitante && fechaPartido !== "";
 
@@ -308,7 +309,7 @@ function CrearPartidoDelTorneo({ torneoId, torneoContexto, equiposInscritos, car
         jornada: jornada ? Number(jornada) : null,
         fase,
         grupo: grupo || null,
-      } as never,
+      },
       { onSuccess: onDone },
     );
   }
@@ -362,7 +363,7 @@ function CrearPartidoDelTorneo({ torneoId, torneoContexto, equiposInscritos, car
         </label>
         <label>
           Fase
-          <select value={fase} onChange={(e) => setFase(e.target.value)}>
+          <select value={fase} onChange={(e) => setFase(e.target.value as Fase)}>
             {FASES.map((f) => (
               <option key={f} value={f}>
                 {f}

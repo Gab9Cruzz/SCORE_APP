@@ -98,7 +98,7 @@ export function EstadisticasDelTorneoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/estadisticas/torneos/{torneo_id}/posiciones", {
         params: { path: { torneo_id: edicionId } },
-      } as never);
+      });
       if (error) throw error;
       return data as PosicionRow[];
     },
@@ -134,7 +134,7 @@ export function EstadisticasDelTorneoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/estadisticas/torneos/{torneo_id}/goleadores", {
         params: { path: { torneo_id: edicionId } },
-      } as never);
+      });
       if (error) throw error;
       return data as GoleadorRow[];
     },
@@ -148,7 +148,7 @@ export function EstadisticasDelTorneoPage() {
       const { data, error } = await api.PATCH("/api/v1/grupos/equipos/{grupo_equipo_id}", {
         params: { path: { grupo_equipo_id: grupoEquipoId } },
         body: { orden_manual: ordenManual },
-      } as never);
+      });
       if (error) throw error;
       return data;
     },

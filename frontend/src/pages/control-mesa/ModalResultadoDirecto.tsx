@@ -481,7 +481,7 @@ export function ModalResultadoDirecto(props: {
       const { data, error } = await api.POST("/api/v1/partidos/{partido_id}/resultado-directo", {
         params: { path: { partido_id: partido.id } },
         body,
-      } as never);
+      });
       if (error) throw error;
       return data;
     },

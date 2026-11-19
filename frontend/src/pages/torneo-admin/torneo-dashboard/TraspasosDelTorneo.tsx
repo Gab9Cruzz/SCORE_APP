@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import type { Equipo as EquipoRow } from "../../../api/types";
+import type { Equipo as EquipoRow, Esquema } from "../../../api/types";
 import { api, apiErrorMessage } from "../../../api/client";
 import { ResourceTable } from "../../../components/admin/ResourceTable";
 import { SelectorJugadorBuscable, type JugadorBuscadoRow } from "../../../components/admin/SelectorJugadorBuscable";
@@ -117,7 +117,7 @@ export function TraspasosDelTorneoPage() {
   const queryClient = useQueryClient();
   const [modo, setModo] = useState<Modo>({ tipo: "lista" });
 
-  const crud = useResourceCrud<TraspasoRow>({
+  const crud = useResourceCrud<TraspasoRow, Esquema<"TraspasoCreate">>({
     resourceKey: "traspasos",
     basePath: "/api/v1/traspasos",
     listParams: { torneo_id: torneoId },
@@ -188,7 +188,7 @@ export function TraspasosDelTorneoPage() {
         nombreEquipoDeInscripcion={(id) => nombreEquipoDeInscripcion(id)}
         perfiles={perfiles}
         onCrear={(body) =>
-          crud.create.mutateAsync(body as never).then(() => {
+          crud.create.mutateAsync(body).then(() => {
             queryClient.invalidateQueries({ queryKey: ["plantillas"] });
             volver();
           })

@@ -2,6 +2,11 @@ import { useState, type FormEvent } from "react";
 
 export type ResourceFieldValue = string | number | boolean | null;
 
+/** Lo que entrega `onSubmit`: un valor por campo. Las páginas genéricas de
+ * alta/edición lo mandan tal cual como cuerpo y la validación la hace el
+ * backend (TASK-032: tipo explícito en vez de `as never`). */
+export type ValoresFormulario = Record<string, ResourceFieldValue>;
+
 export interface ResourceFormFieldOption {
   value: number;
   label: string;

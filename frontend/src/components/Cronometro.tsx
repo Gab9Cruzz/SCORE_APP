@@ -255,7 +255,7 @@ export function Cronometro(props: {
       const { data, error } = await api.POST("/api/v1/partidos/{partido_id}/hitos", {
         params: { path: { partido_id: partidoId } },
         body,
-      } as never);
+      });
       if (error) throw error;
       return data;
     },
@@ -272,7 +272,7 @@ export function Cronometro(props: {
     mutationFn: async () => {
       const { data, error } = await api.POST("/api/v1/partidos/{partido_id}/deshacer-cierre-forzado", {
         params: { path: { partido_id: partidoId } },
-      } as never);
+      });
       if (error) throw error;
       return data;
     },
@@ -287,7 +287,7 @@ export function Cronometro(props: {
       const { data, error } = await api.PATCH("/api/v1/partidos/{partido_id}/hitos/{hito_id}", {
         params: { path: { partido_id: partidoId, hito_id: hitoId } },
         body: { minuto_reloj: minuto },
-      } as never);
+      });
       if (error) throw error;
       return data;
     },
@@ -342,7 +342,7 @@ export function Cronometro(props: {
   const corriendo = !estado.en_pausa && (estado.tipo_cronometro === "Corrido" ? estado.partido_iniciado : estado.periodo_abierto != null);
 
   function accion(tipo: TipoHito, extra?: Record<string, unknown>) {
-    registrar.mutate({ tipo_hito: tipo, ...extra } as never);
+    registrar.mutate({ tipo_hito: tipo, ...extra });
   }
 
   // Botón "Iniciar 1er Tiempo": un solo toque arranca el partido Y el
@@ -352,8 +352,8 @@ export function Cronometro(props: {
   // mesa no necesita dos toques para lo que el árbitro percibe como una
   // sola acción.
   async function iniciarPrimerTiempo() {
-    await registrar.mutateAsync({ tipo_hito: "Inicio_Partido" } as never);
-    await registrar.mutateAsync({ tipo_hito: "Inicio_Periodo", numero_periodo: 1 } as never);
+    await registrar.mutateAsync({ tipo_hito: "Inicio_Partido" });
+    await registrar.mutateAsync({ tipo_hito: "Inicio_Periodo", numero_periodo: 1 });
   }
 
   // Botón "Fin del Partido" en el último período: espejo de
@@ -366,8 +366,8 @@ export function Cronometro(props: {
   // toque de mesa cierra el período Y el partido (Fin_Periodo + Fin_Partido),
   // sin exponerle al árbitro los dos hitos por separado.
   async function finalizarUltimoPeriodoYPartido() {
-    await registrar.mutateAsync({ tipo_hito: "Fin_Periodo", numero_periodo: estado.periodo_abierto ?? undefined } as never);
-    await registrar.mutateAsync({ tipo_hito: "Fin_Partido" } as never);
+    await registrar.mutateAsync({ tipo_hito: "Fin_Periodo", numero_periodo: estado.periodo_abierto ?? undefined });
+    await registrar.mutateAsync({ tipo_hito: "Fin_Partido" });
   }
 
   // Desempate manual (Fase 0, Finding 1): mismo espejo, con el ganador
@@ -375,8 +375,8 @@ export function Cronometro(props: {
   // eliminacion_desempate lo exige antes de dejar pasar el UPDATE a
   // Estado='Finalizado' que este Hito dispara.
   async function finalizarUltimoPeriodoYPartidoConDesempate(ganadorId: number) {
-    await registrar.mutateAsync({ tipo_hito: "Fin_Periodo", numero_periodo: estado.periodo_abierto ?? undefined } as never);
-    await registrar.mutateAsync({ tipo_hito: "Fin_Partido", ganador_desempate_id: ganadorId } as never);
+    await registrar.mutateAsync({ tipo_hito: "Fin_Periodo", numero_periodo: estado.periodo_abierto ?? undefined });
+    await registrar.mutateAsync({ tipo_hito: "Fin_Partido", ganador_desempate_id: ganadorId });
   }
 
   // Desempate de eliminatoria: tiempo extra y penales (D-D1/§9, fase 2) —
@@ -384,13 +384,13 @@ export function Cronometro(props: {
   // ganador NO viaja acá: fn_validar_forma_desempate lo deriva de la
   // tanda del lado del servidor (D-D4).
   async function finalizarUltimoPeriodoYPartidoConPenales(local: number, visitante: number) {
-    await registrar.mutateAsync({ tipo_hito: "Fin_Periodo", numero_periodo: estado.periodo_abierto ?? undefined } as never);
+    await registrar.mutateAsync({ tipo_hito: "Fin_Periodo", numero_periodo: estado.periodo_abierto ?? undefined });
     await registrar.mutateAsync({
       tipo_hito: "Fin_Partido",
       metodo_desempate: "Penales",
       penales_local: local,
       penales_visitante: visitante,
-    } as never);
+    });
   }
 
   const esUltimoPeriodo = estado.cantidad_periodos != null && estado.periodo_abierto === estado.cantidad_periodos;
@@ -771,7 +771,7 @@ export function Cronometro(props: {
                     forzado: true,
                     motivo_cierre: motivoCierre as MotivoCierre,
                     ...(motivoCierre === "Otro" ? { motivo_cierre_detalle: motivoDetalle.trim() } : {}),
-                  } as never, {
+                  }, {
                     onSuccess: () => { setConfirmandoForzado(false); setMotivoCierre(null); setMotivoDetalle(""); },
                   })
                 }

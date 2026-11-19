@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router-dom";
-import type { Equipo as EquipoRow } from "../../../api/types";
+import type { Equipo as EquipoRow, Esquema } from "../../../api/types";
 import { apiErrorMessage } from "../../../api/client";
-import { ResourceForm, type ResourceFieldValue } from "../../../components/admin/ResourceForm";
+import { ResourceForm, type ResourceFieldValue, type ValoresFormulario } from "../../../components/admin/ResourceForm";
 import { LIMITE_LISTA, useResourceCrud } from "../../../hooks/useResourceCrud";
 import { useCatalogo } from "../../../hooks/useCatalogo";
 import { useEtiquetaJugadorPorPerfil } from "../../../hooks/useEtiquetaJugadorPorPerfil";
@@ -57,7 +57,7 @@ export function PlantillasDelTorneoPage() {
   const [resolviendoPerfil, setResolviendoPerfil] = useState(false);
   const [perfilAbierto, setPerfilAbierto] = useState<number | null>(null); // jugador_id
 
-  const crud = useResourceCrud<PlantillaRow>({
+  const crud = useResourceCrud<PlantillaRow, Esquema<"JugadorEquipoCreate">, ValoresFormulario>({
     resourceKey: "plantillas",
     basePath: "/api/v1/plantillas",
     listParams: { torneo_id: torneoId },
@@ -192,10 +192,10 @@ export function PlantillasDelTorneoPage() {
     crud.create.mutate(
       {
         jugador_perfil_id: perfilId,
-        inscripcion_torneo_id: values.inscripcion_torneo_id,
-        dorsal: values.dorsal,
-        fecha_inicio: values.fecha_inicio,
-      } as never,
+        inscripcion_torneo_id: Number(values.inscripcion_torneo_id),
+        dorsal: values.dorsal == null || values.dorsal === "" ? null : Number(values.dorsal),
+        fecha_inicio: String(values.fecha_inicio),
+      },
       { onSuccess: volver },
     );
   }
@@ -257,7 +257,7 @@ export function PlantillasDelTorneoPage() {
             { name: "estado", label: "Estado", type: "select", choices: ["Activo", "Inactivo", "Suspendido"] },
           ]}
           initialValues={initialValues}
-          onSubmit={(values) => crud.update.mutate({ id: modo.fila.id, body: values as never }, { onSuccess: volver })}
+          onSubmit={(values) => crud.update.mutate({ id: modo.fila.id, body: values }, { onSuccess: volver })}
           submitting={crud.update.isPending}
           submitError={crud.update.isError ? apiErrorMessage(crud.update.error) : null}
           submitLabel="Guardar cambios"

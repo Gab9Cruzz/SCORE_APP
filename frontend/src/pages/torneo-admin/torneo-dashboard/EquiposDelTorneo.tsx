@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
-import type { Equipo as EquipoRow, Modalidad as ModalidadRow } from "../../../api/types";
+import type { Equipo as EquipoRow, Modalidad as ModalidadRow, Esquema } from "../../../api/types";
 import { ResourceTable } from "../../../components/admin/ResourceTable";
 import { LIMITE_LISTA, useResourceCrud } from "../../../hooks/useResourceCrud";
 import { useEtiquetaJugadorPorPerfil } from "../../../hooks/useEtiquetaJugadorPorPerfil";
@@ -48,7 +48,7 @@ export function EquiposDelTorneoPage() {
   const tamanoEquipo = (modalidades.listQuery.data ?? []).find((m) => m.id === modalidadId)?.tamano_equipo;
   const esIndividual = tamanoEquipo === 1;
 
-  const inscripciones = useResourceCrud<InscripcionRow>({
+  const inscripciones = useResourceCrud<InscripcionRow, Esquema<"InscripcionTorneoCreate">, Esquema<"InscripcionTorneoUpdate">>({
     resourceKey: "inscripciones",
     basePath: "/api/v1/inscripciones",
     listParams: { torneo_id: torneoId },
@@ -90,7 +90,7 @@ function VistaIndividual(props: {
   torneoId: number;
   disciplinaId: number;
   torneoContexto: string;
-  inscripciones: ReturnType<typeof useResourceCrud<InscripcionRow>>;
+  inscripciones: ReturnType<typeof useResourceCrud<InscripcionRow, Esquema<"InscripcionTorneoCreate">, Esquema<"InscripcionTorneoUpdate">>>;
   modalAbierto: boolean;
   setModalAbierto: (v: boolean) => void;
   modalidadId: number;
@@ -146,7 +146,7 @@ function VistaIndividual(props: {
         isLoading={inscripciones.listQuery.isLoading || perfiles.listQuery.isLoading || jugadores.listQuery.isLoading}
         isError={inscripciones.listQuery.isError}
         emptyMessage="Sin jugadores inscritos todavía en esta edición."
-        onSoftDelete={(fila) => inscripciones.update.mutate({ id: fila.id, body: { estado: "Cancelado" } as never })}
+        onSoftDelete={(fila) => inscripciones.update.mutate({ id: fila.id, body: { estado: "Cancelado" } })}
         softDeleteLabel="Cancelar inscripción"
         softDeletePending={inscripciones.update.isPending}
         estadosDeBaja={["Cancelado"]}
@@ -172,7 +172,7 @@ function VistaEquipo(props: {
   torneoId: number;
   disciplinaId: number;
   torneoContexto: string;
-  inscripciones: ReturnType<typeof useResourceCrud<InscripcionRow>>;
+  inscripciones: ReturnType<typeof useResourceCrud<InscripcionRow, Esquema<"InscripcionTorneoCreate">, Esquema<"InscripcionTorneoUpdate">>>;
   esPareja: boolean;
   modalAbierto: boolean;
   setModalAbierto: (v: boolean) => void;
@@ -265,7 +265,7 @@ function VistaEquipo(props: {
         // pestaña global Inscripciones (Fase 3: consolidación) — mismo PATCH
         // directo {estado: "Cancelado"} que ya usaba InscripcionesAdmin.tsx,
         // no un DELETE (la tabla no lo tiene).
-        onSoftDelete={(fila) => inscripciones.update.mutate({ id: fila.id, body: { estado: "Cancelado" } as never })}
+        onSoftDelete={(fila) => inscripciones.update.mutate({ id: fila.id, body: { estado: "Cancelado" } })}
         softDeleteLabel="Cancelar inscripción"
         softDeletePending={inscripciones.update.isPending}
         estadosDeBaja={["Cancelado"]}

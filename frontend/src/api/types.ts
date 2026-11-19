@@ -20,5 +20,9 @@ import type { components } from "./schema";
  * todos. Mismo criterio que AuditoriaAdmin.tsx ya usaba para su propio
  * tipo (`components["schemas"]["AuditoriaOut"]` directo, sin alias local).
  */
+/** Cualquier esquema del contrato por nombre (TASK-032): para tipar los
+ * cuerpos de `useResourceCrud` con el `*Create` real en vez de `Partial<Out>`. */
+export type Esquema<K extends keyof components["schemas"]> = components["schemas"][K];
+
 export type Equipo = components["schemas"]["EquipoOut"];
 export type Modalidad = components["schemas"]["ModalidadOut"];

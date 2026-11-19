@@ -43,7 +43,7 @@ export function BarraDisciplinasPublica(props: BarraDisciplinasPublicaProps) {
   const query = useQuery({
     queryKey: ["disciplinas-con-partidos"],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/disciplinas/con-partidos", {} as never);
+      const { data, error } = await api.GET("/api/v1/disciplinas/con-partidos", {});
       if (error) throw error;
       return data as DisciplinaConPartidos[];
     },

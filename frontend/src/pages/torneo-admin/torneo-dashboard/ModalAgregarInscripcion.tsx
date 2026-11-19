@@ -131,7 +131,7 @@ function ModalIndividual(props: { torneoId: number; torneoContexto: string; onCl
           jugador_nombre: jugador.nombre.trim(),
           jugador_correo_electronico: jugador.correo_electronico.trim(),
         },
-      } as never);
+      });
       if (error) throw error;
       return { data, nombre: jugador.nombre.trim() };
     },
@@ -323,7 +323,7 @@ function ModalEquipo(props: {
     mutationFn: async (equipo: { id: number; nombre: string }) => {
       const { data, error } = await api.POST("/api/v1/inscripciones", {
         body: { torneo_id: torneoId, equipo_id: equipo.id },
-      } as never);
+      });
       if (error) throw error;
       return { data, equipoNombre: equipo.nombre };
     },
@@ -359,13 +359,13 @@ function ModalEquipo(props: {
           disciplina_id: torneoDisciplinaId,
           modalidad_id: torneoModalidadId,
         },
-      } as never);
+      });
       if (errEquipo) throw errEquipo;
       const equipoId = (equipo as { id: number }).id;
 
       const { data: inscripcion, error: errInsc } = await api.POST("/api/v1/inscripciones", {
         body: { torneo_id: torneoId, equipo_id: equipoId },
-      } as never);
+      });
       if (errInsc) throw errInsc;
       return { inscripcionTorneoId: (inscripcion as { id: number }).id, equipoNombre: nombreNuevoEquipo.trim() };
     },

@@ -83,7 +83,7 @@ export function DetalleTorneoPublicoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}", {
         params: { path: { torneo_id: id } },
-      } as never);
+      });
       if (error) throw error;
       return data as TorneoDetalle;
     },
@@ -97,7 +97,7 @@ export function DetalleTorneoPublicoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneo-grupos/{torneo_grupo_id}", {
         params: { path: { torneo_grupo_id: grupoId as number } },
-      } as never);
+      });
       if (error) throw error;
       return data as TorneoGrupoDetalle;
     },
@@ -118,7 +118,7 @@ export function DetalleTorneoPublicoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/estadisticas/torneos/{torneo_id}/posiciones", {
         params: { path: { torneo_id: id } },
-      } as never);
+      });
       if (error) throw error;
       return data as PosicionRow[];
     },
@@ -130,7 +130,7 @@ export function DetalleTorneoPublicoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/estadisticas/torneos/{torneo_id}/resultados", {
         params: { path: { torneo_id: id } },
-      } as never);
+      });
       if (error) throw error;
       return data as ResultadoRow[];
     },
@@ -142,7 +142,7 @@ export function DetalleTorneoPublicoPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/estadisticas/torneos/{torneo_id}/goleadores", {
         params: { path: { torneo_id: id } },
-      } as never);
+      });
       if (error) throw error;
       return data as GoleadorRow[];
     },

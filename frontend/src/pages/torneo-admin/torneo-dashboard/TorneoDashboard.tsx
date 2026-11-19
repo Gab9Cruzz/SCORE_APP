@@ -97,7 +97,7 @@ export function TorneoDashboardPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneos/{torneo_id}", {
         params: { path: { torneo_id: id } },
-      } as never);
+      });
       if (error) throw error;
       return data as TorneoRow;
     },
@@ -109,7 +109,7 @@ export function TorneoDashboardPage() {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/torneo-grupos/{torneo_grupo_id}", {
         params: { path: { torneo_grupo_id: torneoQuery.data!.torneo_grupo_id } },
-      } as never);
+      });
       if (error) throw error;
       return data as TorneoGrupoRow;
     },
@@ -124,7 +124,7 @@ export function TorneoDashboardPage() {
     mutationFn: async (body: { fecha_inicio: string; fecha_fin: string }) => {
       const { data, error } = await api.POST("/api/v1/torneos", {
         body: { torneo_grupo_id: torneoQuery.data?.torneo_grupo_id, ...body },
-      } as never);
+      });
       if (error) throw error;
       return data as TorneoRow;
     },
@@ -156,7 +156,7 @@ export function TorneoDashboardPage() {
     mutationFn: async () => {
       const { data, error } = await api.POST("/api/v1/torneos/{torneo_id}/reabrir", {
         params: { path: { torneo_id: id } },
-      } as never);
+      });
       if (error) throw error;
       return data as TorneoRow;
     },

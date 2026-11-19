@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { apiErrorMessage } from "../../api/client";
-import { ResourceForm, type ResourceFieldValue, type ResourceFormField } from "../../components/admin/ResourceForm";
+import { ResourceForm, type ResourceFieldValue, type ResourceFormField, type ValoresFormulario } from "../../components/admin/ResourceForm";
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
 import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
 
@@ -36,7 +36,7 @@ interface SimpleResourceAdminPageProps<TOut extends RowBase> {
 export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResourceAdminPageProps<TOut>) {
   const { resourceKey, basePath, title, createFields, editFields, columns, emptyMessage, isSelf, renderRowExtra } =
     props;
-  const crud = useResourceCrud<TOut>({ resourceKey, basePath });
+  const crud = useResourceCrud<TOut, ValoresFormulario, ValoresFormulario>({ resourceKey, basePath });
   const [modo, setModo] = useState<Modo<TOut>>({ tipo: "lista" });
 
   function volver() {
@@ -49,7 +49,7 @@ export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResou
         <h1>Nuevo — {title}</h1>
         <ResourceForm
           fields={createFields}
-          onSubmit={(values) => crud.create.mutate(values as never, { onSuccess: volver })}
+          onSubmit={(values) => crud.create.mutate(values, { onSuccess: volver })}
           submitting={crud.create.isPending}
           submitError={crud.create.isError ? apiErrorMessage(crud.create.error) : null}
           submitLabel="Crear"
@@ -72,7 +72,7 @@ export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResou
         <ResourceForm
           fields={editFields}
           initialValues={initialValues}
-          onSubmit={(values) => crud.update.mutate({ id: fila.id, body: values as never }, { onSuccess: volver })}
+          onSubmit={(values) => crud.update.mutate({ id: fila.id, body: values }, { onSuccess: volver })}
           submitting={crud.update.isPending}
           submitError={crud.update.isError ? apiErrorMessage(crud.update.error) : null}
           submitLabel="Guardar cambios"

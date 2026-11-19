@@ -6,6 +6,7 @@ import { useCatalogo } from "../../hooks/useCatalogo";
 import { useResourceCrud } from "../../hooks/useResourceCrud";
 import { iconoDisciplina } from "../../components/iconosDisciplina";
 import { SelectorJugadorBuscable, type JugadorBuscadoRow } from "../../components/admin/SelectorJugadorBuscable";
+import type { Esquema } from "../../api/types";
 
 interface EquipoDetalle {
   id: number;
@@ -169,7 +170,7 @@ export function DetalleEquipoPage() {
           equipoId={equipoId}
           equipoNombre={equipo.nombre}
           onAgregado={(dorsal) =>
-            plantillaBase.create.mutate({ jugador_id: dorsal.jugador_id, dorsal_sugerido: dorsal.dorsal } as never)
+            plantillaBase.create.mutate({ jugador_id: dorsal.jugador_id, dorsal_sugerido: dorsal.dorsal })
           }
           onClose={() => setBuscando(false)}
         />
@@ -207,10 +208,13 @@ function ModalBuscarAgregarJugador(props: {
   const [nuevoJugador, setNuevoJugador] = useState(JUGADOR_VACIO);
   const [confirmando, setConfirmando] = useState<{
     jugador: JugadorBuscadoRow;
-    conflicto: { conflicto: boolean; equipos: string[]; mensaje?: string | null };
+    conflicto: Esquema<"ConflictoMultimilitancia">;
   } | null>(null);
 
-  const crearJugador = useResourceCrud<JugadorRow>({ resourceKey: "jugadores", basePath: "/api/v1/jugadores" });
+  const crearJugador = useResourceCrud<JugadorRow, Esquema<"JugadorCreate">>({
+    resourceKey: "jugadores",
+    basePath: "/api/v1/jugadores",
+  });
 
   async function elegirJugador(jugador: JugadorBuscadoRow) {
     setElegido(jugador);
@@ -247,7 +251,7 @@ function ModalBuscarAgregarJugador(props: {
           // no un warning que se pueda ignorar sin leer.
           <div className="resource-form" aria-label="Advertencia de multimilitancia">
             <p>
-              ⚠️ {confirmando.jugador.nombre} ya está inscrito en {confirmando.conflicto.equipos.join(", ")}.
+              ⚠️ {confirmando.jugador.nombre} ya está inscrito en {(confirmando.conflicto.equipos ?? []).join(", ")}.
             </p>
             <p>{confirmando.conflicto.mensaje}</p>
             <div className="resource-form__actions">
@@ -310,7 +314,7 @@ function ModalBuscarAgregarJugador(props: {
                           nombre: nuevoJugador.nombre.trim(),
                           cedula: nuevoJugador.cedula.trim(),
                           correo_electronico: nuevoJugador.correo_electronico.trim(),
-                        } as never,
+                        },
                         { onSuccess: (jugador) => elegirJugador(jugador as JugadorRow) },
                       )
                     }

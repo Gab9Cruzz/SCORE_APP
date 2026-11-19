@@ -190,7 +190,7 @@ function PasoCerrarDirecto(props: {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/estadisticas/torneos/{torneo_id}/posiciones", {
         params: { path: { torneo_id: torneoId } },
-      } as never);
+      });
       if (error) throw error;
       return data as PosicionRow[];
     },
@@ -276,7 +276,7 @@ function PasoCerrarDirecto(props: {
       const { data, error } = await api.POST("/api/v1/torneos/{torneo_id}/cerrar", {
         params: { path: { torneo_id: torneoId } },
         body: ordenPodio ? { orden_podio: ordenPodio } : {},
-      } as never);
+      });
       if (error) throw error;
       return data;
     },
@@ -426,7 +426,7 @@ function PasoGenerarPlayoffs(props: {
     queryFn: async () => {
       const { data, error } = await api.GET("/api/v1/estadisticas/torneos/{torneo_id}/posiciones", {
         params: { path: { torneo_id: torneoId } },
-      } as never);
+      });
       if (error) throw error;
       return data as { grupo_id: number | null }[];
     },
@@ -447,7 +447,7 @@ function PasoGenerarPlayoffs(props: {
           formato_eliminatoria: formato,
           ...(tipoCronometro === "Corrido" ? {} : { metodo_desempate_eliminatoria: metodoDesempate }),
         },
-      } as never);
+      });
       if (error) throw error;
       return data;
     },
