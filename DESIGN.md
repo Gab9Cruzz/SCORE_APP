@@ -156,6 +156,13 @@ Reglas:
 `ResourceTable` (en `components/admin/`) es la tabla de CRUD construida sobre
 `<Table>`: suma Editar, la baja con confirmación y las acciones extra.
 
+Paginación (TASK-039): las grillas de administración piden de a 50 filas
+(`TAMANO_PAGINA`) y muestran debajo `<Paginacion>`: "1–50 de 312" a la
+izquierda, Anterior y Siguiente a la derecha. Con una sola página no se
+muestra. Al cambiar un filtro se vuelve a la primera página (`usePagina`), y
+la búsqueda de texto espera 300 ms sin teclear antes de consultar al
+servidor (`useValorConRetardo`).
+
 ## 9. Modales
 
 `<Modal titulo|etiqueta|idTitulo onCerrar sinGuardar cierreBloqueado ancho>`,

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, apiErrorMessage } from "../api/client";
 import { LIMITE_EVENTOS_PARTIDO } from "../hooks/useResourceCrud";
 import { useAuth } from "../auth/useAuth";
-import { useNombrePorIdConFaltantes } from "../hooks/useFetchFaltantes";
+import { useNombresPorIds } from "../hooks/useFetchFaltantes";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import {
   type EventoPendiente,
@@ -141,15 +141,6 @@ export function MesaPanel({
     staleTime: 5 * 60 * 1000,
   });
 
-  const equiposQuery = useQuery({
-    queryKey: ["equipos-catalogo"],
-    queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/equipos", { params: { query: { limit: 200 } } });
-      if (error) throw error;
-      return data;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
 
   const eventosCatalogoQuery = useQuery({
     queryKey: ["eventos-catalogo"],
@@ -241,13 +232,8 @@ export function MesaPanel({
     [plantillaVisitanteQuery.data, perfilesConvocados],
   );
 
-  const equipoNombreBase = useMemo(
-    () => new Map((equiposQuery.data ?? []).map((e) => [e.id, e.nombre])),
-    [equiposQuery.data],
-  );
-  // Bug 2 (D2, parte B): resolución dirigida — mismo criterio que
-  // ControlDeMesaPage, para el equipo local/visitante de este partido.
-  const equipoNombre = useNombrePorIdConFaltantes("/api/v1/equipos", equipoNombreBase, [equipoLocalId, equipoVisitanteId]);
+  // TASK-039: solo los dos equipos de este partido, no el catálogo entero.
+  const equipoNombre = useNombresPorIds("/api/v1/equipos", [equipoLocalId, equipoVisitanteId]);
   const eventoIdPorNombre = useMemo(
     () => new Map((eventosCatalogoQuery.data ?? []).map((e) => [e.nombre, e.id])),
     [eventosCatalogoQuery.data],

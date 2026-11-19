@@ -16,6 +16,7 @@ export function JugadoresAdminPage() {
       basePath="/api/v1/jugadores"
       title="Jugadores"
       emptyMessage="No hay jugadores creados todavía."
+      busqueda={{ etiqueta: "Buscar jugador", placeholder: "Buscar por nombre o cédula..." }}
       createFields={[
         { name: "nombre", label: "Nombre", type: "text", required: true },
         { name: "cedula", label: "Cédula", type: "text", required: true },

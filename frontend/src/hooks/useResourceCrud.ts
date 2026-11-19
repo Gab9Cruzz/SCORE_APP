@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { pedirRutaDinamica } from "../api/rutaDinamica";
 
 /**
@@ -34,9 +34,8 @@ import { pedirRutaDinamica } from "../api/rutaDinamica";
  * necesita saber el número — se exporta solo para quien quiera mostrarlo
  * en el mensaje.
  *
- * No es paginación: es un tope. La paginación con cursor sigue pendiente
- * (ver TODOS.md); mientras tanto lo importante es que el corte sea
- * VISIBLE y no silencioso. */
+ * Es el tope de los listados SIN paginar (selectores, mapas de nombres).
+ * Las grillas de administración paginan con `tamanoPagina` (TASK-039). */
 export const LIMITE_LISTA = 200;
 
 /** Tope de eventos de UN partido (`le=500` en GET /eventos-partido,
@@ -52,16 +51,28 @@ interface UseResourceCrudOptions {
   listParams?: Record<string, unknown>;
   /** Si es false, no dispara el GET de lista (para pickers condicionales). */
   enabled?: boolean;
+  /** TASK-039: con esto el GET pide una página (`skip`/`limit`) en lugar de
+   * las primeras `LIMITE_LISTA` filas. `pagina` empieza en 0. */
+  tamanoPagina?: number;
+  pagina?: number;
 }
+
+/** Filas por página de las grillas de administración (TASK-039). */
+export const TAMANO_PAGINA = 50;
 
 export function useResourceCrud<
   TOut extends { id: number },
   TCreate = Partial<TOut>,
   TUpdate = Partial<TOut>,
 >(options: UseResourceCrudOptions) {
-  const { resourceKey, basePath, listParams, enabled = true } = options;
+  const { resourceKey, basePath, listParams, enabled = true, tamanoPagina, pagina = 0 } = options;
   const queryClient = useQueryClient();
-  const queryKey = [resourceKey, listParams ?? null] as const;
+  const ventana = tamanoPagina ? { skip: pagina * tamanoPagina, limit: tamanoPagina } : { limit: LIMITE_LISTA };
+  // La ventana va en la clave solo si pagina: los listados de siempre
+  // conservan su clave (y lo que ya la invalida o la siembra en tests).
+  const queryKey = tamanoPagina
+    ? ([resourceKey, listParams ?? null, ventana] as const)
+    : ([resourceKey, listParams ?? null] as const);
 
   // TASK-011: la respuesta guarda también el total de X-Total-Count. Dos
   // observadores sobre la misma entrada de caché (una sola petición): uno
@@ -71,13 +82,16 @@ export function useResourceCrud<
     enabled,
     queryFn: async (): Promise<{ filas: TOut[]; total: number | null }> => {
       const { data, error, response } = await pedirRutaDinamica("GET", basePath, {
-        query: { limit: LIMITE_LISTA, ...listParams },
+        query: { ...ventana, ...listParams },
       });
       if (error) throw error;
       const cabecera = response?.headers.get("X-Total-Count");
       const total = cabecera != null && cabecera !== "" ? Number(cabecera) : null;
       return { filas: data as TOut[], total: Number.isFinite(total) ? total : null };
     },
+    // Al cambiar de página se sigue viendo la anterior hasta que llega la
+    // nueva, en vez de vaciar la tabla y mostrar "Cargando…" cada vez.
+    placeholderData: tamanoPagina ? keepPreviousData : undefined,
   };
   const listQuery = useQuery({ ...listaConTotal, select: (d) => d.filas });
   const totalQuery = useQuery({ ...listaConTotal, select: (d) => d.total });
@@ -139,7 +153,11 @@ export function useResourceCrud<
   const filasRecibidas = listQuery.data?.length ?? 0;
   // TASK-011: con X-Total-Count el aviso es exacto. Sin la cabecera (los
   // endpoints que todavía no la mandan) se mantiene la inferencia de arriba.
-  const truncado = total !== null ? total > filasRecibidas : filasRecibidas === LIMITE_LISTA;
+  const truncado = tamanoPagina
+    ? false
+    : total !== null
+      ? total > filasRecibidas
+      : filasRecibidas === LIMITE_LISTA;
 
   return { listQuery, total, truncado, create, update, softDelete, customAction };
 }

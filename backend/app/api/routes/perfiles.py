@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
+from app.core.paginacion import ids_por_coma, informar_total
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.jugador_perfil_disciplina import (
@@ -23,11 +24,14 @@ async def listar_perfiles(
     limit: int = Query(default=100, ge=1, le=200),
     jugador_id: int | None = None,
     disciplina_id: int | None = None,
+    ids: list[int] | None = Depends(ids_por_coma),
+    *,
+    response: Response,
     session: AsyncSession = Depends(get_db),
 ) -> list[JugadorPerfilDisciplinaOut]:
-    return await JugadorPerfilDisciplinaService(session).list(
-        skip=skip, limit=limit, jugador_id=jugador_id, disciplina_id=disciplina_id
-    )
+    servicio = JugadorPerfilDisciplinaService(session)
+    informar_total(response, await servicio.contar(jugador_id=jugador_id, disciplina_id=disciplina_id, ids=ids))
+    return await servicio.list(skip=skip, limit=limit, jugador_id=jugador_id, disciplina_id=disciplina_id, ids=ids)
 
 
 @router.get("/{perfil_id}", response_model=JugadorPerfilDisciplinaOut)

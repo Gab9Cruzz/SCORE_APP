@@ -1,6 +1,6 @@
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import Select, delete, func, select
 
 from app.core.reloj import ahora_negocio
 from app.models.acceso import Acceso
@@ -37,6 +37,25 @@ class AccesoRepository(BaseRepository[Acceso]):
         no del string exacto — y en los intentos fallidos el username es
         texto arbitrario que nunca fue una cuenta.
         """
+        stmt = self._consulta_listado(
+            usuario_id=usuario_id, username=username, exitoso=exitoso, desde=desde, hasta=hasta
+        )
+        stmt = stmt.order_by(Acceso.fecha.desc(), Acceso.id.desc()).offset(skip).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def contar_listado(self, **filtros: object) -> int:
+        """Total de `listar(**filtros)` sin paginar (TASK-039)."""
+        return await self._contar(self._consulta_listado(**filtros))  # type: ignore[arg-type]
+
+    def _consulta_listado(
+        self,
+        usuario_id: int | None = None,
+        username: str | None = None,
+        exitoso: bool | None = None,
+        desde: date | None = None,
+        hasta: date | None = None,
+    ) -> Select:
         stmt = select(Acceso)
         if usuario_id is not None:
             stmt = stmt.where(Acceso.usuario_id == usuario_id)
@@ -51,9 +70,7 @@ class AccesoRepository(BaseRepository[Acceso]):
             # Sin esto, filtrar "hasta hoy" no devolvería nada de hoy, que
             # es justo lo que alguien auditando espera ver.
             stmt = stmt.where(Acceso.fecha <= datetime.combine(hasta, time.max))
-        stmt = stmt.order_by(Acceso.fecha.desc(), Acceso.id.desc()).offset(skip).limit(limit)
-        result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        return stmt
 
     async def purgar_anteriores_a(self, dias: int) -> int:
         """Borra las filas más viejas que `dias` y devuelve cuántas fueron.

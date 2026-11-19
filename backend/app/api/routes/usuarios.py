@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
+from app.core.paginacion import informar_total
 from app.db.session import get_db
 from app.exceptions.errors import ForbiddenError
 from app.models.usuario import Usuario
@@ -40,10 +41,14 @@ async def listar_usuarios(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=200),
     rol: RolUsuario | None = None,
+    *,
+    response: Response,
     session: AsyncSession = Depends(get_db),
     usuario_actual: Usuario = Depends(get_current_user),
 ) -> list[UsuarioOut]:
-    return await UsuarioService(session).list(usuario_actual, skip=skip, limit=limit, rol=rol)
+    servicio = UsuarioService(session)
+    informar_total(response, await servicio.contar(usuario_actual, rol=rol))
+    return await servicio.list(usuario_actual, skip=skip, limit=limit, rol=rol)
 
 
 @router.get(

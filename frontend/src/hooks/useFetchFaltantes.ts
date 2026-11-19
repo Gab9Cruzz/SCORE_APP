@@ -1,6 +1,7 @@
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { pedirRutaDinamica } from "../api/rutaDinamica";
+import { LIMITE_LISTA } from "./useResourceCrud";
 
 /**
  * Bug 2 (fixes-datos-traspasos-control-mesa-plan.md, D2): resolución
@@ -11,26 +12,34 @@ import { pedirRutaDinamica } from "../api/rutaDinamica";
  * pantalla cae al fallback `"Equipo #ID"`/`"Perfil #ID"` aunque el dato
  * real esté perfecto en la base (causa raíz confirmada en P3 del plan).
  *
- * Este hook pide, UNO POR UNO, solo los IDs que el llamador diga que le
- * faltan — `GET {basePath}/{id}` (ya existe para equipos/jugadores/
- * perfiles, sin backend nuevo) — y los cachea aparte
- * (`queryKey: [basePath, "individual", id]`, no compite con el `queryKey`
- * de la lista capada). No es paginación real (eso sigue siendo
- * `TODOS.md` §3B-9): resuelve el ID puntual que la pantalla necesita
- * mostrar, no "cuántos hay en total".
+ * Este hook pide solo los IDs que el llamador diga que le faltan, y los
+ * cachea aparte (no compite con el `queryKey` de la lista capada).
+ *
+ * TASK-039 (FE-09): en UNA petición por tanda de hasta `LIMITE_LISTA` ids
+ * — `GET {basePath}?ids=1,2,3` — y no un `GET {basePath}/{id}` por cada
+ * uno: una pantalla con 30 equipos sin nombre hacía 30 viajes. Lo admiten
+ * equipos, jugadores, perfiles y torneos.
  *
  * Devuelve un `Map<id, fila completa>` — el llamador extrae el campo que
  * necesite (`nombre`, `jugador_id`, etc.), porque distintos recursos
  * exponen distintos campos.
  */
 export function useFetchFaltantes<T extends { id: number }>(basePath: string, idsFaltantes: number[]): Map<number, T> {
+  // Ordenados, para que el mismo conjunto en otro orden sea la misma
+  // entrada de caché.
+  const ordenados = [...new Set(idsFaltantes)].sort((a, b) => a - b);
+  const tandas: number[][] = [];
+  for (let i = 0; i < ordenados.length; i += LIMITE_LISTA) tandas.push(ordenados.slice(i, i + LIMITE_LISTA));
+
   const resultados = useQueries({
-    queries: idsFaltantes.map((id) => ({
-      queryKey: [basePath, "individual", id] as const,
+    queries: tandas.map((ids) => ({
+      queryKey: [basePath, "por-ids", ids.join(",")] as const,
       queryFn: async () => {
-        const { data, error } = await pedirRutaDinamica("GET", `${basePath}/{id}`, { path: { id } });
+        const { data, error } = await pedirRutaDinamica("GET", basePath, {
+          query: { ids: ids.join(","), limit: ids.length },
+        });
         if (error) throw error;
-        return data as T;
+        return data as T[];
       },
       staleTime: 5 * 60 * 1000,
     })),
@@ -43,7 +52,7 @@ export function useFetchFaltantes<T extends { id: number }>(basePath: string, id
   return useMemo(() => {
     const m = new Map<number, T>();
     for (const r of resultados) {
-      if (r.data) m.set((r.data as T).id, r.data as T);
+      for (const fila of r.data ?? []) m.set(fila.id, fila);
     }
     return m;
   }, [resultados]);
@@ -84,4 +93,14 @@ export function useNombrePorIdConFaltantes(
     for (const [id, row] of faltantes) m.set(id, row.nombre);
     return m;
   }, [mapaBase, faltantes]);
+}
+
+const SIN_NOMBRES = new Map<number, string>();
+
+/** TASK-039: los nombres de exactamente estos ids, sin ninguna lista de
+ * base. Para pantallas que muestran pocos registros de un catálogo grande
+ * (Control de Mesa: los equipos de los partidos en pantalla) y antes
+ * bajaban 200 equipos para nombrar cuatro. */
+export function useNombresPorIds(basePath: string, ids: (number | null | undefined)[]): Map<number, string> {
+  return useNombrePorIdConFaltantes(basePath, SIN_NOMBRES, ids);
 }

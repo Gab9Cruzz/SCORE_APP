@@ -22,9 +22,21 @@ class JugadorPerfilDisciplinaService:
         return await self.repo.get_or_404(id_)
 
     async def list(
-        self, skip: int = 0, limit: int = 100, jugador_id: int | None = None, disciplina_id: int | None = None
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        jugador_id: int | None = None,
+        disciplina_id: int | None = None,
+        ids: list[int] | None = None,
     ) -> list[JugadorPerfilDisciplina]:
-        return await self.repo.list(skip=skip, limit=limit, jugador_id=jugador_id, disciplina_id=disciplina_id)
+        return await self.repo.list(
+            skip=skip, limit=limit, jugador_id=jugador_id, disciplina_id=disciplina_id, ids=ids
+        )
+
+    async def contar(
+        self, jugador_id: int | None = None, disciplina_id: int | None = None, ids: list[int] | None = None
+    ) -> int:
+        return await self.repo.contar_filtrado(jugador_id=jugador_id, disciplina_id=disciplina_id, ids=ids)
 
     async def create(self, data: JugadorPerfilDisciplinaCreate) -> JugadorPerfilDisciplina:
         # unique_perfil_por_disciplina (02_constraints.sql) evita un

@@ -6,7 +6,8 @@ import { FiltrosRecurso } from "../../components/admin/FiltrosRecurso";
 import { ResourceForm, type ResourceFieldValue, type ResourceFormField, type ValoresFormulario } from "../../components/admin/ResourceForm";
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
 import { useCatalogo } from "../../hooks/useCatalogo";
-import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
+import { TAMANO_PAGINA, useResourceCrud } from "../../hooks/useResourceCrud";
+import { usePagina, useValorConRetardo } from "../../hooks/usePagina";
 import { iconoDisciplina } from "../../components/iconosDisciplina";
 import { useTituloPagina } from "../../hooks/useTituloPagina";
 
@@ -36,32 +37,29 @@ export function EquiposAdminPage() {
   const [estadoFiltro, setEstadoFiltro] = useState("");
   const [busqueda, setBusqueda] = useState("");
 
-  // Disciplina/Modalidad/Estado se filtran EN EL SERVIDOR (Mejora #1): son
-  // los que sacan a la grilla del techo de 200 filas. La búsqueda por
-  // texto sigue siendo en memoria — no hay `?nombre=` en la API y
-  // agregarlo es alcance nuevo; el banner de truncado avisa cuando eso
-  // deja de alcanzar.
+  // TASK-039 (UX-05): todos los filtros, la búsqueda incluida, van al
+  // servidor, y la grilla pagina. Antes la búsqueda filtraba en el
+  // navegador las primeras 200 filas: el equipo 201 no aparecía nunca.
+  const q = useValorConRetardo(busqueda.trim());
   const listParams = useMemo(() => {
     const params: Record<string, unknown> = {};
     if (disciplinaFiltro) params.disciplina_id = Number(disciplinaFiltro);
     if (modalidadFiltro) params.modalidad_id = Number(modalidadFiltro);
     if (estadoFiltro) params.estado = estadoFiltro;
+    if (q) params.q = q;
     return params;
-  }, [disciplinaFiltro, modalidadFiltro, estadoFiltro]);
+  }, [disciplinaFiltro, modalidadFiltro, estadoFiltro, q]);
+  const [pagina, setPagina] = usePagina(JSON.stringify(listParams));
 
   const crud = useResourceCrud<EquipoRow, ValoresFormulario, ValoresFormulario>({
     resourceKey: "equipos",
     basePath: "/api/v1/equipos",
     listParams,
+    tamanoPagina: TAMANO_PAGINA,
+    pagina,
   });
 
-  const equipos = useMemo(() => crud.listQuery.data ?? [], [crud.listQuery.data]);
-
-  const filas = useMemo(() => {
-    const texto = busqueda.trim().toLowerCase();
-    if (texto === "") return equipos;
-    return equipos.filter((e) => e.nombre.toLowerCase().includes(texto));
-  }, [equipos, busqueda]);
+  const filas = crud.listQuery.data ?? [];
 
   const hayFiltros = Boolean(disciplinaFiltro || modalidadFiltro || estadoFiltro || busqueda.trim());
 
@@ -252,15 +250,6 @@ export function EquiposAdminPage() {
         onLimpiar={limpiarFiltros}
       />
 
-      {/* Mejora #1: hasta acá, la fila 201 simplemente no existía para el
-          frontend — sin banner, sin aviso, sin paginación. Un fallo
-          silencioso pasa a ser uno visible. */}
-      {crud.truncado && (
-        <p className="muted">
-          Mostrando los primeros {LIMITE_LISTA} equipos. Filtrá por disciplina o categoría para ver el resto.
-        </p>
-      )}
-
       {crud.softDelete.isError && <p className="error-text">{apiErrorMessage(crud.softDelete.error)}</p>}
 
       <ResourceTable<EquipoRow>
@@ -286,6 +275,14 @@ export function EquiposAdminPage() {
             Registrar Jugadores
           </button>
         )}
+        etiqueta="Equipos"
+        paginacion={{
+          pagina,
+          tamano: TAMANO_PAGINA,
+          total: crud.total,
+          onCambiar: setPagina,
+          cargando: crud.listQuery.isFetching,
+        }}
       />
     </div>
   );

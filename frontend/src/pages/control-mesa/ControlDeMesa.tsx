@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
-import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
+import { useNombrePorIdConFaltantes, useNombresPorIds } from "../../hooks/useFetchFaltantes";
 import { ESTADOS_OPERABLES, totalDeRespuesta } from "../../lib/partidosOperables";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
 import { useTituloPagina } from "../../hooks/useTituloPagina";
@@ -72,31 +72,15 @@ export function ControlDeMesaPage() {
   const partidos = partidosQuery.data?.partidos ?? [];
   const total = partidosQuery.data?.total ?? null;
 
-  // Lista de equipos como mapa BASE, con resolución dirigida por ID encima:
-  // un equipo fuera de la ventana del listado se pide individual antes de caer
-  // al fallback "#ID".
-  const equiposQuery = useQuery({
-    queryKey: ["equipos-mesa"],
-    queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/equipos", { params: { query: { limit: 200 } } });
-      if (error) throw error;
-      return data as { id: number; nombre: string }[];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-  const nombreEquipoBase = useMemo(
-    () => new Map((equiposQuery.data ?? []).map((e) => [e.id, e.nombre])),
-    [equiposQuery.data],
-  );
-
   const nombreTorneo = useNombrePorIdConFaltantes(
     "/api/v1/torneos",
     new Map(torneos.map((t) => [t.id, t.nombre])),
     partidos.map((p) => p.torneo_id),
   );
-  const nombreEquipo = useNombrePorIdConFaltantes(
+  // TASK-039: solo los equipos de los partidos listados, en una petición
+  // (antes se bajaba el catálogo entero de equipos para nombrar estos).
+  const nombreEquipo = useNombresPorIds(
     "/api/v1/equipos",
-    nombreEquipoBase,
     partidos.flatMap((p) => [p.equipos_id_local, p.equipos_id_visitante]),
   );
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Select, select
 
 from app.core.bloqueos import Espacio, bloquear
 from app.models.torneo import Torneo
@@ -76,7 +77,36 @@ class TorneoRepository(BaseRepository[Torneo]):
         `solo_publicados` (portal-publico-feed-partidos-plan.md, E-B3a):
         excluye `Publicado=False` — el router lo prende cuando el caller
         es anónimo, sin importar `torneo_grupo_id`/`incluir_archivados`."""
+        stmt = self._consulta_lista(
+            torneo_ids_permitidos=torneo_ids_permitidos,
+            torneo_grupo_id=torneo_grupo_id,
+            incluir_archivados=incluir_archivados,
+            solo_publicados=solo_publicados,
+            **filtros,
+        )
+        stmt = stmt.order_by(Torneo.id).offset(skip).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def contar_lista(self, **criterios: Any) -> int:
+        """Total de `list(**criterios)` sin paginar (TASK-039)."""
+        return await self._contar(self._consulta_lista(**criterios))
+
+    def _consulta_lista(
+        self,
+        torneo_ids_permitidos: Sequence[int] | None = None,
+        torneo_grupo_id: int | None = None,
+        incluir_archivados: bool = False,
+        solo_publicados: bool = False,
+        ids: Sequence[int] | None = None,
+        **filtros: object,
+    ) -> Select:
         stmt = select(Torneo).join(TorneoGrupo, TorneoGrupo.id == Torneo.torneo_grupo_id)
+        if ids is not None:
+            # TASK-039: pedir por id es acceso directo, como GET /torneos/{id}:
+            # un torneo de un grupo archivado se sigue pudiendo nombrar.
+            stmt = stmt.where(Torneo.id.in_(ids))
+            incluir_archivados = True
         if torneo_ids_permitidos is not None:
             stmt = stmt.where(Torneo.id.in_(torneo_ids_permitidos))
         if solo_publicados:
@@ -88,9 +118,7 @@ class TorneoRepository(BaseRepository[Torneo]):
         for campo, valor in filtros.items():
             if valor is not None:
                 stmt = stmt.where(getattr(Torneo, campo) == valor)
-        stmt = stmt.order_by(Torneo.id).offset(skip).limit(limit)
-        result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        return stmt
 
     async def ids_existentes(self, torneo_ids: Sequence[int]) -> set[int]:
         """Usado por AsignacionTorneoAdminService.set_torneos_asignados

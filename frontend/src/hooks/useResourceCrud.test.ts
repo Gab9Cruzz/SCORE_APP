@@ -260,4 +260,63 @@ describe("useResourceCrud", () => {
 
     await waitFor(() => expect(result.current.customAction.isSuccess).toBe(true));
   });
+
+  // TASK-039: con tamanoPagina pide una ventana skip/limit, y el total
+  // viene de X-Total-Count; ya no hay "truncado".
+  it("paginado: pide skip/limit de la página y expone el total", async () => {
+    let params: URLSearchParams | undefined;
+    server.use(
+      http.get(BASE, ({ request }) => {
+        params = new URL(request.url).searchParams;
+        return HttpResponse.json([{ id: 51, nombre: "Cincuenta y uno", estado: "Activo" }], {
+          headers: { "X-Total-Count": "312" },
+        });
+      }),
+    );
+    const { result } = renderHook(
+      () =>
+        useResourceCrud<TestOut>({
+          resourceKey: "paginado",
+          basePath: "/api/v1/test-resource",
+          listParams: { estado: "Activo" },
+          tamanoPagina: 50,
+          pagina: 1,
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.total).toBe(312));
+    expect(params?.get("skip")).toBe("50");
+    expect(params?.get("limit")).toBe("50");
+    expect(params?.get("estado")).toBe("Activo");
+    expect(result.current.truncado).toBe(false);
+  });
+
+  it("paginado: al cambiar de página sigue mostrando la anterior hasta que llega la nueva", async () => {
+    let liberar: (() => void) | null = null;
+    server.use(
+      http.get(BASE, async ({ request }) => {
+        const skip = Number(new URL(request.url).searchParams.get("skip"));
+        if (skip > 0) await new Promise<void>((r) => (liberar = r));
+        return HttpResponse.json([{ id: skip + 1, nombre: `Fila ${skip + 1}`, estado: "Activo" }]);
+      }),
+    );
+    const { result, rerender } = renderHook(
+      ({ pagina }) =>
+        useResourceCrud<TestOut>({
+          resourceKey: "paginado-placeholder",
+          basePath: "/api/v1/test-resource",
+          tamanoPagina: 50,
+          pagina,
+        }),
+      { wrapper: createWrapper(), initialProps: { pagina: 0 } },
+    );
+    await waitFor(() => expect(result.current.listQuery.data?.[0]?.id).toBe(1));
+
+    rerender({ pagina: 1 });
+    await waitFor(() => expect(liberar).not.toBeNull());
+    expect(result.current.listQuery.data?.[0]?.id).toBe(1);
+    liberar!();
+    await waitFor(() => expect(result.current.listQuery.data?.[0]?.id).toBe(51));
+  });
 });

@@ -4335,6 +4335,8 @@ export interface operations {
                 torneo_grupo_id?: number | null;
                 solo_mios?: boolean;
                 incluir_archivados?: boolean;
+                /** @description Identificadores separados por coma (hasta 200). */
+                ids?: string | null;
             };
             header?: never;
             path?: never;
@@ -4892,6 +4894,9 @@ export interface operations {
                 estado?: ("Activo" | "Inactivo") | null;
                 disciplina_id?: number | null;
                 modalidad_id?: number | null;
+                q?: string | null;
+                /** @description Identificadores separados por coma (hasta 200). */
+                ids?: string | null;
             };
             header?: never;
             path?: never;
@@ -5187,6 +5192,8 @@ export interface operations {
                 limit?: number;
                 estado?: ("Activo" | "Inactivo") | null;
                 q?: string | null;
+                /** @description Identificadores separados por coma (hasta 200). */
+                ids?: string | null;
             };
             header?: never;
             path?: never;
@@ -5382,6 +5389,8 @@ export interface operations {
                 limit?: number;
                 jugador_id?: number | null;
                 disciplina_id?: number | null;
+                /** @description Identificadores separados por coma (hasta 200). */
+                ids?: string | null;
             };
             header?: never;
             path?: never;

@@ -69,12 +69,14 @@ function handlerEquipos(equipos: EquipoFixture[]) {
     const disciplinaId = url.searchParams.get("disciplina_id");
     const modalidadId = url.searchParams.get("modalidad_id");
     const estado = url.searchParams.get("estado");
+    const q = url.searchParams.get("q")?.toLowerCase() ?? null;
     return HttpResponse.json(
       equipos.filter(
         (e) =>
           (disciplinaId === null || e.disciplina_id === Number(disciplinaId)) &&
           (modalidadId === null || e.modalidad_id === Number(modalidadId)) &&
-          (estado === null || e.estado === estado),
+          (estado === null || e.estado === estado) &&
+          (q === null || e.nombre.toLowerCase().includes(q)),
       ),
     );
   });
@@ -144,6 +146,30 @@ describe("EquiposAdminPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     expect(await screen.findByText("Los Tigres")).toBeInTheDocument();
+  });
+
+  // TASK-039 (UX-05): la búsqueda consulta al servidor. Antes filtraba en
+  // el navegador las primeras 200 filas y el equipo 201 no aparecía.
+  it("buscar un equipo por nombre consulta al servidor", async () => {
+    const consultas: (string | null)[] = [];
+    montar([TIGRES, NADAL]);
+    server.use(
+      http.get(EQUIPOS, ({ request }) => {
+        const q = new URL(request.url).searchParams.get("q");
+        consultas.push(q);
+        // El servidor es el que filtra: si la página filtrara en memoria,
+        // con esta respuesta seguiría viendo a Los Tigres.
+        return HttpResponse.json(q ? [NADAL] : [TIGRES, NADAL]);
+      }),
+    );
+    const user = userEvent.setup();
+    expect(await screen.findByText("Los Tigres")).toBeInTheDocument();
+
+    await user.type(screen.getByRole("searchbox", { name: "Buscar equipo" }), "alca");
+
+    await waitFor(() => expect(consultas).toContain("alca"));
+    await waitFor(() => expect(screen.queryByText("Los Tigres")).not.toBeInTheDocument());
+    expect(screen.getByText("Nadal/Alcaraz")).toBeInTheDocument();
   });
 
   it("el vacío real no habla de filtros", async () => {

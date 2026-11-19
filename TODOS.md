@@ -12,9 +12,10 @@ retomarlo — acá solo queda lo que sigue abierto.
   un estado normal, no un error: deja dos errores en la consola por visita a
   "Gestionar partido" y ensucia el monitoreo de 4xx. Devolver 200 con
   `null` (y adaptar `Cronometro.tsx`) o un 404 explícito. Prioridad P3.
-- **Paginación real con cursor en `/equipos` y `/jugadores`** (3B-9). Cambia
-  el contrato de API (rompe cualquier cliente que asuma offset) — requiere
-  su propio ciclo, no es un fix acotado. **Diferido con umbral numérico**
+- **Paginación con cursor en `/equipos` y `/jugadores`** (3B-9). TASK-039 ya
+  pagina las grillas por desplazamiento (`skip`/`limit` + `X-Total-Count`,
+  pie "1–50 de 312") y busca en el servidor; lo que queda diferido es pasar
+  a cursor, que cambia el contrato de API. **Diferido con umbral numérico**
   (revisión del plan de cierre, 2026-09-18) — se reabre con (a) >150 equipos
   orgánicos o >150 jugadores orgánicos (75% del tope de página de 200), o
   (b) p95 medido >800ms en `GET /jugadores` o `GET /equipos`, o (c) un

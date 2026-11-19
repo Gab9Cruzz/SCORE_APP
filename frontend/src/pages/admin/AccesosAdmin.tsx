@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { apiErrorMessage } from "../../api/client";
 import { FiltrosRecurso } from "../../components/admin/FiltrosRecurso";
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
-import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
+import { TAMANO_PAGINA, useResourceCrud } from "../../hooks/useResourceCrud";
+import { usePagina, useValorConRetardo } from "../../hooks/usePagina";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
 import { useTituloPagina } from "../../hooks/useTituloPagina";
 
@@ -80,19 +81,23 @@ export function AccesosAdminPage() {
   // otras grillas. Acá filtrar en memoria sería inútil — lo que se busca
   // (un intento puntual) puede estar en la fila 5.000, mucho más allá del
   // techo de la primera página.
+  const username = useValorConRetardo(busqueda.trim());
   const listParams = useMemo(() => {
     const params: Record<string, unknown> = {};
     if (exitosoFiltro) params.exitoso = exitosoFiltro === "true";
-    if (busqueda.trim()) params.username = busqueda.trim();
+    if (username) params.username = username;
     if (desde) params.desde = desde;
     if (hasta) params.hasta = hasta;
     return params;
-  }, [exitosoFiltro, busqueda, desde, hasta]);
+  }, [exitosoFiltro, username, desde, hasta]);
+  const [pagina, setPagina] = usePagina(JSON.stringify(listParams));
 
   const crud = useResourceCrud<AccesoRow>({
     resourceKey: "accesos",
     basePath: "/api/v1/accesos",
     listParams,
+    tamanoPagina: TAMANO_PAGINA,
+    pagina,
   });
 
   const filas = crud.listQuery.data ?? [];
@@ -177,11 +182,6 @@ export function AccesosAdminPage() {
         </label>
       </div>
 
-      {crud.truncado && (
-        <p className="muted">
-          Mostrando los {LIMITE_LISTA} más recientes. Acotá el rango de fechas para ver más atrás.
-        </p>
-      )}
       {crud.listQuery.isError && <p className="error-text">{apiErrorMessage(crud.listQuery.error)}</p>}
 
       <ResourceTable<AccesoRow>
@@ -194,6 +194,14 @@ export function AccesosAdminPage() {
             ? "Ningún acceso coincide con estos filtros."
             : "Todavía no hay accesos registrados."
         }
+        etiqueta="Accesos"
+        paginacion={{
+          pagina,
+          tamano: TAMANO_PAGINA,
+          total: crud.total,
+          onCambiar: setPagina,
+          cargando: crud.listQuery.isFetching,
+        }}
       />
     </div>
   );

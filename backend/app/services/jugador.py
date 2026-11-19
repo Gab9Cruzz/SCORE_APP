@@ -24,14 +24,27 @@ class JugadorService:
         estado: str | None = None,
         q: str | None = None,
         incluir_cedula: bool = True,
+        ids: list[int] | None = None,
     ) -> list[Jugador]:
         # q (gestion-avanzada-equipos-control-mesa-plan.md, Requerimiento 2):
         # búsqueda server-side por nombre/cédula, camino separado del
         # listado paginado plano — no tiene sentido combinar skip/limit con
         # un patrón de búsqueda de texto libre en la misma consulta.
         if q is not None and q.strip():
-            return await self.repo.buscar(q, skip=skip, limit=limit, estado=estado, incluir_cedula=incluir_cedula)
-        return await self.repo.list(skip=skip, limit=limit, estado=estado)
+            return await self.repo.buscar(
+                q, skip=skip, limit=limit, estado=estado, incluir_cedula=incluir_cedula, ids=ids
+            )
+        return await self.repo.list(skip=skip, limit=limit, estado=estado, ids=ids)
+
+    async def contar(
+        self,
+        estado: str | None = None,
+        q: str | None = None,
+        incluir_cedula: bool = True,
+        ids: list[int] | None = None,
+    ) -> int:
+        """Total para X-Total-Count (TASK-039): mismos filtros que `list`."""
+        return await self.repo.contar_filtrado(estado=estado, q=q, incluir_cedula=incluir_cedula, ids=ids)
 
     async def create(self, data: JugadorCreate) -> Jugador:
         return await self.repo.create(**data.model_dump())

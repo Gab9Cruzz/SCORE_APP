@@ -402,6 +402,23 @@ main {
   position: relative;
 }
 
+/* TASK-039: pie de tabla paginada. */
+.paginacion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--espacio-2);
+  margin-top: var(--espacio-3);
+}
+
+.paginacion__rango {
+  margin: 0 auto 0 0;
+  color: var(--text-muted);
+  font-size: var(--texto-sm);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Cierre de Fase Regular + Llaves + Playoffs (Design review, Pass 2):
    GET /estado-fase convierte un render antes instantáneo (derivado del
    cliente) en una lectura de red — este skeleton reserva la altura del

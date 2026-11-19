@@ -1,6 +1,6 @@
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import Select, delete, func, select
 
 from app.core.reloj import ahora_negocio
 from app.models.auditoria import Auditoria
@@ -36,6 +36,26 @@ class AuditoriaRepository(BaseRepository[Auditoria]):
         `hasta` incluye el día entero (ver `AccesoRepository.listar` para
         el porqué de `time.max`).
         """
+        stmt = self._consulta_listado(
+            tabla=tabla, registro_id=registro_id, accion=accion, usuario_id=usuario_id, desde=desde, hasta=hasta
+        )
+        stmt = stmt.order_by(Auditoria.fecha.desc(), Auditoria.id.desc()).offset(skip).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def contar_listado(self, **filtros: object) -> int:
+        """Total de `listar(**filtros)` sin paginar (TASK-039)."""
+        return await self._contar(self._consulta_listado(**filtros))  # type: ignore[arg-type]
+
+    def _consulta_listado(
+        self,
+        tabla: str | None = None,
+        registro_id: int | None = None,
+        accion: str | None = None,
+        usuario_id: int | None = None,
+        desde: date | None = None,
+        hasta: date | None = None,
+    ) -> Select:
         stmt = select(Auditoria)
         if tabla:
             stmt = stmt.where(Auditoria.tabla == tabla)
@@ -49,9 +69,7 @@ class AuditoriaRepository(BaseRepository[Auditoria]):
             stmt = stmt.where(Auditoria.fecha >= datetime.combine(desde, time.min))
         if hasta is not None:
             stmt = stmt.where(Auditoria.fecha <= datetime.combine(hasta, time.max))
-        stmt = stmt.order_by(Auditoria.fecha.desc(), Auditoria.id.desc()).offset(skip).limit(limit)
-        result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        return stmt
 
     async def purgar_anteriores_a(self, dias: int) -> int:
         """Idéntica en forma a `AccesoRepository.purgar_anteriores_a` — ver

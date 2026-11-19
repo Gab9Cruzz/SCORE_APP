@@ -1,9 +1,10 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles
+from app.core.paginacion import informar_total
 from app.db.session import get_db
 from app.repositories.auditoria import AuditoriaRepository
 from app.schemas.auditoria import AccionAuditoria, AuditoriaOut
@@ -28,18 +29,21 @@ async def listar_auditoria(
     usuario_id: int | None = None,
     desde: date | None = None,
     hasta: date | None = None,
+    *,
+    response: Response,
     session: AsyncSession = Depends(get_db),
 ) -> list[AuditoriaOut]:
     """Bitácora de cambios (alta/modificación/baja) de cualquier entidad,
     del más reciente al más antiguo. `desde`/`hasta` son días completos.
     """
-    return await AuditoriaRepository(session).listar(
-        skip=skip,
-        limit=limit,
-        tabla=tabla,
-        registro_id=registro_id,
-        accion=accion,
-        usuario_id=usuario_id,
-        desde=desde,
-        hasta=hasta,
-    )
+    filtros = {
+        "tabla": tabla,
+        "registro_id": registro_id,
+        "accion": accion,
+        "usuario_id": usuario_id,
+        "desde": desde,
+        "hasta": hasta,
+    }
+    repo = AuditoriaRepository(session)
+    informar_total(response, await repo.contar_listado(**filtros))
+    return await repo.listar(skip=skip, limit=limit, **filtros)

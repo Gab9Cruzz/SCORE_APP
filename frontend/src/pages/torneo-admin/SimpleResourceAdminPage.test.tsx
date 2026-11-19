@@ -20,7 +20,7 @@ const columnas = [
   { key: "estado", label: "Estado" },
 ];
 
-function renderPagina(isSelf?: (row: Fila) => boolean) {
+function renderPagina(isSelf?: (row: Fila) => boolean, conBusqueda = false) {
   const Wrapper = createWrapper();
   return render(
     <Wrapper>
@@ -32,6 +32,7 @@ function renderPagina(isSelf?: (row: Fila) => boolean) {
         editFields={campos}
         columns={columnas}
         isSelf={isSelf}
+        busqueda={conBusqueda ? { etiqueta: "Buscar recurso" } : undefined}
       />
     </Wrapper>,
   );
@@ -97,7 +98,11 @@ describe("SimpleResourceAdminPage", () => {
 
   it("dar de baja: muestra un mensaje si falla (roles-3-modulos-plan.md, Fase 4, D2b — antes era silencioso)", async () => {
     const user = userEvent.setup();
-    server.use(http.delete(`${BASE}/1`, () => HttpResponse.json({ detail: "no podés desactivar tu propia cuenta" }, { status: 403 })));
+    server.use(
+      http.delete(`${BASE}/1`, () =>
+        HttpResponse.json({ detail: "no podés desactivar tu propia cuenta" }, { status: 403 }),
+      ),
+    );
     renderPagina();
     await screen.findByText("Uno");
 
@@ -130,23 +135,79 @@ describe("SimpleResourceAdminPage", () => {
     expect(await screen.findByText("nombre duplicado")).toBeInTheDocument();
   });
 
-  it("avisa cuando la lista llegó al techo de LIMITE_LISTA (3A-5)", async () => {
+  // TASK-039 (UX-05): antes se cortaba en 200 con un aviso; ahora pagina
+  // y se llega a la última fila.
+  it("pagina de a 50 y llega a la última fila con 500 registros", async () => {
+    const user = userEvent.setup();
+    const pedidos: string[] = [];
     server.use(
-      http.get(BASE, () =>
-        HttpResponse.json(
-          Array.from({ length: 200 }, (_, i) => ({ id: i + 1, nombre: `Fila ${i + 1}`, estado: "Activo" })),
-        ),
-      ),
+      http.get(BASE, ({ request }) => {
+        const url = new URL(request.url);
+        pedidos.push(url.search);
+        const skip = Number(url.searchParams.get("skip"));
+        const limit = Number(url.searchParams.get("limit"));
+        const filas = Array.from({ length: Math.max(0, Math.min(limit, 500 - skip)) }, (_, i) => ({
+          id: skip + i + 1,
+          nombre: `Fila ${skip + i + 1}`,
+          estado: "Activo",
+        }));
+        return HttpResponse.json(filas, { headers: { "X-Total-Count": "500" } });
+      }),
     );
     renderPagina();
 
-    expect(await screen.findByText(/Mostrando los primeros 200/)).toBeInTheDocument();
-  });
+    expect(await screen.findByText("Fila 1")).toBeInTheDocument();
+    expect(screen.getByText(/1–50 de 500/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Anterior/ })).toBeDisabled();
 
-  it("no avisa truncado cuando la lista no llegó al techo", async () => {
+    for (let i = 0; i < 9; i++) {
+      await waitFor(() => expect(screen.getByRole("button", { name: /Siguiente/ })).toBeEnabled());
+      await user.click(screen.getByRole("button", { name: /Siguiente/ }));
+    }
+    expect(await screen.findByText("Fila 500")).toBeInTheDocument();
+    expect(screen.getByText(/451–500 de 500/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Siguiente/ })).toBeDisabled();
+    expect(pedidos.at(-1)).toContain("skip=450");
+    expect(pedidos.at(-1)).toContain("limit=50");
+    // Diez páginas de clics: con toda la suite en paralelo pasa de los 5 s por defecto.
+  }, 20_000);
+
+  it("con una sola página no muestra el pie de paginación", async () => {
     renderPagina();
     await screen.findByText("Uno");
+    expect(screen.queryByRole("navigation", { name: "Paginación" })).not.toBeInTheDocument();
+  });
 
-    expect(screen.queryByText(/Mostrando los primeros/)).not.toBeInTheDocument();
+  it("la búsqueda va al servidor y vuelve a la primera página", async () => {
+    const user = userEvent.setup();
+    const pedidos: URLSearchParams[] = [];
+    server.use(
+      http.get(BASE, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        pedidos.push(params);
+        const q = params.get("q");
+        const skip = Number(params.get("skip"));
+        if (q)
+          return HttpResponse.json([{ id: 9, nombre: "Buscado", estado: "Activo" }], {
+            headers: { "X-Total-Count": "1" },
+          });
+        const filas = Array.from({ length: 50 }, (_, i) => ({
+          id: skip + i + 1,
+          nombre: `Fila ${skip + i + 1}`,
+          estado: "Activo",
+        }));
+        return HttpResponse.json(filas, { headers: { "X-Total-Count": "120" } });
+      }),
+    );
+    renderPagina(undefined, true);
+    await screen.findByText("Fila 1");
+    await user.click(screen.getByRole("button", { name: /Siguiente/ }));
+    await screen.findByText("Fila 51");
+
+    await user.type(screen.getByRole("searchbox", { name: "Buscar recurso" }), "busc");
+    expect(await screen.findByText("Buscado")).toBeInTheDocument();
+    const ultimo = pedidos.at(-1)!;
+    expect(ultimo.get("q")).toBe("busc");
+    expect(ultimo.get("skip")).toBe("0");
   });
 });

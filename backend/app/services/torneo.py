@@ -69,6 +69,7 @@ class TorneoService:
         torneo_ids_permitidos: list[int] | None = None,
         incluir_archivados: bool = False,
         solo_publicados: bool = False,
+        ids: list[int] | None = None,
     ) -> list[TorneoOut]:
         """`torneo_ids_permitidos` (rbac-licencias-torneos-plan.md, E1):
         restringe el listado a estos IDs — lo arma el router a partir de
@@ -92,9 +93,14 @@ class TorneoService:
             torneo_ids_permitidos=torneo_ids_permitidos,
             incluir_archivados=incluir_archivados,
             solo_publicados=solo_publicados,
+            ids=ids,
         )
         configs = await self._configs_por_torneo([t.id for t in torneos])
         return [self._a_salida(t, configs.get(t.id)) for t in torneos]
+
+    async def contar(self, **criterios: object) -> int:
+        """Total de `list(**criterios)` sin paginar (TASK-039)."""
+        return await self.repo.contar_lista(**criterios)
 
     async def create(self, data: TorneoCreate, usuario_actual: Usuario) -> TorneoOut:
         """Resuelve el grupo ANTES de crear la edición

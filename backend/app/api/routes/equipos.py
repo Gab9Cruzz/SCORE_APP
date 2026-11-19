@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
+from app.core.paginacion import ids_por_coma, informar_total
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.equipo import EquipoCreate, EquipoOut, EquipoUpdate, EstadoEquipo
@@ -29,15 +30,25 @@ async def listar_equipos(
     # que sí existe.
     disciplina_id: int | None = None,
     modalidad_id: int | None = None,
+    # TASK-039: búsqueda por nombre en el servidor y resolución de varios
+    # ids en una petición (la usa Control de Mesa para nombrar solo los
+    # equipos de los partidos que muestra).
+    q: str | None = None,
+    ids: list[int] | None = Depends(ids_por_coma),
+    *,
+    response: Response,
     session: AsyncSession = Depends(get_db),
 ) -> list[EquipoOut]:
-    return await EquipoService(session).list(
-        skip=skip,
-        limit=limit,
-        estado=estado,
-        disciplina_id=disciplina_id,
-        modalidad_id=modalidad_id,
-    )
+    filtros = {
+        "estado": estado,
+        "disciplina_id": disciplina_id,
+        "modalidad_id": modalidad_id,
+        "q": q,
+        "ids": ids,
+    }
+    servicio = EquipoService(session)
+    informar_total(response, await servicio.contar(**filtros))
+    return await servicio.list(skip=skip, limit=limit, **filtros)
 
 
 @router.get("/{equipo_id}", response_model=EquipoOut)

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Button } from "../ui/Button";
+import { Paginacion, type PropsPaginacion } from "../ui/Paginacion";
 import { Table } from "../ui/Table";
 
 export interface ResourceTableColumn<T> {
@@ -62,6 +63,8 @@ interface ResourceTableProps<T extends RowConEstado> {
   nombreFila?: (row: T) => string;
   /** Nombre de la tabla (caption oculto). */
   etiqueta?: string;
+  /** TASK-039: pie "1–50 de 312" con anterior y siguiente. */
+  paginacion?: Omit<PropsPaginacion, "filasEnPagina">;
 }
 
 /** Tabla genérica de listado para el módulo Torneo Admin
@@ -86,6 +89,7 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
     confirmacion,
     nombreFila = nombrePorDefecto,
     etiqueta,
+    paginacion,
   } = props;
 
   // TASK-038 (UX-06): la baja no se ejecuta con un clic. El botón abre una
@@ -122,67 +126,70 @@ export function ResourceTable<T extends RowConEstado>(props: ResourceTableProps<
   if (tieneAcciones) encabezados.push(null);
 
   return (
-    <Table
-      encabezados={encabezados}
-      cargando={isLoading}
-      error={isError}
-      vacio={rows.length === 0}
-      mensajeVacio={emptyMessage}
-      etiqueta={etiqueta}
-    >
-      {rows.map((row) => (
-        <tr key={row.id}>
-          {columns.map((c) => (
-            <td key={c.key}>{c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key] ?? "")}</td>
-          ))}
-          {tieneAcciones && confirmandoId === row.id && onSoftDelete && (
-            <td className="table-actions table-actions--confirmando" onKeyDown={(e) => alPresionarTecla(e, row.id)}>
-              <span role="alert" className="table-actions__pregunta">
-                {confirmacion ? confirmacion(row) : `¿${softDeleteLabel} «${nombreFila(row)}»?`}
-              </span>
-              <Button
-                variante="peligro"
-                disabled={softDeletePending}
-                onClick={() => {
-                  setConfirmandoId(null);
-                  onSoftDelete(row);
-                }}
-              >
-                Confirmar
-              </Button>
-              <Button ref={volverRef} onClick={() => cerrarConfirmacion(row.id)}>
-                Volver
-              </Button>
-            </td>
-          )}
-          {tieneAcciones && confirmandoId !== row.id && (
-            <td className="table-actions">
-              {onSelect && (
-                <Button aria-label={`Editar ${nombreFila(row)}`} onClick={() => onSelect(row)}>
-                  Editar
+    <>
+      <Table
+        encabezados={encabezados}
+        cargando={isLoading}
+        error={isError}
+        vacio={rows.length === 0}
+        mensajeVacio={emptyMessage}
+        etiqueta={etiqueta}
+      >
+        {rows.map((row) => (
+          <tr key={row.id}>
+            {columns.map((c) => (
+              <td key={c.key}>{c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key] ?? "")}</td>
+            ))}
+            {tieneAcciones && confirmandoId === row.id && onSoftDelete && (
+              <td className="table-actions table-actions--confirmando" onKeyDown={(e) => alPresionarTecla(e, row.id)}>
+                <span role="alert" className="table-actions__pregunta">
+                  {confirmacion ? confirmacion(row) : `¿${softDeleteLabel} «${nombreFila(row)}»?`}
+                </span>
+                <Button
+                  variante="peligro"
+                  disabled={softDeletePending}
+                  onClick={() => {
+                    setConfirmandoId(null);
+                    onSoftDelete(row);
+                  }}
+                >
+                  Confirmar
                 </Button>
-              )}
-              {onSoftDelete &&
-                !estadosDeBaja.includes(row.estado ?? "") &&
-                !isSelf?.(row) &&
-                (puedeSoftDelete?.(row) ?? true) && (
-                  <Button
-                    aria-label={`${softDeleteLabel} ${nombreFila(row)}`}
-                    ref={(el) => {
-                      if (el) disparadores.current.set(row.id, el);
-                      else disparadores.current.delete(row.id);
-                    }}
-                    onClick={() => setConfirmandoId(row.id)}
-                    disabled={softDeletePending}
-                  >
-                    {softDeleteLabel}
+                <Button ref={volverRef} onClick={() => cerrarConfirmacion(row.id)}>
+                  Volver
+                </Button>
+              </td>
+            )}
+            {tieneAcciones && confirmandoId !== row.id && (
+              <td className="table-actions">
+                {onSelect && (
+                  <Button aria-label={`Editar ${nombreFila(row)}`} onClick={() => onSelect(row)}>
+                    Editar
                   </Button>
                 )}
-              {extraActions?.(row)}
-            </td>
-          )}
-        </tr>
-      ))}
-    </Table>
+                {onSoftDelete &&
+                  !estadosDeBaja.includes(row.estado ?? "") &&
+                  !isSelf?.(row) &&
+                  (puedeSoftDelete?.(row) ?? true) && (
+                    <Button
+                      aria-label={`${softDeleteLabel} ${nombreFila(row)}`}
+                      ref={(el) => {
+                        if (el) disparadores.current.set(row.id, el);
+                        else disparadores.current.delete(row.id);
+                      }}
+                      onClick={() => setConfirmandoId(row.id)}
+                      disabled={softDeletePending}
+                    >
+                      {softDeleteLabel}
+                    </Button>
+                  )}
+                {extraActions?.(row)}
+              </td>
+            )}
+          </tr>
+        ))}
+      </Table>
+      {paginacion && !isLoading && !isError && <Paginacion {...paginacion} filasEnPagina={rows.length} />}
+    </>
   );
 }

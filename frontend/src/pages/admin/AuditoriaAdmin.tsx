@@ -3,7 +3,8 @@ import { apiErrorMessage } from "../../api/client";
 import type { components } from "../../api/schema";
 import { FiltrosRecurso } from "../../components/admin/FiltrosRecurso";
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
-import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
+import { TAMANO_PAGINA, useResourceCrud } from "../../hooks/useResourceCrud";
+import { usePagina } from "../../hooks/usePagina";
 import { LOCALE, parsearFecha } from "../../lib/fechas";
 import { useTituloPagina } from "../../hooks/useTituloPagina";
 
@@ -161,11 +162,15 @@ export function AuditoriaAdminPage() {
     return params;
   }, [tablaFiltro, accionFiltro, registroIdValido, registroIdNum, desde, hasta]);
 
+  const [pagina, setPagina] = usePagina(JSON.stringify(listParams));
   const crud = useResourceCrud<AuditoriaRow>({
     resourceKey: "auditoria",
     basePath: "/api/v1/auditoria",
     listParams,
+    tamanoPagina: TAMANO_PAGINA,
+    pagina,
   });
+  const hayOtrasPaginas = crud.total !== null && crud.total > (crud.listQuery.data?.length ?? 0);
 
   const filas = crud.listQuery.data ?? [];
   const hayFiltros = Boolean(tablaFiltro || accionFiltro || registroIdFiltro.trim() || desde || hasta);
@@ -265,12 +270,6 @@ export function AuditoriaAdminPage() {
         </label>
       </div>
 
-      {crud.truncado && (
-        <p className="muted">
-          Mostrando los {LIMITE_LISTA} más recientes. Acotá el rango de fechas o filtrá por entidad
-          para ver más atrás.
-        </p>
-      )}
       {crud.listQuery.isError && <p className="error-text">{apiErrorMessage(crud.listQuery.error)}</p>}
 
       <div className="filtros-recurso">
@@ -281,13 +280,11 @@ export function AuditoriaAdminPage() {
         >
           ⬇ Descargar CSV
         </button>
-        {/* 3A-3, EC-B: si hay más filas de las que trajo la paginación, el
-            CSV solo puede reflejar lo que YA está en pantalla — avisar en
-            vez de exportar en silencio un archivo incompleto. */}
-        {crud.truncado && filas.length > 0 && (
-          <span className="muted">
-            Descarga solo las primeras {LIMITE_LISTA} filas — afiná el filtro para exportar menos.
-          </span>
+        {/* 3A-3, EC-B: el CSV refleja lo que está en pantalla — con varias
+            páginas, solo la actual. Se avisa en vez de exportar en silencio
+            un archivo incompleto. */}
+        {hayOtrasPaginas && filas.length > 0 && (
+          <span className="muted">Descarga solo esta página — afiná el filtro para exportar menos.</span>
         )}
       </div>
 
@@ -299,6 +296,14 @@ export function AuditoriaAdminPage() {
         emptyMessage={
           hayFiltros ? "Ningún cambio coincide con estos filtros." : "Todavía no hay cambios registrados."
         }
+        etiqueta="Cambios registrados"
+        paginacion={{
+          pagina,
+          tamano: TAMANO_PAGINA,
+          total: crud.total,
+          onCambiar: setPagina,
+          cargando: crud.listQuery.isFetching,
+        }}
       />
     </div>
   );

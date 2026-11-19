@@ -30,6 +30,8 @@ class EquipoService:
         estado: str | None = None,
         disciplina_id: int | None = None,
         modalidad_id: int | None = None,
+        q: str | None = None,
+        ids: list[int] | None = None,
     ) -> list[EquipoOut]:
         equipos = await self.repo.list(
             skip=skip,
@@ -37,9 +39,15 @@ class EquipoService:
             estado=estado,
             disciplina_id=disciplina_id,
             modalidad_id=modalidad_id,
+            q=q,
+            ids=ids,
         )
         totales = await self.repo.plantilla_total_por_equipo([e.id for e in equipos])
         return [self._a_salida(e, totales.get(e.id, 0)) for e in equipos]
+
+    async def contar(self, **filtros: object) -> int:
+        """Lo que contaría `list(**filtros)` sin paginar (TASK-039)."""
+        return await self.repo.contar_filtrado(**filtros)
 
     async def create(self, data: EquipoCreate) -> EquipoOut:
         await self._validar_disciplina_modalidad(data.disciplina_id, data.modalidad_id)

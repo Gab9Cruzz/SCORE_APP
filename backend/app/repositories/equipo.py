@@ -1,6 +1,7 @@
 from collections.abc import Sequence
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 
 from app.models.equipo import Equipo
 from app.models.equipo_jugador_base import EquipoJugadorBase
@@ -11,6 +12,15 @@ from app.repositories.base import BaseRepository
 class EquipoRepository(BaseRepository[Equipo]):
     model = Equipo
     nombre_recurso = "Equipo"
+
+    def _consulta_filtrada(self, q: str | None = None, **filtros: Any) -> Select:
+        """TASK-039 (UX-05): `q` busca por nombre en el servidor, parcial y sin
+        distinguir mayúsculas — igual que `/jugadores?q=`. Antes la búsqueda
+        filtraba en el navegador sobre las primeras 200 filas."""
+        stmt = super()._consulta_filtrada(**filtros)
+        if q is not None and q.strip():
+            stmt = stmt.where(Equipo.nombre.ilike(f"%{q.strip()}%"))
+        return stmt
 
     async def plantilla_total_por_equipo(self, equipo_ids: Sequence[int]) -> dict[int, int]:
         """Cuántos candidatos tiene la Plantilla Base de cada equipo, para

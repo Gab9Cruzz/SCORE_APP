@@ -7,6 +7,7 @@ repositorio no tiene un método `delete`, solo `soft_delete`.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Generic, TypeVar
 
 from sqlalchemy import Select, func, select
@@ -33,8 +34,13 @@ class BaseRepository(Generic[ModelT]):
             raise NotFoundError(self.nombre_recurso, id_)
         return obj
 
-    def _consulta_filtrada(self, **filtros: Any) -> Select:
+    def _consulta_filtrada(self, ids: Sequence[int] | None = None, **filtros: Any) -> Select:
+        """Igualdad por columna para cada filtro no nulo. `ids` (TASK-039)
+        restringe a esos identificadores: es lo que usa el frontend para
+        traducir varios ids a nombres en una sola petición."""
         stmt = select(self.model)
+        if ids is not None:
+            stmt = stmt.where(self.model.id.in_(ids))  # type: ignore[attr-defined]
         for campo, valor in filtros.items():
             if valor is not None:
                 stmt = stmt.where(getattr(self.model, campo) == valor)

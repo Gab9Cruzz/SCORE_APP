@@ -2,9 +2,11 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { apiErrorMessage } from "../../api/client";
 import { ResourceForm, type ResourceFieldValue, type ResourceFormField, type ValoresFormulario } from "../../components/admin/ResourceForm";
+import { FiltrosRecurso } from "../../components/admin/FiltrosRecurso";
 import { ResourceTable, type ResourceTableColumn } from "../../components/admin/ResourceTable";
 import { Button } from "../../components/ui/Button";
-import { LIMITE_LISTA, useResourceCrud } from "../../hooks/useResourceCrud";
+import { usePagina, useValorConRetardo } from "../../hooks/usePagina";
+import { TAMANO_PAGINA, useResourceCrud } from "../../hooks/useResourceCrud";
 import { useTituloPagina } from "../../hooks/useTituloPagina";
 
 interface RowBase {
@@ -28,6 +30,9 @@ interface SimpleResourceAdminPageProps<TOut extends RowBase> {
   renderRowExtra?: (row: TOut) => ReactNode;
   /** TASK-038 — ver ResourceTable.tsx `confirmacion`. */
   confirmacionBaja?: (row: TOut) => string;
+  /** TASK-039: búsqueda en el servidor (`?q=`), para los recursos cuyo
+   * endpoint la admite. */
+  busqueda?: { etiqueta: string; placeholder?: string };
 }
 
 /** Página de gestión CRUD para un recurso "simple" (Torneo, Equipo,
@@ -38,9 +43,29 @@ interface SimpleResourceAdminPageProps<TOut extends RowBase> {
  * torneo-dashboard/PartidosDelTorneo.tsx, torneo-dashboard/EquiposDelTorneo.tsx,
  * torneo-dashboard/PlantillasDelTorneo.tsx). */
 export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResourceAdminPageProps<TOut>) {
-  const { resourceKey, basePath, title, createFields, editFields, columns, emptyMessage, isSelf, renderRowExtra, confirmacionBaja } =
-    props;
-  const crud = useResourceCrud<TOut, ValoresFormulario, ValoresFormulario>({ resourceKey, basePath });
+  const {
+    resourceKey,
+    basePath,
+    title,
+    createFields,
+    editFields,
+    columns,
+    emptyMessage,
+    isSelf,
+    renderRowExtra,
+    confirmacionBaja,
+    busqueda,
+  } = props;
+  const [texto, setTexto] = useState("");
+  const q = useValorConRetardo(texto.trim());
+  const [pagina, setPagina] = usePagina(q);
+  const crud = useResourceCrud<TOut, ValoresFormulario, ValoresFormulario>({
+    resourceKey,
+    basePath,
+    listParams: q ? { q } : undefined,
+    tamanoPagina: TAMANO_PAGINA,
+    pagina,
+  });
   const [modo, setModo] = useState<Modo<TOut>>({ tipo: "lista" });
 
   useTituloPagina(modo.tipo === "crear" ? `Nuevo — ${title}` : modo.tipo === "editar" ? `Editar — ${title}` : title);
@@ -101,22 +126,20 @@ export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResou
           Beneficia a los 4 recursos que usan esta página compartida, no
           solo a Usuarios. */}
       {crud.softDelete.isError && <p className="error-text">{apiErrorMessage(crud.softDelete.error)}</p>}
-      {/* 3A-5 (docs/plans/cierre-backlog-todos-plan.md): esta página
-          genérica sirve a Jugadores y Usuarios — antes ninguno de los dos
-          avisaba el techo de LIMITE_LISTA, a diferencia de EquiposAdmin/
-          AccesosAdmin/AuditoriaAdmin, que ya lo hacían cada uno por su
-          cuenta. Un solo banner acá arregla los dos de una vez. */}
-      {crud.truncado && (
-        <p className="muted">
-          Mostrando los primeros {LIMITE_LISTA}. Usá los filtros o la búsqueda para ver el resto.
-        </p>
+      {busqueda && (
+        <FiltrosRecurso
+          selects={[]}
+          busqueda={{ value: texto, label: busqueda.etiqueta, placeholder: busqueda.placeholder, onChange: setTexto }}
+          hayFiltrosAplicados={texto !== ""}
+          onLimpiar={() => setTexto("")}
+        />
       )}
       <ResourceTable<TOut>
         rows={crud.listQuery.data ?? []}
         columns={columns}
         isLoading={crud.listQuery.isLoading}
         isError={crud.listQuery.isError}
-        emptyMessage={emptyMessage}
+        emptyMessage={q ? "Nada coincide con la búsqueda." : emptyMessage}
         onSelect={(fila) => setModo({ tipo: "editar", fila })}
         onSoftDelete={(fila) => crud.softDelete.mutate(fila.id)}
         softDeletePending={crud.softDelete.isPending}
@@ -124,6 +147,15 @@ export function SimpleResourceAdminPage<TOut extends RowBase>(props: SimpleResou
         extraActions={renderRowExtra}
         confirmacion={confirmacionBaja}
         etiqueta={title}
+        // TASK-039 (UX-05): antes se cortaba en 200 con un aviso; ahora se
+        // llega a cualquier fila.
+        paginacion={{
+          pagina,
+          tamano: TAMANO_PAGINA,
+          total: crud.total,
+          onCambiar: setPagina,
+          cargando: crud.listQuery.isFetching,
+        }}
       />
     </div>
   );

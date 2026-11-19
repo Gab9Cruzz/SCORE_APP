@@ -68,6 +68,13 @@ class UsuarioService:
             rol = "Arbitro"
         return await self.repo.list(skip=skip, limit=limit, rol=rol)
 
+    async def contar(self, usuario_actual: Usuario, rol: str | None = None) -> int:
+        """Total para X-Total-Count (TASK-039), con el mismo recorte por rol
+        que `list` — si no, un TorneoAdmin vería cuántas cuentas hay en total."""
+        if usuario_actual.rol == "TorneoAdmin":
+            rol = "Arbitro"
+        return await self.repo.contar_filtrado(rol=rol)
+
     async def create(self, data: UsuarioCreate) -> Usuario:
         payload = data.model_dump(exclude={"password"})
         payload["password_hash"] = hash_password(data.password)

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_current_user_optional, require_roles
+from app.core.paginacion import ids_por_coma, informar_total
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.schemas.jugador import (
@@ -54,6 +55,10 @@ async def listar_jugadores(
     # Plantilla Base, el registro por lote y (opcional) el buscador de
     # Control de Mesa.
     q: str | None = None,
+    # TASK-039: varios jugadores por id en una sola petición.
+    ids: list[int] | None = Depends(ids_por_coma),
+    *,
+    response: Response,
     session: AsyncSession = Depends(get_db),
     usuario_actual: Usuario | None = Depends(get_current_user_optional),
 ) -> list[JugadorOut] | list[JugadorPublicOut]:
@@ -61,9 +66,9 @@ async def listar_jugadores(
     # no mira la cédula (si no, alcanzaba con probar una cédula para saber
     # si esa persona está registrada) y la respuesta no la trae.
     ver_pii = puede_ver_pii(usuario_actual)
-    jugadores = await JugadorService(session).list(
-        skip=skip, limit=limit, estado=estado, q=q, incluir_cedula=ver_pii
-    )
+    servicio = JugadorService(session)
+    informar_total(response, await servicio.contar(estado=estado, q=q, incluir_cedula=ver_pii, ids=ids))
+    jugadores = await servicio.list(skip=skip, limit=limit, estado=estado, q=q, incluir_cedula=ver_pii, ids=ids)
     if not ver_pii:
         return [JugadorPublicOut.model_validate(j) for j in jugadores]
     return [JugadorOut.model_validate(j) for j in jugadores]

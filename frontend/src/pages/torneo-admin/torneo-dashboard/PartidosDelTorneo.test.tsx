@@ -178,11 +178,13 @@ describe("PartidosDelTorneoPage", () => {
     server.use(
       // La lista BASE de /equipos (sin filtro, tope de 200 por ID
       // ascendente) no trae al equipo 999 — simula esa ventana ya llena.
-      http.get(EQUIPOS, () => HttpResponse.json([{ id: 1, nombre: "Halcones FC" }])),
-      // Resolución dirigida (useFetchFaltantes): GET /equipos/999 SÍ
-      // existe y devuelve el nombre real — es lo que pide para el ID que
-      // falta en la lista base.
-      http.get(`${EQUIPOS}/999`, () => HttpResponse.json({ id: 999, nombre: "Equipo Recién Creado" })),
+      // Resolución dirigida (useFetchFaltantes, TASK-039): GET
+      // /equipos?ids=999 trae el nombre real del que falta en la lista base.
+      http.get(EQUIPOS, ({ request }) =>
+        new URL(request.url).searchParams.get("ids") === "999"
+          ? HttpResponse.json([{ id: 999, nombre: "Equipo Recién Creado" }])
+          : HttpResponse.json([{ id: 1, nombre: "Halcones FC" }]),
+      ),
       http.get(INSCRIPCIONES, () => HttpResponse.json([{ id: 7, equipo_id: 999, estado: "Inscrito" }])),
       http.get(
         PARTIDOS,

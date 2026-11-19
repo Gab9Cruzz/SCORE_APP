@@ -1,9 +1,10 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles
+from app.core.paginacion import informar_total
 from app.db.session import get_db
 from app.repositories.acceso import AccesoRepository
 from app.schemas.acceso import AccesoOut
@@ -30,6 +31,8 @@ async def listar_accesos(
     exitoso: bool | None = None,
     desde: date | None = None,
     hasta: date | None = None,
+    *,
+    response: Response,
     session: AsyncSession = Depends(get_db),
 ) -> list[AccesoOut]:
     """Bitácora de inicios de sesión, del más reciente al más antiguo.
@@ -37,12 +40,7 @@ async def listar_accesos(
     `username` es coincidencia parcial e insensible a mayúsculas; `desde`
     y `hasta` son días completos (incluyen el día indicado entero).
     """
-    return await AccesoRepository(session).listar(
-        skip=skip,
-        limit=limit,
-        usuario_id=usuario_id,
-        username=username,
-        exitoso=exitoso,
-        desde=desde,
-        hasta=hasta,
-    )
+    filtros = {"usuario_id": usuario_id, "username": username, "exitoso": exitoso, "desde": desde, "hasta": hasta}
+    repo = AccesoRepository(session)
+    informar_total(response, await repo.contar_listado(**filtros))
+    return await repo.listar(skip=skip, limit=limit, **filtros)

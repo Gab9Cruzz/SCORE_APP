@@ -112,6 +112,30 @@ describe("ControlDeMesaPage — RBAC scoping (control-mesa-centralizacion-fixtur
     await screen.findByText("Tiburones FC vs Águilas del Sur");
     expect(screen.queryByLabelText("Torneo")).not.toBeInTheDocument();
   });
+
+  // TASK-039: Control de Mesa no descarga la lista completa de equipos;
+  // pide solo los de los partidos que muestra, en una petición.
+  it("pide solo los equipos de los partidos en pantalla, por ids", async () => {
+    sembrarSesion("TorneoAdmin", "torneo_admin_test", 7);
+    const pedidosEquipos: URLSearchParams[] = [];
+    server.use(
+      http.get(PARTIDOS, () => HttpResponse.json([PARTIDO_TORNEO_1])),
+      http.get(TORNEOS, () => HttpResponse.json([{ id: 1, nombre: "Copa Ecotec 2026" }])),
+      http.get(EQUIPOS, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        pedidosEquipos.push(params);
+        return HttpResponse.json([
+          { id: 1, nombre: "Tiburones FC" },
+          { id: 2, nombre: "Águilas del Sur" },
+        ]);
+      }),
+    );
+    renderControlDeMesa();
+
+    expect(await screen.findByText(/Tiburones FC/)).toBeInTheDocument();
+    expect(pedidosEquipos).toHaveLength(1);
+    expect(pedidosEquipos[0].get("ids")).toBe("1,2");
+  });
 });
 
 // Sección 16 (Decision Audit Trail #9): Walkover mudado desde

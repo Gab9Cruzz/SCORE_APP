@@ -5,7 +5,7 @@ import { api, apiErrorMessage } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
 import { MesaPanel } from "../../components/MesaPanel";
 import { useEmpezarPartido } from "../../components/useEmpezarPartido";
-import { useNombrePorIdConFaltantes } from "../../hooks/useFetchFaltantes";
+import { useNombresPorIds } from "../../hooks/useFetchFaltantes";
 import { useOnlineStatus } from "../../hooks/useOnlineStatus";
 import { AccionWalkoverMesa } from "./AccionWalkoverMesa";
 import { AlineacionEditor } from "./AlineacionEditor";
@@ -185,29 +185,12 @@ export function GestionarPartidoPage() {
     enabled: equipoVisitanteId != null && partido != null,
   });
 
-  const equiposQuery = useQuery({
-    queryKey: ["equipos-mesa"],
-    queryFn: async () => {
-      const { data, error } = await api.GET("/api/v1/equipos", { params: { query: { limit: 200 } } });
-      if (error) throw error;
-      return data as { id: number; nombre: string }[];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-  const nombreEquipoBase = useMemo(
-    () => new Map((equiposQuery.data ?? []).map((e) => [e.id, e.nombre])),
-    [equiposQuery.data],
-  );
-  const nombreEquipo = useNombrePorIdConFaltantes(
+  // TASK-039: solo los dos equipos y el torneo de este partido.
+  const nombreEquipo = useNombresPorIds(
     "/api/v1/equipos",
-    nombreEquipoBase,
     partido ? [partido.equipos_id_local, partido.equipos_id_visitante] : [],
   );
-  const nombreTorneo = useNombrePorIdConFaltantes(
-    "/api/v1/torneos",
-    new Map<number, string>(),
-    partido ? [partido.torneo_id] : [],
-  );
+  const nombreTorneo = useNombresPorIds("/api/v1/torneos", partido ? [partido.torneo_id] : []);
 
   const plantillaCompleta = useMemo(
     () => [...(plantillaLocalQuery.data ?? []), ...(plantillaVisitanteQuery.data ?? [])],

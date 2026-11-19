@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -9,6 +9,7 @@ from app.api.deps import (
     verificar_torneo_visible,
 )
 from app.core.metricas import registrar_evento
+from app.core.paginacion import ids_por_coma, informar_total
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.repositories.asignacion_torneo_admin import AsignacionTorneoAdminRepository
@@ -39,6 +40,10 @@ async def listar_torneos(
     # GET /torneo-grupos (3B-7). Sin efecto cuando `torneo_grupo_id` viene
     # explícito (P6): ver TorneoRepository.list.
     incluir_archivados: bool = False,
+    # TASK-039: varios torneos por id en una sola petición.
+    ids: list[int] | None = Depends(ids_por_coma),
+    *,
+    response: Response,
     session: AsyncSession = Depends(get_db),
     usuario: Usuario | None = Depends(get_current_user_optional),
 ) -> list[TorneoOut]:
@@ -47,19 +52,21 @@ async def listar_torneos(
     torneo_ids_permitidos: list[int] | None = None
     if solo_mios and usuario is not None and usuario.rol == "TorneoAdmin":
         torneo_ids_permitidos = await AsignacionTorneoAdminRepository(session).listar_torneo_ids_activos(usuario.id)
-    return await TorneoService(session).list(
-        skip=skip,
-        limit=limit,
-        estado=estado,
-        torneo_grupo_id=torneo_grupo_id,
-        torneo_ids_permitidos=torneo_ids_permitidos,
-        incluir_archivados=incluir_archivados,
+    criterios: dict[str, object] = {
+        "estado": estado,
+        "torneo_grupo_id": torneo_grupo_id,
+        "torneo_ids_permitidos": torneo_ids_permitidos,
+        "incluir_archivados": incluir_archivados,
+        "ids": ids,
         # E-B3a (portal-publico-feed-partidos-plan.md): con solo el
         # detalle gateado (C2/T3.4b), un anónimo igual podía enumerar
         # torneos borrador acá — gatear detalle y dejar el listado abierto
         # era el peor de los dos mundos. `None` = con sesión, sin filtro.
-        solo_publicados=usuario is None,
-    )
+        "solo_publicados": usuario is None,
+    }
+    servicio = TorneoService(session)
+    informar_total(response, await servicio.contar(**criterios))
+    return await servicio.list(skip=skip, limit=limit, **criterios)
 
 
 @router.get(
