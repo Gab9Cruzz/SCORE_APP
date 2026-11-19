@@ -90,6 +90,11 @@ const CODIGOS_ERROR_TRADUCIDOS: Record<string, string> = {
   // ANTES de pasarlo por este mapa (ver MesaPanel.tsx), nunca por el texto
   // ya traducido.
   evento_conflicto_concurrente: "Otro operador está cargando un evento en este partido — reintentá en un momento.",
+  // TASK-015: códigos de RAISE EXCEPTION que todavía llegaban crudos.
+  jugador_ya_activo_en_este_torneo: "Ese jugador ya está activo en otro equipo de este torneo.",
+  equipo_ya_asignado_a_otro_grupo_en_esta_fase: "Ese equipo ya está asignado a otro grupo de esta fase.",
+  hito_ya_registrado: "Ese momento del partido ya está registrado.",
+  partido_corrido_sin_ganador: "Para finalizar el partido falta indicar quién ganó.",
 };
 
 /** Extrae un mensaje legible del error de FastAPI ({"detail": "..."} o
@@ -97,6 +102,12 @@ const CODIGOS_ERROR_TRADUCIDOS: Record<string, string> = {
 export function apiErrorMessage(error: unknown, fallback = "Ocurrió un error inesperado."): string {
   if (error && typeof error === "object" && "detail" in error) {
     const detail = (error as { detail: unknown }).detail;
+    // TASK-015: un 500 trae un identificador que también queda en el
+    // registro del servidor; se muestra para poder reportarlo.
+    const id = "id" in error ? (error as { id: unknown }).id : undefined;
+    if (detail === "Error interno." && typeof id === "string") {
+      return `Ocurrió un error interno. Si se repite, avisá con este código: ${id}`;
+    }
     if (typeof detail === "string") return CODIGOS_ERROR_TRADUCIDOS[detail] ?? detail;
     if (Array.isArray(detail)) {
       return detail

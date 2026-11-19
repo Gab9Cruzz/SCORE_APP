@@ -1,7 +1,12 @@
 """Traducción de excepciones a respuestas HTTP + traducción de errores crudos de Postgres."""
+import logging
+import uuid
+
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import DBAPIError, IntegrityError
+
+from app.core.logging import CABECERA_REQUEST_ID, request_id_actual
 
 from app.exceptions.errors import (
     AuthError,
@@ -15,28 +20,82 @@ from app.exceptions.errors import (
     RateLimitError,
 )
 
-# asyncpg antepone el SQLSTATE y un preámbulo largo al mensaje. Esto se queda
-# solo con la última línea útil, que es la que escribió el RAISE EXCEPTION o
-# el motor de constraints (ej: 'llave duplicada viola restricción de unicidad').
-def _clean_pg_message(raw: str) -> str:
-    line = raw.strip().splitlines()[0] if raw.strip() else raw
-    for prefix in ("duplicate key value violates unique constraint",):
-        if prefix in line:
-            return "Ya existe un registro con esos datos (restricción de unicidad)."
-    return line
+logger = logging.getLogger("score_app.errores")
+
+ERROR_INTERNO = "Error interno."
+
+# TASK-015 (BE-04, SEC-06): el mensaje de Postgres solo sale tal cual cuando
+# lo escribió el proyecto (RAISE EXCEPTION de un trigger, P0001). Para las
+# restricciones, un texto fijo por tipo: el crudo nombra tablas y
+# restricciones. Cualquier otro error de base es un 500 genérico, registrado.
+_MENSAJES_RESTRICCION = {
+    "23505": "Ya existe un registro con esos datos (restricción de unicidad).",
+    "23503": "El registro hace referencia a otro que no existe, o está en uso por otros datos.",
+    "23514": "Los datos no cumplen una de las reglas de validación.",
+    "23502": "Falta un dato obligatorio.",
+    "23P01": "Los datos se superponen con otro registro existente.",
+}
+_MENSAJE_RESTRICCION_GENERICO = "Los datos entran en conflicto con una restricción."
+
+
+def _sqlstate(exc: DBAPIError) -> str | None:
+    return getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+
+
+def _primera_linea(exc: DBAPIError) -> str:
+    """psycopg agrega CONTEXT/DETAIL en líneas siguientes; el mensaje del
+    RAISE EXCEPTION es la primera."""
+    crudo = str(exc.orig) if exc.orig else str(exc)
+    return crudo.strip().splitlines()[0] if crudo.strip() else crudo
+
+
+def _request_id(request: Request | None) -> str:
+    if request is not None:
+        guardado = getattr(request.state, "request_id", None)
+        if guardado:
+            return guardado
+    return request_id_actual.get() or str(uuid.uuid4())
+
+
+def _error_interno(request: Request | None, exc: BaseException) -> JSONResponse:
+    """500 sin detalle interno, con un identificador que también queda en el
+    registro junto con la traza completa."""
+    request_id = _request_id(request)
+    logger.error(
+        "error no controlado %s %s [%s]",
+        request.method if request is not None else "-",
+        request.url.path if request is not None else "-",
+        request_id,
+        exc_info=exc,
+        extra={"request_id": request_id},
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": ERROR_INTERNO, "id": request_id},
+        headers={CABECERA_REQUEST_ID: request_id},
+    )
 
 
 def _integrity_error_response(exc: IntegrityError) -> JSONResponse:
-    message = _clean_pg_message(str(exc.orig) if exc.orig else str(exc))
-    return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": message})
+    mensaje = _MENSAJES_RESTRICCION.get(_sqlstate(exc) or "", _MENSAJE_RESTRICCION_GENERICO)
+    return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": mensaje})
 
 
-def _dbapi_error_response(exc: DBAPIError) -> JSONResponse:
+def _dbapi_error_response(exc: DBAPIError, request: Request | None = None) -> JSONResponse:
+    sqlstate = _sqlstate(exc)
     # RAISE EXCEPTION en un trigger (fn_validar_jugador_partido,
-    # fn_validar_equipos_inscritos) llega acá, no como IntegrityError: no es
-    # una FK/UNIQUE/CHECK, es una regla de negocio explícita. SQLSTATE P0001.
-    message = _clean_pg_message(str(exc.orig) if exc.orig else str(exc))
-    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": message})
+    # fn_validar_equipos_inscritos) llega acá, no como IntegrityError: es una
+    # regla de negocio escrita por el proyecto. SQLSTATE P0001.
+    if sqlstate == "P0001":
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": _primera_linea(exc)})
+    if sqlstate == "22001":
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": "Uno de los textos es demasiado largo."},
+        )
+    if sqlstate is not None and sqlstate.startswith("23"):
+        return _integrity_error_response(exc)  # type: ignore[arg-type]
+    return _error_interno(request, exc)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -113,5 +172,12 @@ def register_exception_handlers(app: FastAPI) -> None:
         return _integrity_error_response(exc)
 
     @app.exception_handler(DBAPIError)
-    async def _sa_dbapi(_: Request, exc: DBAPIError) -> JSONResponse:
-        return _dbapi_error_response(exc)
+    async def _sa_dbapi(request: Request, exc: DBAPIError) -> JSONResponse:
+        return _dbapi_error_response(exc, request)
+
+    # TASK-015: lo que nadie tradujo. Corre en ServerErrorMiddleware, fuera
+    # de RequestIdMiddleware: por eso el identificador viaja en request.state
+    # y la cabecera se pone acá.
+    @app.exception_handler(Exception)
+    async def _inesperado(request: Request, exc: Exception) -> JSONResponse:
+        return _error_interno(request, exc)

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core import auditoria as _auditoria_listener  # noqa: F401 - registra el event listener de flush (ver ese módulo)
 from app.core.config import get_settings
+from app.core.logging import CABECERA_REQUEST_ID, RequestIdMiddleware, configurar_logging
 from app.core.paginacion import CABECERA_TOTAL
 from app.db.database import async_session_factory
 from app.exceptions.handlers import register_exception_handlers
@@ -15,6 +17,8 @@ from app.repositories.auditoria import AuditoriaRepository
 from app.services.usuario import UsuarioService
 
 settings = get_settings()
+configurar_logging()
+logger = logging.getLogger("score_app.arranque")
 
 
 async def _bootstrap_admin_con_reintentos() -> None:
@@ -36,12 +40,12 @@ async def _bootstrap_admin_con_reintentos() -> None:
                     settings.admin_username, settings.admin_password, settings.admin_nombre
                 )
                 if creado:
-                    print(f"[bootstrap] Usuario Admin '{creado.username}' creado.")
+                    logger.info("bootstrap: usuario Admin '%s' creado", creado.username)
             return
         except Exception as exc:  # noqa: BLE001 - se loguea, no se propaga (ver docstring)
-            print(f"[bootstrap] intento {intento + 1}/5 falló al conectar con la base: {exc!r}")
+            logger.warning("bootstrap: intento %s/5 falló al conectar con la base: %r", intento + 1, exc)
             await asyncio.sleep(1)
-    print("[bootstrap] no se pudo conectar con la base tras 5 intentos; sigo sin el Admin bootstrap.")
+    logger.error("bootstrap: no se pudo conectar con la base tras 5 intentos; sigo sin el Admin bootstrap")
 
 
 async def _purgar_accesos_viejos() -> None:
@@ -72,13 +76,12 @@ async def _purgar_accesos_viejos() -> None:
             repo = AccesoRepository(session)
             borrados = await repo.purgar_anteriores_a(settings.accesos_retencion_dias)
             if borrados:
-                print(
-                    f"[accesos] purga: {borrados} registro(s) de más de "
-                    f"{settings.accesos_retencion_dias} días eliminados; "
-                    f"quedan {await repo.contar()}."
+                logger.info(
+                    "accesos: purga de %s registro(s) de más de %s días; quedan %s",
+                    borrados, settings.accesos_retencion_dias, await repo.contar(),
                 )
-    except Exception as exc:  # noqa: BLE001 - se loguea, no se propaga (ver docstring)
-        print(f"[accesos] no se pudo purgar la bitácora: {exc!r}")
+    except Exception:  # noqa: BLE001 - se loguea, no se propaga (ver docstring)
+        logger.exception("accesos: no se pudo purgar la bitácora")
 
 
 async def _purgar_auditoria_vieja() -> None:
@@ -95,13 +98,12 @@ async def _purgar_auditoria_vieja() -> None:
             repo = AuditoriaRepository(session)
             borrados = await repo.purgar_anteriores_a(settings.auditoria_retencion_dias)
             if borrados:
-                print(
-                    f"[auditoria] purga: {borrados} registro(s) de más de "
-                    f"{settings.auditoria_retencion_dias} días eliminados; "
-                    f"quedan {await repo.contar()}."
+                logger.info(
+                    "auditoria: purga de %s registro(s) de más de %s días; quedan %s",
+                    borrados, settings.auditoria_retencion_dias, await repo.contar(),
                 )
-    except Exception as exc:  # noqa: BLE001 - se loguea, no se propaga (ver docstring)
-        print(f"[auditoria] no se pudo purgar la bitácora: {exc!r}")
+    except Exception:  # noqa: BLE001 - se loguea, no se propaga (ver docstring)
+        logger.exception("auditoria: no se pudo purgar la bitácora")
 
 
 @asynccontextmanager
@@ -121,6 +123,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# TASK-015: identificador por petición (X-Request-ID). Va antes que CORS
+# para que CORS quede por fuera y agregue sus cabeceras a todo.
+app.add_middleware(RequestIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -129,7 +134,7 @@ app.add_middleware(
     allow_headers=["*"],
     # TASK-011: sin esto el navegador le oculta al frontend el total de los
     # listados paginados.
-    expose_headers=[CABECERA_TOTAL],
+    expose_headers=[CABECERA_TOTAL, CABECERA_REQUEST_ID],
 )
 
 register_exception_handlers(app)
