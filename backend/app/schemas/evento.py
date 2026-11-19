@@ -25,6 +25,9 @@ class EventoOut(EventoBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    # TASK-019: GOL, AUTOGOL, TARJETA_AMARILLA, TARJETA_ROJA, CAMBIO, o
+    # None para un tipo propio.
+    codigo: str | None = None
     estado: EstadoEvento
     fecha_registro: datetime
     fecha_modificacion: datetime

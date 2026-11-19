@@ -14,12 +14,12 @@
 -- ============================================================
 
 -- Catálogo de eventos
-INSERT INTO EVENTOS (Nombre, Descripcion) VALUES
-    ('Gol', 'Gol anotado por el jugador'),
-    ('Autogol', 'Gol en propia meta'),
-    ('Tarjeta Amarilla', 'Amonestación'),
-    ('Tarjeta Roja', 'Expulsión'),
-    ('Cambio', 'Sustitución de jugador');
+INSERT INTO EVENTOS (Nombre, Codigo, Descripcion) VALUES
+    ('Gol', 'GOL', 'Gol anotado por el jugador'),
+    ('Autogol', 'AUTOGOL', 'Gol en propia meta'),
+    ('Tarjeta Amarilla', 'TARJETA_AMARILLA', 'Amonestación'),
+    ('Tarjeta Roja', 'TARJETA_ROJA', 'Expulsión'),
+    ('Cambio', 'CAMBIO', 'Sustitución de jugador');
 
 -- Catálogo de disciplinas.
 -- Va ANTES que TORNEO: TORNEO.Disciplina_ID es NOT NULL (ver 01_schema.sql,

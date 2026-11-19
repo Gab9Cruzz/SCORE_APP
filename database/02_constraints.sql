@@ -317,7 +317,11 @@ ALTER TABLE PARTIDOS
 
 -- EVENTOS
 ALTER TABLE EVENTOS
-    ADD CONSTRAINT chk_eventos_estado CHECK (Estado IN ('Activo', 'Inactivo'));
+    ADD CONSTRAINT chk_eventos_estado CHECK (Estado IN ('Activo', 'Inactivo')),
+    -- TASK-019: dos tipos con el mismo nombre (o el mismo código) volvían
+    -- ambiguo cualquier reconocimiento por texto.
+    ADD CONSTRAINT unique_eventos_nombre UNIQUE (Nombre),
+    ADD CONSTRAINT unique_eventos_codigo UNIQUE (Codigo);
 
 -- USUARIOS
 

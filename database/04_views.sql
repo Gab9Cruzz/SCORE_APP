@@ -22,9 +22,11 @@ SELECT
     p.TORNEO_ID,
     ep.JUGADOR_ID,
     ep.EQUIPO_ID       AS Equipo_Del_Jugador,
-    ev.Nombre          AS Tipo_Gol,
+    -- TASK-019: por código, no por nombre. Tipo_Gol conserva sus dos
+    -- valores de siempre para las vistas que lo leen.
+    (CASE WHEN ev.Codigo = 'AUTOGOL' THEN 'Autogol' ELSE 'Gol' END)::VARCHAR(50) AS Tipo_Gol,
     CASE
-        WHEN ev.Nombre = 'Autogol' THEN
+        WHEN ev.Codigo = 'AUTOGOL' THEN
             CASE WHEN ep.EQUIPO_ID = p.EQUIPOS_ID_LOCAL
                  THEN p.EQUIPOS_ID_VISITANTE
                  ELSE p.EQUIPOS_ID_LOCAL
@@ -36,7 +38,7 @@ FROM EVENTOS_PARTIDO ep
 JOIN EVENTOS ev  ON ev.ID = ep.EVENTOS_ID
 JOIN PARTIDOS p  ON p.ID  = ep.PARTIDOS_ID
 WHERE ep.Estado = 'Registrado'
-  AND ev.Nombre IN ('Gol', 'Autogol');
+  AND ev.Codigo IN ('GOL', 'AUTOGOL');
 
 -- ------------------------------------------------------------
 -- Próximos partidos programados

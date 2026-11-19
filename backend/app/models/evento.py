@@ -16,6 +16,9 @@ class Evento(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(50))
+    # TASK-019: identificador estable de los tipos de sistema (ver
+    # 01_schema.sql). La lógica compara por esto, no por `nombre`.
+    codigo: Mapped[str | None] = mapped_column(String(30))
     descripcion: Mapped[str | None] = mapped_column(String(200))
     # Valores válidos: Activo, Inactivo (chk_eventos_estado)
     estado: Mapped[str] = mapped_column(String(20), default="Activo")

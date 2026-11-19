@@ -2288,6 +2288,8 @@ export interface components {
             descripcion?: string | null;
             /** Id */
             id: number;
+            /** Codigo */
+            codigo?: string | null;
             /**
              * Estado
              * @enum {string}

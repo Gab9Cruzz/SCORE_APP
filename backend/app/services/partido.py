@@ -359,7 +359,7 @@ class PartidoService:
         # control-mesa-reactividad-playoffs-plan.md, Fase 3 §3: resuelto UNA
         # vez fuera del loop (no cambia por evento), igual criterio que
         # `torneo`/`config` arriba — evita una consulta repetida por evento.
-        rojas_catalogo = await self.evento_catalogo_repo.list(limit=1, nombre="Tarjeta Roja")
+        rojas_catalogo = await self.evento_catalogo_repo.list(limit=1, codigo="TARJETA_ROJA")
         eventos_id_roja = rojas_catalogo[0].id if rojas_catalogo else None
 
         for evento in data.eventos:
@@ -375,7 +375,7 @@ class PartidoService:
             evento_catalogo = await self.evento_catalogo_repo.get_or_404(evento.eventos_id)
             await validar_reglas_cambio(
                 torneo=torneo,
-                evento_catalogo_nombre=evento_catalogo.nombre,
+                evento_catalogo_codigo=evento_catalogo.codigo,
                 evento_partido_repo=self.evento_partido_repo,
                 partido_id=id_,
                 jugador_id=evento.jugador_id,
@@ -392,7 +392,7 @@ class PartidoService:
             # evalúa DESPUÉS del flush de este evento (visible en la misma
             # transacción, igual criterio que validar_reglas_cambio arriba
             # con los eventos de vueltas anteriores del loop).
-            if eventos_id_roja is not None and evento_catalogo.nombre == "Tarjeta Amarilla":
+            if eventos_id_roja is not None and evento_catalogo.codigo == "TARJETA_AMARILLA":
                 roja_auto = await procesar_doble_amarilla(
                     evento_partido_repo=self.evento_partido_repo,
                     partido_id=id_,

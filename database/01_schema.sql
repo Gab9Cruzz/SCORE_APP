@@ -637,6 +637,12 @@ CREATE TABLE PARTIDOS (
 CREATE TABLE EVENTOS (
     ID SERIAL PRIMARY KEY,
     Nombre VARCHAR(50) NOT NULL,
+    -- TASK-019 (FUN-14): identificador estable de los tipos de SISTEMA (GOL,
+    -- AUTOGOL, TARJETA_AMARILLA, TARJETA_ROJA, CAMBIO). Vistas, triggers y
+    -- servicios comparan por esto, no por el nombre (renombrar "Gol" ponía
+    -- en cero todos los marcadores). NULL = tipo propio, sin lógica asociada.
+    -- Un tipo con código no se renombra ni se da de baja (EventoService).
+    Codigo VARCHAR(30),
     Descripcion VARCHAR(200),
     Fecha_Registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     Fecha_Modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

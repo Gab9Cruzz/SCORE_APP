@@ -245,7 +245,8 @@ BEGIN
         RAISE EXCEPTION 'El jugador no pertenecia a ese equipo en la fecha del partido.';
     END IF;
 
-    SELECT (Nombre = 'Cambio') INTO v_es_cambio FROM EVENTOS WHERE ID = NEW.EVENTOS_ID;
+    -- TASK-019: por código, no por nombre.
+    SELECT (Codigo IS NOT DISTINCT FROM 'CAMBIO') INTO v_es_cambio FROM EVENTOS WHERE ID = NEW.EVENTOS_ID;
 
     IF v_es_cambio THEN
         IF NEW.JUGADOR_ID_ENTRA IS NULL THEN

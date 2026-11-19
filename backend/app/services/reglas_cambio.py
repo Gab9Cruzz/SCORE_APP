@@ -6,7 +6,7 @@ from app.repositories.evento_partido import EventoPartidoRepository
 async def validar_reglas_cambio(
     *,
     torneo: Torneo,
-    evento_catalogo_nombre: str,
+    evento_catalogo_codigo: str | None,
     evento_partido_repo: EventoPartidoRepository,
     partido_id: int,
     jugador_id: int,
@@ -30,7 +30,8 @@ async def validar_reglas_cambio(
     NO llamaba nada de esto, hallazgo 6 de ese plan) pasa acá su propio
     `EventoPartidoRepository`, en vez de acoplarse al otro servicio.
     """
-    if evento_catalogo_nombre != "Cambio":
+    # TASK-019: por código, no por nombre.
+    if evento_catalogo_codigo != "CAMBIO":
         return
 
     # Doble-salida (corrección 1, CRÍTICO): INCONDICIONAL, fuera del `if`

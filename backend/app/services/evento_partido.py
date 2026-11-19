@@ -122,8 +122,8 @@ class EventoPartidoService:
         settings = get_settings()
         evento_catalogo = await self.evento_catalogo_repo.get_or_404(data.eventos_id)
         roja_catalogo_id: int | None = None
-        if evento_catalogo.nombre == "Tarjeta Amarilla":
-            rojas = await self.evento_catalogo_repo.list(limit=1, nombre="Tarjeta Roja")
+        if evento_catalogo.codigo == "TARJETA_AMARILLA":
+            rojas = await self.evento_catalogo_repo.list(limit=1, codigo="TARJETA_ROJA")
             roja_catalogo_id = rojas[0].id if rojas else None
 
         intentos_restantes = settings.evento_concurrencia_reintentos
@@ -209,7 +209,7 @@ class EventoPartidoService:
         # `PartidoService.registrar_resultado_directo` (mismo módulo
         # `reglas_tarjetas`, ver su docstring, ya actualizado — los dos
         # callers comparten la misma disciplina transaccional ahora).
-        if evento_catalogo.nombre == "Tarjeta Amarilla" and roja_catalogo_id is not None:
+        if evento_catalogo.codigo == "TARJETA_AMARILLA" and roja_catalogo_id is not None:
             roja_auto = await procesar_doble_amarilla(
                 evento_partido_repo=self.repo,
                 partido_id=evento.partidos_id,
@@ -285,9 +285,9 @@ class EventoPartidoService:
                 text(
                     """
                     SELECT
-                        COUNT(*) FILTER (WHERE ev.Nombre = 'Tarjeta Roja' AND ep.JUGADOR_ID = :j) AS rojas,
-                        COUNT(*) FILTER (WHERE ev.Nombre = 'Cambio' AND ep.JUGADOR_ID = :j) AS salidas,
-                        COUNT(*) FILTER (WHERE ev.Nombre = 'Cambio' AND ep.JUGADOR_ID_ENTRA = :j) AS entradas
+                        COUNT(*) FILTER (WHERE ev.Codigo = 'TARJETA_ROJA' AND ep.JUGADOR_ID = :j) AS rojas,
+                        COUNT(*) FILTER (WHERE ev.Codigo = 'CAMBIO' AND ep.JUGADOR_ID = :j) AS salidas,
+                        COUNT(*) FILTER (WHERE ev.Codigo = 'CAMBIO' AND ep.JUGADOR_ID_ENTRA = :j) AS entradas
                       FROM EVENTOS_PARTIDO ep
                       JOIN EVENTOS ev ON ev.ID = ep.EVENTOS_ID
                      WHERE ep.PARTIDOS_ID = :p AND ep.Estado = 'Registrado'
@@ -309,13 +309,13 @@ class EventoPartidoService:
         queda como wrapper delgado: solo el early-return barato si no es
         'Cambio' y la consulta de torneo. `evento_catalogo` ya lo resuelve
         `create()` antes de tomar el lock (T-5) — no se vuelve a consultar."""
-        if evento_catalogo.nombre != "Cambio":
+        if evento_catalogo.codigo != "CAMBIO":
             return
 
         torneo = await self.torneo_repo.get_or_404(partido.torneo_id)
         await validar_reglas_cambio(
             torneo=torneo,
-            evento_catalogo_nombre=evento_catalogo.nombre,
+            evento_catalogo_codigo=evento_catalogo.codigo,
             evento_partido_repo=self.repo,
             partido_id=partido.id,
             jugador_id=data.jugador_id,
@@ -360,10 +360,10 @@ class EventoPartidoService:
         """
         evento = await self.repo.get_or_404(id_)
         evento_catalogo = await self.evento_catalogo_repo.get_or_404(evento.eventos_id)
-        es_tarjeta = evento_catalogo.nombre in ("Tarjeta Amarilla", "Tarjeta Roja")
+        es_tarjeta = evento_catalogo.codigo in ("TARJETA_AMARILLA", "TARJETA_ROJA")
         # TASK-009: los goles también toman el lock — anular uno puede cambiar
         # quién avanza de llave (ver _verificar_llave_no_cambia).
-        es_gol = evento_catalogo.nombre in ("Gol", "Autogol")
+        es_gol = evento_catalogo.codigo in ("GOL", "AUTOGOL")
         if es_tarjeta or es_gol:
             settings = get_settings()
             try:
