@@ -9,6 +9,7 @@ from app.api.router import api_router
 from app.core import auditoria as _auditoria_listener  # noqa: F401 - registra el event listener de flush (ver ese módulo)
 from app.core.config import get_settings
 from app.core.logging import CABECERA_REQUEST_ID, RequestIdMiddleware, configurar_logging
+from app.core.migraciones import avisar, migraciones_pendientes
 from app.core.paginacion import CABECERA_TOTAL
 from app.db.database import async_session_factory
 from app.exceptions.handlers import register_exception_handlers
@@ -84,6 +85,17 @@ async def _purgar_accesos_viejos() -> None:
         logger.exception("accesos: no se pudo purgar la bitácora")
 
 
+async def _avisar_migraciones_pendientes() -> None:
+    """TASK-031: avisa en el registro si la base no tiene alguna migración de
+    database/. No las aplica (eso es `python -m scripts.migrar --aplicar`).
+    En segundo plano y sin propagar errores, como el resto del arranque."""
+    try:
+        async with async_session_factory() as session:
+            avisar(await migraciones_pendientes(session))
+    except Exception:  # noqa: BLE001 - se loguea, no se propaga
+        logger.exception("migraciones: no se pudo verificar el estado")
+
+
 async def _purgar_auditoria_vieja() -> None:
     """Borra de AUDITORIA lo más viejo que `auditoria_retencion_dias` (30
     por defecto — "1 mes", como se pidió). Mismo mecanismo, mismo
@@ -113,6 +125,7 @@ async def lifespan(_: FastAPI):
     # responde, no vale la pena bloquear el arranque por una limpieza.
     asyncio.create_task(_purgar_accesos_viejos())
     asyncio.create_task(_purgar_auditoria_vieja())
+    asyncio.create_task(_avisar_migraciones_pendientes())
     yield
 
 

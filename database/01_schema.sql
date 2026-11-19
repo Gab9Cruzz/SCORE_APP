@@ -814,3 +814,17 @@ CREATE TABLE AUDITORIA (
     User_Agent VARCHAR(255),
     Fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ------------------------------------------------------------
+-- SCHEMA_MIGRATIONS (TASK-031, docs/audit/: ARQ-01/DB-10/OPS-10): qué
+-- migraciones (NN_migracion_*.sql) tiene aplicadas ESTA base. Una
+-- instalación nueva las registra todas al final de 06_triggers.sql (ya las
+-- incorpora); en una base existente se dan de alta con
+-- `python -m scripts.migrar --marcar-hasta NN` y lo pendiente se aplica
+-- con `--aplicar`. Checksum NULL = incorporada en 01–06, no ejecutada.
+-- ------------------------------------------------------------
+CREATE TABLE SCHEMA_MIGRATIONS (
+    Nombre VARCHAR(200) PRIMARY KEY,
+    Aplicada_En TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    Checksum VARCHAR(64)
+);

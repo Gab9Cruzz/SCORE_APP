@@ -63,6 +63,7 @@ Cada una aplica un plan concreto sobre una base **ya provisionada**
 | `39_migracion_tabla_posiciones.sql` | TASK-025 (`docs/audit/`): `vw_tabla_posiciones` parte de los participantes y usa el ganador declarado en cronómetro corrido; toma `Ganador_Corrido_ID` de `PARTIDOS` |
 | `40_migracion_restricciones_coherencia.sql` | TASK-026 (`docs/audit/`): `Estado NOT NULL` en 13 tablas, `CHECK` de fechas, rangos y nombres no vacíos; el cierre de torneo no deja una baja anterior al alta |
 | `41_migracion_bloqueo_torneo_cerrado.sql` | TASK-027 (`docs/audit/`): el bloqueo de torneo cerrado cubre también crear/borrar partidos, convocatorias e inscripciones |
+| `42_migracion_schema_migrations.sql` | TASK-031 (`docs/audit/`): tabla `SCHEMA_MIGRATIONS` (registro de migraciones aplicadas); ver "Registro de migraciones" |
 
 **Nota (2026-09-14):** este índice se quedó desactualizado entre `21` y `30` — ninguna de esas
 migraciones aparecía listada aquí, aunque sí estaban aplicadas (o, en el caso de `21`,
@@ -99,6 +100,33 @@ los 140 tests seguían en verde. Por eso ahora existe
 `backend/tests/test_scripts_sql.py`: crea una base desde `01`–`06`, corre
 `10`, `11` y la última migración encima **dos veces** y verifica que los datos que dejan
 sean coherentes. Si volvés a cambiar el esquema, ese test es el que avisa.
+
+## Registro de migraciones (`SCHEMA_MIGRATIONS`)
+
+Desde TASK-031 cada base guarda qué migraciones (`NN_migracion_*.sql`) tiene
+aplicadas, y `backend/scripts/migrar.py` compara ese registro con esta
+carpeta. Desde `backend/`:
+
+```powershell
+python -m scripts.migrar                    # estado: qué falta
+python -m scripts.migrar --aplicar          # aplica lo pendiente, cada una en su transacción
+python -m scripts.migrar --marcar-hasta 41  # alta de una base existente, sin ejecutar nada
+```
+
+- Una instalación nueva (`01`–`06`) ya registra como aplicadas todas las
+  migraciones que incorpora (lista al final de `06_triggers.sql`); no le
+  falta nada.
+- Una base anterior a TASK-031 no tiene la tabla: darla de alta con
+  `--marcar-hasta` hasta la última migración que se le aplicó a mano, y
+  después `--aplicar`.
+- Una migración que falla no deja cambios ni registro.
+- La API avisa en el registro, al arrancar, si falta alguna (no la aplica).
+- **Al agregar una migración nueva**, además de los tres lugares de abajo,
+  sumarla a la línea de base de `06_triggers.sql` (`test_scripts_sql.py` y
+  `test_migraciones.py` lo verifican).
+
+El procedimiento de abajo (copia previa, ensayo en una base descartable)
+sigue valiendo; `--aplicar` reemplaza solo el paso de `psql -1`.
 
 ## Correr una migración contra `torneos_mvp`
 

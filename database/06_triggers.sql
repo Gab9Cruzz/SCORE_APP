@@ -1294,3 +1294,45 @@ BEGIN
 
     RAISE NOTICE 'Verificacion OK: esquema, seed y triggers coherentes.';
 END $$;
+
+-- ------------------------------------------------------------
+-- TASK-031: línea de base de SCHEMA_MIGRATIONS. Esta instalación ya incluye
+-- todo lo que hacen estas migraciones (01–06 describen el estado final),
+-- así que quedan registradas como aplicadas sin ejecutarlas. Al agregar una
+-- migración nueva, sumarla acá también (test_scripts_sql.py lo verifica).
+-- ------------------------------------------------------------
+INSERT INTO SCHEMA_MIGRATIONS (Nombre) VALUES
+    ('07_migracion_roles_arbitro.sql'),
+    ('08_migracion_equipos_jugadores.sql'),
+    ('09_migracion_torneo_ediciones.sql'),
+    ('12_migracion_catalogo_disciplinas.sql'),
+    ('13_migracion_equipos_disciplina.sql'),
+    ('14_migracion_auditoria_accesos.sql'),
+    ('15_migracion_popularidad_disciplinas.sql'),
+    ('16_migracion_foto_jugadores.sql'),
+    ('17_migracion_motor_formatos.sql'),
+    ('18_migracion_auditoria_cambios.sql'),
+    ('19_migracion_plantilla_base_equipo.sql'),
+    ('20_migracion_control_mesa_tiempos.sql'),
+    ('21_migracion_desempate_manual.sql'),
+    ('22_migracion_rate_limiting_login.sql'),
+    ('23_migracion_archivar_torneo_grupo.sql'),
+    ('24_migracion_limites_y_walkover.sql'),
+    ('25_migracion_convocados.sql'),
+    ('26_migracion_rbac_licencias_torneos.sql'),
+    ('27_migracion_minimo_titulares.sql'),
+    ('28_migracion_reglas_cambio.sql'),
+    ('29_migracion_maximo_titulares.sql'),
+    ('30_migracion_fin_forzado.sql'),
+    ('31_migracion_portal_publico.sql'),
+    ('32_migracion_cierre_fase_y_llaves.sql'),
+    ('33_migracion_metodo_desempate.sql'),
+    ('34_migracion_validar_jugador_por_fecha.sql'),
+    ('35_migracion_reclamo_llave.sql'),
+    ('36_migracion_codigo_eventos.sql'),
+    ('37_migracion_indice_partido_ida.sql'),
+    ('38_migracion_inicio_partido_unico.sql'),
+    ('39_migracion_tabla_posiciones.sql'),
+    ('40_migracion_restricciones_coherencia.sql'),
+    ('41_migracion_bloqueo_torneo_cerrado.sql'),
+    ('42_migracion_schema_migrations.sql');
