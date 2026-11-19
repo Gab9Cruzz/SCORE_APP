@@ -59,6 +59,7 @@ SCRIPTS_VIGENTES = [
     "38_migracion_inicio_partido_unico.sql",
     "39_migracion_tabla_posiciones.sql",
     "40_migracion_restricciones_coherencia.sql",
+    "41_migracion_bloqueo_torneo_cerrado.sql",
 ]
 
 # F10/E-L6 (portal-publico-feed-partidos-plan.md): el test de cobertura de

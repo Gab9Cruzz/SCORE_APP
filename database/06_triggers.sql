@@ -1182,8 +1182,13 @@ DECLARE
     v_partido_id INT;
     v_estado_torneo VARCHAR(20);
 BEGIN
-    IF TG_TABLE_NAME = 'partidos' THEN
+    -- TASK-027 (DB-06): también inscripciones y convocatorias, y en
+    -- PARTIDOS también INSERT/DELETE (antes solo UPDATE).
+    IF TG_TABLE_NAME IN ('partidos', 'inscripciones_torneo') THEN
         v_torneo_id := COALESCE(NEW.Torneo_ID, OLD.Torneo_ID);
+    ELSIF TG_TABLE_NAME = 'convocado_a_partido' THEN
+        v_partido_id := COALESCE(NEW.Partido_ID, OLD.Partido_ID);
+        SELECT Torneo_ID INTO v_torneo_id FROM PARTIDOS WHERE ID = v_partido_id;
     ELSIF TG_TABLE_NAME = 'eventos_partido' THEN
         v_partido_id := COALESCE(NEW.PARTIDOS_ID, OLD.PARTIDOS_ID);
         SELECT Torneo_ID INTO v_torneo_id FROM PARTIDOS WHERE ID = v_partido_id;
@@ -1200,8 +1205,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- TASK-027: INSERT y DELETE también. El cierre y la reapertura no escriben
+-- en estas tablas (la baja de plantillas va a JUGADOR_EQUIPO, que queda
+-- fuera a propósito), así que no hace falta exceptuarlos.
 CREATE TRIGGER trg_partidos_bloquear_torneo_cerrado
-BEFORE UPDATE ON PARTIDOS
+BEFORE INSERT OR UPDATE OR DELETE ON PARTIDOS
+FOR EACH ROW EXECUTE FUNCTION fn_bloquear_escritura_torneo_cerrado();
+
+CREATE TRIGGER trg_convocado_bloquear_torneo_cerrado
+BEFORE INSERT OR UPDATE OR DELETE ON CONVOCADO_A_PARTIDO
+FOR EACH ROW EXECUTE FUNCTION fn_bloquear_escritura_torneo_cerrado();
+
+CREATE TRIGGER trg_inscripciones_torneo_bloquear_torneo_cerrado
+BEFORE INSERT OR UPDATE OR DELETE ON INSCRIPCIONES_TORNEO
 FOR EACH ROW EXECUTE FUNCTION fn_bloquear_escritura_torneo_cerrado();
 
 CREATE TRIGGER trg_eventos_partido_bloquear_torneo_cerrado

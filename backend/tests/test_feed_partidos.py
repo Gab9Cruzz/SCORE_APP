@@ -117,8 +117,12 @@ async def _escenario_partido_hoy(
     """Atajo para el caso más común: un torneo con 2 equipos inscritos y
     UN partido — la mayoría de los tests de T3.6/E-T solo necesitan variar
     uno de estos campos."""
+    # TASK-027: un torneo Finalizado no admite inscripciones ni partidos
+    # nuevos, así que el escenario se arma abierto y se cierra al final
+    # (como pasa en la realidad: se cierra el día de la final).
     torneo = await _crear_torneo(
-        db_session, nombre=nombre, publicado=publicado, estado_torneo=estado_torneo, estado_grupo=estado_grupo
+        db_session, nombre=nombre, publicado=publicado,
+        estado_torneo="Activo" if estado_torneo == "Finalizado" else estado_torneo, estado_grupo=estado_grupo
     )
     local = await _crear_equipo(
         db_session, f"{nombre} Local", disciplina_id=torneo.disciplina_id, modalidad_id=torneo.modalidad_id, estado=estado_local
@@ -132,6 +136,8 @@ async def _escenario_partido_hoy(
         db_session, torneo_id=torneo.id, local_id=local.id, visitante_id=visitante.id,
         dias_offset=dias_offset, estado=estado_partido,
     )
+    if estado_torneo == "Finalizado":
+        torneo.estado = "Finalizado"
     await db_session.commit()
     return torneo, partido
 
