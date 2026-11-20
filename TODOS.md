@@ -14,7 +14,6 @@ vive ahí.
 |---|---|---|
 | Espera tu decisión | Despliegue a producción: Fase 5 del roadmap (TASK-049 a 054 y 056) | Dónde se despliega, dominio para HTTPS, destino de las copias |
 | Espera tu decisión | Correo al jugador al ser traspasado o quedar libre | Elegir proveedor de correo |
-| Se puede hacer ya | `GET /partidos/{id}/cronometro` responde 400 sin configuración de tiempos | P3 |
 | Se puede hacer ya | Filtrar por torneo asignado los listados internos de `torneo-admin` | P3 |
 | Se puede hacer ya | Revisión humana: seguir el README desde cero en una máquina limpia | Criterio de TASK-055; el ensayo automático pasó |
 | Diferido con umbral | Paginación con cursor en `/equipos` y `/jugadores` | Se reabre con >150 registros reales o p95 >800 ms |
@@ -39,11 +38,6 @@ completo salvo la Fase 5.
 
 ## Pendiente — ya evaluado, falta ejecutar
 
-- **`GET /partidos/{id}/cronometro` responde 400 cuando el torneo no tiene
-  configuración de tiempos** (UX-21, `docs/audit/12_REVISION_VISUAL.md`). Es
-  un estado normal, no un error: deja dos errores en la consola por visita a
-  "Gestionar partido" y ensucia el monitoreo de 4xx. Devolver 200 con
-  `null` (y adaptar `Cronometro.tsx`) o un 404 explícito. Prioridad P3.
 - **Paginación con cursor en `/equipos` y `/jugadores`** (3B-9). TASK-039 ya
   pagina las grillas por desplazamiento (`skip`/`limit` + `X-Total-Count`,
   pie "1–50 de 312") y busca en el servidor; lo que queda diferido es pasar

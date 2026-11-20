@@ -200,6 +200,22 @@ async def test_la_demo_no_usa_equipo_fantasma_para_inscripciones_individuales(ba
     )
 
 
+async def test_los_datos_de_muestra_dejan_cada_torneo_con_configuracion_de_tiempos(base_al_dia):
+    """UX-21: `seed_portal_demo.sql` insertaba torneos sin su fila de
+    CONFIGURACION_TIEMPO_TORNEO (la API la crea al dar de alta un torneo; un
+    script que inserta en TORNEO directo tiene que hacerlo él). Sin ella,
+    `GET /partidos/{id}/cronometro` responde 400 y la mesa no puede arrancar
+    el partido. Corre después de los scripts vigentes, así que 11 ya cargó
+    el catálogo que el seed necesita."""
+    sql = (DATABASE_DIR / "seed_portal_demo.sql").read_text(encoding="utf-8")
+    await base_al_dia.execute(sql)
+    sin_config = await base_al_dia.fetch(
+        "SELECT t.Nombre FROM TORNEO t"
+        " WHERE NOT EXISTS (SELECT 1 FROM CONFIGURACION_TIEMPO_TORNEO c WHERE c.Torneo_ID = t.ID)"
+    )
+    assert not sin_config, f"torneos sin configuración de tiempos: {[r['nombre'] for r in sin_config]}"
+
+
 def test_todo_archivo_de_database_esta_clasificado():
     """F10/E-L6 test 2 (portal-publico-feed-partidos-plan.md): cobertura de
     directorio. `set(glob) - SQL_FILES - SCRIPTS_HISTORICOS - SEEDS_MANUALES`

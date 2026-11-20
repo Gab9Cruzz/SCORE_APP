@@ -48,6 +48,16 @@ SELECT
 UPDATE TORNEO SET Publicado = TRUE
  WHERE Torneo_Grupo_ID = (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Liga Demo Portal Público') AND Numero_Edicion = 1;
 
+-- Configuración de tiempos: Fútbol 11, 2 tiempos de 45'.
+-- Sin esta fila, GET /partidos/{id}/cronometro respondía 400 y la mesa
+-- no podía arrancar el partido (UX-21): la API la crea al dar de alta un
+-- torneo, pero este script inserta en TORNEO directo.
+INSERT INTO CONFIGURACION_TIEMPO_TORNEO (Torneo_ID, Tipo_Cronometro, Cantidad_Periodos, Duracion_Periodo_Minutos, Duracion_Descanso_Minutos)
+SELECT t.ID, 'Periodos', 2, 45, 15
+  FROM TORNEO t JOIN TORNEO_GRUPO g ON g.ID = t.Torneo_Grupo_ID
+ WHERE g.Nombre = 'Liga Demo Portal Público' AND t.Numero_Edicion = 1
+   AND NOT EXISTS (SELECT 1 FROM CONFIGURACION_TIEMPO_TORNEO c WHERE c.Torneo_ID = t.ID);
+
 INSERT INTO EQUIPOS (Nombre, Disciplina_ID, Modalidad_ID)
 SELECT v.nombre, (SELECT ID FROM DISCIPLINA WHERE Nombre ILIKE 'f_tbol' LIMIT 1),
        (SELECT m.ID FROM MODALIDAD m WHERE m.Nombre = 'Fútbol 11'
@@ -109,6 +119,16 @@ SELECT
  );
 UPDATE TORNEO SET Publicado = TRUE
  WHERE Torneo_Grupo_ID = (SELECT ID FROM TORNEO_GRUPO WHERE Nombre = 'Liga Demo Básquet Portal Público') AND Numero_Edicion = 1;
+
+-- Configuración de tiempos: básquet, 4 cuartos de 10'.
+-- Sin esta fila, GET /partidos/{id}/cronometro respondía 400 y la mesa
+-- no podía arrancar el partido (UX-21): la API la crea al dar de alta un
+-- torneo, pero este script inserta en TORNEO directo.
+INSERT INTO CONFIGURACION_TIEMPO_TORNEO (Torneo_ID, Tipo_Cronometro, Cantidad_Periodos, Duracion_Periodo_Minutos, Duracion_Descanso_Minutos)
+SELECT t.ID, 'Periodos', 4, 10, 2
+  FROM TORNEO t JOIN TORNEO_GRUPO g ON g.ID = t.Torneo_Grupo_ID
+ WHERE g.Nombre = 'Liga Demo Básquet Portal Público' AND t.Numero_Edicion = 1
+   AND NOT EXISTS (SELECT 1 FROM CONFIGURACION_TIEMPO_TORNEO c WHERE c.Torneo_ID = t.ID);
 
 INSERT INTO EQUIPOS (Nombre, Disciplina_ID, Modalidad_ID)
 SELECT v.nombre, (SELECT ID FROM DISCIPLINA WHERE Nombre = 'Baloncesto'),
