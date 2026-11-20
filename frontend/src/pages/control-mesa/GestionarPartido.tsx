@@ -526,7 +526,10 @@ export function GestionarPartidoPage() {
         </>
       )}
 
-      {!bloqueado && !sinRival && (
+      {/* Con el partido en curso la barra no tiene nada que ofrecer: no se
+          renderiza, porque es sticky en pantallas angostas y vacía igual
+          pintaba fondo y borde encima de la lista de titulares. */}
+      {!bloqueado && !sinRival && (!enCurso || empezar.isError) && (
         <div className="gestionar-partido__acciones">
           {!enCurso && (
             <>

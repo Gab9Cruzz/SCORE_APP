@@ -1307,6 +1307,19 @@ td:first-child {
   border-radius: var(--radius);
 }
 
+/* Registro por lote: las casillas de la tabla quedan fuera de
+   .resource-form y se veían con el gris nativo del navegador. */
+.tabla-lote input {
+  width: 100%;
+  min-width: 7rem;
+  box-sizing: border-box;
+  background: var(--surface-alt);
+  border: 1px solid var(--border-campo);
+  color: var(--text);
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius);
+}
+
 .resource-form__actions {
   display: flex;
   gap: 0.75rem;

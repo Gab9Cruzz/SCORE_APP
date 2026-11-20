@@ -7,6 +7,7 @@ import { createWrapper } from "../../../test/test-utils";
 import { EquiposDelTorneoPage } from "./EquiposDelTorneo";
 import type { TorneoDashboardContext } from "./TorneoDashboard";
 import { comprobarModalAccesible } from "../../../test/a11y";
+import { hoyISO } from "../../../lib/fechas";
 
 const CONTEXTO: TorneoDashboardContext = {
   torneoId: 20,
@@ -149,7 +150,9 @@ describe("EquiposDelTorneoPage — Pareja/Conjunto (tamano_equipo >= 2)", () => 
   // T27 — "Quitar" manda fecha_fin=hoy directo, sin pedir un formulario de
   // fecha (Design sección A: el caso retroactivo sigue en Plantillas).
   it("Gestionar plantilla: Quitar manda fecha_fin=hoy sin formulario", async () => {
-    const hoy = new Date().toISOString().slice(0, 10);
+    // "Hoy" en la zona del negocio, como la app: con toISOString (UTC) la
+    // prueba fallaba de 19:00 a medianoche en Guayaquil.
+    const hoy = hoyISO();
     server.use(
       http.get(INSCRIPCIONES, () => HttpResponse.json([{ id: 1, torneo_id: 20, equipo_id: 1, jugador_perfil_id: null, estado: "Inscrito" }])),
       http.get(EQUIPOS, () => HttpResponse.json([{ id: 1, nombre: "Halcones FC" }])),

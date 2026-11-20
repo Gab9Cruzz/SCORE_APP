@@ -243,6 +243,17 @@ describe("GestionarPartido — partido en curso (llegadas tardías)", () => {
     expect(screen.queryByRole("button", { name: /Cargar resultado directo/ })).not.toBeInTheDocument();
   });
 
+  it("con el partido en curso no deja la barra fija de acciones vacía tapando la lista", async () => {
+    // La barra es `position: sticky` en pantallas angostas: vacía, igual se
+    // pintaba (fondo y borde) encima de un titular.
+    sembrarSesion();
+    sembrarEnCurso();
+    const { container } = montar();
+
+    await screen.findByText(/Solo podés sumar suplentes/);
+    expect(container.querySelector(".gestionar-partido__acciones")).toBeNull();
+  });
+
   it("no deja reprogramar la fecha con el partido en curso", async () => {
     // Mover la fecha hacia atrás con eventos ya cargados los dejaría
     // inconsistentes: el trigger que valida pertenencia mira la fecha del

@@ -254,7 +254,7 @@ export function RegistroLoteAdminPage() {
         )}
 
         <div className="table-scroll">
-          <table>
+          <table className="tabla-lote">
             <thead>
               <tr>
                 <th scope="col">Cédula</th>

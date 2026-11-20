@@ -64,5 +64,6 @@ Los pisos están en `backend/scripts/cobertura_minima.py`, que lee
 `coverage.xml` (coverage.py solo tiene un piso global). Comprobado que
 corta: con el piso de services en 99 sale con error y marca "BAJO".
 
-El servicio más flojo es `services/minuto_partido.py` (36 %), seguido de
-`inscripcion_torneo.py` (78 %); el resto de services pasa del 88 %.
+El servicio más flojo era `services/minuto_partido.py` (36 %); con
+`tests/test_minuto_partido.py` pasó a 100 %. Queda `inscripcion_torneo.py`
+(78 %); el resto de services pasa del 88 %.
