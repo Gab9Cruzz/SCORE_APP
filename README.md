@@ -82,7 +82,7 @@ resultado.
 | `docs/plans/` | Un plan por módulo, con las decisiones y por qué se tomaron. |
 | `docs/designs/` | Design docs de UI. |
 | [`docs/queries/`](docs/queries/README.md) | Métricas ad hoc versionadas en SQL (no un dashboard) — cómo correrlas y contra qué base. |
-| `TODOS.md` | Lo deferido de cada plan, con el motivo. |
+| [`TODOS.md`](TODOS.md) | **Pendientes**: lo abierto, lo que espera una decisión y lo descartado, con el motivo. Lo resuelto, en `docs/historial-resueltos.md`. |
 | `infrastructure/` | `docker-compose.yml` — Postgres + API; `initdb/` carga el esquema y el catálogo la primera vez. |
 | [`e2e/`](e2e/README.md) | Recorridos de punta a punta con Playwright contra una base propia. |
 | [`docs/cobertura.md`](docs/cobertura.md) | Cobertura medida y pisos por carpeta. |

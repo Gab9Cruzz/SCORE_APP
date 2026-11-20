@@ -155,11 +155,9 @@ sigue valiendo; `--aplicar` reemplaza solo el paso de `psql -1`.
        -F c -f "database\backups\torneos_mvp_pre_<cambio>_$ts.dump" torneos_mvp
    ```
 
-2. **Probala contra una base descartable antes**, no contra la real. Para
-   la `13` está `backend/scripts/verificar_migracion_13.py`, que arma una
-   base con el esquema viejo, ejercita los casos borde (equipos ambiguos y
-   huérfanos), verifica el frenazo, la resolución manual y la
-   idempotencia. Sirve de molde para la próxima.
+2. **Probala contra una base descartable antes**, no contra la real: correr
+   `python -m scripts.migrar --aplicar` sobre una copia restaurada de la
+   base real, comprobando los casos borde que la migración frena.
 
 3. **Corré el archivo entero en UNA transacción.** No es un detalle
    menor: varias de estas migraciones se detienen a propósito con un
