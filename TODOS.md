@@ -14,7 +14,6 @@ vive ahí.
 |---|---|---|
 | Espera tu decisión | Despliegue a producción: Fase 5 del roadmap (TASK-049 a 054 y 056) | Dónde se despliega, dominio para HTTPS, destino de las copias |
 | Espera tu decisión | Correo al jugador al ser traspasado o quedar libre | Elegir proveedor de correo |
-| Se puede hacer ya | Filtrar por torneo asignado los listados internos de `torneo-admin` | P3 |
 | Se puede hacer ya | Revisión humana: seguir el README desde cero en una máquina limpia | Criterio de TASK-055; el ensayo automático pasó |
 | Diferido con umbral | Paginación con cursor en `/equipos` y `/jugadores` | Se reabre con >150 registros reales o p95 >800 ms |
 | Diferido con umbral | Editar el catálogo de disciplinas desde la interfaz | Se reabre al segundo pedido real |
@@ -36,7 +35,7 @@ completo salvo la Fase 5.
    destino de las copias. **Pospuesto (2026-11-19)** hasta tener esas
    definiciones; el resto del roadmap sigue sin esperar.
 
-## Pendiente — ya evaluado, falta ejecutar
+## Diferido — se reabre al cumplirse la condición
 
 - **Paginación con cursor en `/equipos` y `/jugadores`** (3B-9). TASK-039 ya
   pagina las grillas por desplazamiento (`skip`/`limit` + `X-Total-Count`,
@@ -57,15 +56,6 @@ completo salvo la Fase 5.
   dos niveles de rol en la misma ruta); `Slug` no se edita desde la UI
   (lo consume el portal público); no se agrega un rol nuevo, `AdminGeneral`
   ya alcanza.
-- **Filtrar por asignación los LISTADOS de sub-recursos** dentro de un
-  torneo específico (equipos/jugadores/partidos) en `torneo-admin/*` —
-  heredan protección de escritura pero no filtran el listado. Prioridad P3.
-  Si se reabre: el alcance NO se expresa como query param elegible por el
-  cliente (invierte el default seguro) — se deriva implícito del token vía
-  `torneo_ids_permitidos` (mismo patrón que ya usan `torneos`/`partidos`).
-  Un caso de alta/búsqueda que necesite ver filas no inscritas se expresa
-  como flag de capacidad con nombre honesto (`incluir_no_inscritos=true`),
-  nunca ampliando el techo de permisos del rol.
 
 ## Backlog sin urgencia (evaluado, nadie lo pidió todavía)
 

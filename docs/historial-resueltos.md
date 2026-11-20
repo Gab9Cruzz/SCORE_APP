@@ -5,6 +5,20 @@ que `TODOS.md` muestre solo lo abierto. Varios comentarios del código citan
 "TODOS.md" por una decisión que hoy está en esta página. El detalle de cada
 cambio está en el commit que lo cerró y en `docs/plans/`.
 
+## Resuelto (2026-11-20)
+
+- **Filtrar por asignación los listados de un torneo** en `torneo-admin`.
+  Ya estaba hecho y figuraba como pendiente por error: `GET /inscripciones`,
+  `/plantillas`, `/traspasos` y `/partidos` recortan a un TorneoAdmin a sus
+  torneos asignados, derivado del token y sin parámetro que el cliente pueda
+  desactivar (`torneo_ids_permitidos`). Lo cubren las pruebas
+  `test_torneo_admin_sin_asignacion_no_ve_*` de inscripciones, plantillas y
+  traspasos. Equipos y jugadores no se recortan: son catálogos compartidos
+  (decisión de TASK-013).
+- **`GET /partidos/{id}/cronometro` respondía 400** (UX-21) en los torneos
+  de `seed_portal_demo.sql`, que no les creaba configuración de tiempos.
+  Corregido el seed, con prueba en `test_scripts_sql.py`.
+
 ## Resuelto (2026-11-18)
 
 - **CI en GitHub Actions** (`.github/workflows/ci.yml`, TASK-003 de
